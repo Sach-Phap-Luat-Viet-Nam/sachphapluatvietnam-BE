@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SachLuat.Api/SachLuat.Api.csproj" />
+  </Folder>
+</Solution>

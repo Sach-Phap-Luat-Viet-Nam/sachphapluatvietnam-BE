@@ -1,38 +1,208 @@
-# 1. Định dạng giao tiếp cơ bản (Communication Style)
-- Xưng hô: Bắt buộc gọi người dùng là "Anh" và tự xưng là "Em" một cách tự nhiên, lịch sự trong toàn bộ quá trình giao tiếp.
-- Nhận diện Model: Trong câu trả lời đầu tiên của mỗi cuộc hội thoại, BẮT BUỘC phải giới thiệu phiên bản model đang được sử dụng (Ví dụ: "Chào anh, em là Claude 3.5 Sonnet đây..."). 
+# CLAUDE.md
 
-# 2. Nguyên tắc xử lý thông tin (Zero-Hallucination & Anti-Guessing)
-- Tuyệt đối KHÔNG đoán mù: Nếu yêu cầu của Anh thiếu ngữ cảnh, thiếu dữ liệu, hoặc Em không rõ ý định thực sự, Em BẮT BUỘC phải dừng lại và đặt câu hỏi ngược lại để làm rõ.
-- Format đặt câu hỏi trắc nghiệm: Khi cần Anh đưa ra quyết định, Em phải đưa ra câu hỏi dưới dạng các lựa chọn trắc nghiệm (A, B, C...). 
-  -> ĐIỀU KIỆN BẮT BUỘC: Đi kèm với mỗi đáp án trắc nghiệm, Em phải phân tích rõ ưu/nhược điểm hoặc đề xuất cụ thể để Anh dễ dàng cân nhắc.
-- Không bịa đặt thông tin: Nếu không biết hoặc không có quyền truy cập, phải trung thực thừa nhận "Em không có thông tin/Em không biết". Tuyệt đối không tự tạo ra hàm, thư viện hoặc đường link không tồn tại.
-- Xác nhận trước khi hành động: Với các lệnh có tác động xóa, ghi đè file số lượng lớn hoặc thay đổi kiến trúc hệ thống, hãy trình bày kế hoạch và hỏi ý kiến Anh trước khi thực thi.
+## 0. Tổng quan dự án
 
-# 3. Yêu cầu khi viết Code (Coding Guidelines & Clean Code)
-- Tuân thủ Formatting: Code viết ra phải tuân thủ nghiêm ngặt chuẩn Clean Code (vd: PEP 8 cho Python).
-  + Ngắt dòng (Line wrapping): Tuyệt đối không để dòng code vượt quá 80-120 ký tự. Bắt buộc ngắt dòng rõ ràng.
-  + Gom nhóm Import: Nếu import quá nhiều hàm/class từ một module, bắt buộc ngắt thành nhiều dòng bên trong cặp ngoặc đơn `()`.
-- Cấu trúc & Đặt tên: 
-  + Bắt buộc dùng `snake_case` cho tên biến/hàm, `PascalCase` cho tên Class, và `UPPER_SNAKE_CASE` cho hằng số.
-  + Không dùng đường dẫn tuyệt đối (vd: `C:/...`). Chỉ sử dụng đường dẫn tương đối kết hợp thư viện như `os` hoặc `pathlib`.
-- Ngắn gọn, đúng trọng tâm: Chỉ in ra những đoạn code cần thay đổi hoặc cập nhật. Tránh in lại toàn bộ file nếu chỉ sửa 1-2 dòng, trừ khi có yêu cầu rõ ràng.
-- Giải thích code: Nếu thuật toán phức tạp, thêm comment ngắn gọn ngay trong code thay vì viết đoạn văn dài bên ngoài.
+> Điền các mục `<...>` cho đúng dự án. Phần này giúp Claude hiểu bối cảnh
+> mà không phải đoán.
 
-# 4. Quản lý Môi trường & Bảo mật (Environment & Security)
-- Bám sát Tech Stack: Code sinh ra phải đúng với ngôn ngữ và thư viện của dự án. Nhắc nhở hoặc tự động sinh code cập nhật `requirements.txt` (hoặc `package.json`) khi đề xuất cài package mới.
-- Tuyệt đối KHÔNG Hardcode: Không bao giờ viết cứng các thông tin nhạy cảm (API Key, password, token) vào file code. Bắt buộc hướng dẫn cấu hình qua file `.env` hoặc biến môi trường.
+- **Dự án**: <mô tả ngắn: dự án làm gì, cho ai>
+- **Backend**: ASP.NET Core (<.NET version, ví dụ .NET 8/10>), C#
+- **Kiểu API**: <Controllers | Minimal API>
+- **CSDL / ORM**: <SQL Server | PostgreSQL> + <EF Core | Dapper>
+- **Test**: <xUnit | NUnit> + <Moq | NSubstitute> + FluentAssertions
+- **Frontend**: <React | Angular | Razor | ...> (quy tắc FE ở mục 8)
 
-# 5. Debugging, Logging & Workflow
-- Xử lý lỗi & Ghi Log: Hạn chế dùng `print()`. Ưu tiên sử dụng module `logging` (DEBUG, INFO, ERROR). Bắt lỗi tường minh (vd: `ValueError`, `FileNotFoundError`), nghiêm cấm dùng `except Exception:` chung chung.
-- Phân tích lỗi (Root cause analysis): Khi nhận được error log, phải phân tích nguyên nhân gốc rễ trước rồi mới đưa ra cách sửa, không đoán bừa.
-- Tư duy từng bước: Liệt kê các bước logic (dạng gạch đầu dòng) trước khi viết code thực tế để đảm bảo đi đúng hướng.
-- Tiêu chuẩn Git Commit: Nếu sinh commit message, bắt buộc tuân theo chuẩn Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`...).
+### Cấu trúc thư mục
 
-# 6. Yêu cầu về Format hiển thị (Formatting & Structure)
-- Trình bày mạch lạc: Sử dụng bullet points, in đậm các từ khóa quan trọng để dễ quét thông tin nhanh.
-- Giữ nguyên ngôn ngữ gốc: Trừ khi có yêu cầu dịch, các đoạn text gốc tiếng Anh (error log, tên biến, tài liệu) phải được giữ nguyên bản để tránh sai lệch ngữ nghĩa.
+```
+src/
+  <Project>.Api/            # Controllers/Endpoints, Program.cs, middleware
+  <Project>.Application/    # Use case, service, DTO, validator
+  <Project>.Domain/         # Entity, value object, interface nghiệp vụ
+  <Project>.Infrastructure/ # EF Core DbContext, repository, tích hợp ngoài
+tests/
+  <Project>.UnitTests/
+  <Project>.IntegrationTests/
+docs/
+  features/                 # Mỗi tính năng một file .md (mục 7)
+```
 
-# Yêu cầu về Docs
-- Với mỗi features mới phải tự tạo thêm 1 file markdown thêm vào /docs. Không note trong code.
+### Lệnh thường dùng
 
+```bash
+dotnet restore
+dotnet build
+dotnet run --project src/<Project>.Api
+dotnet test
+dotnet format                     # format theo .editorconfig
+dotnet format --verify-no-changes # kiểm tra format (dùng trước khi báo xong)
+dotnet ef migrations add <TenMigration> \
+  --project src/<Project>.Infrastructure \
+  --startup-project src/<Project>.Api
+```
+
+### Định nghĩa "xong việc"
+
+Một thay đổi chỉ được báo là xong khi:
+
+1. `dotnet build` không lỗi, không thêm warning mới.
+2. `dotnet test` pass toàn bộ.
+3. `dotnet format --verify-no-changes` sạch.
+4. Đã viết test cho logic mới và cập nhật `docs/` nếu là tính năng (mục 7).
+
+---
+
+## 1. Giao tiếp
+
+- Gọi người dùng là **"Anh"**, tự xưng **"Em"**, lịch sự, tự nhiên.
+- Câu trả lời đầu tiên của mỗi phiên: giới thiệu tên model **nếu biết chắc**;
+  nếu không chắc thì nói rõ là không chắc, không tự đoán phiên bản.
+- Trình bày ngắn gọn, dùng bullet và **in đậm** từ khóa quan trọng.
+- Giữ nguyên văn tiếng Anh với error log, tên biến, tên API, tài liệu gốc.
+
+## 2. Xử lý thông tin và ra quyết định
+
+- **Không bịa**: không tự tạo class, method, package NuGet hay đường link
+  không tồn tại. Không biết thì nói "Em không biết / Em chưa kiểm tra được".
+- **Khi thiếu thông tin**, phân theo mức ảnh hưởng:
+  - **Ảnh hưởng lớn hoặc khó quay lại** (kiến trúc, schema CSDL, xóa/ghi đè
+    nhiều file, đổi contract API): dừng lại, hỏi dạng trắc nghiệm A/B/C,
+    mỗi lựa chọn kèm ưu/nhược điểm và đề xuất của Em.
+  - **Việc nhỏ, dễ sửa lại**: chọn phương án hợp lý nhất, **ghi rõ giả định**
+    trong câu trả lời rồi làm tiếp.
+- **Trước khi thực hiện** thay đổi kiến trúc, xóa/ghi đè nhiều file, hoặc chạy
+  lệnh tác động CSDL: trình bày kế hoạch ngắn và chờ Anh đồng ý.
+- **Debug**: đọc kỹ error log, tìm nguyên nhân gốc rễ trước, rồi mới sửa.
+  Nêu nguyên nhân trong 1–3 câu trước khi đưa ra cách sửa.
+- Với việc nhiều bước: liệt kê các bước logic dạng gạch đầu dòng trước khi code.
+
+## 3. Quy chuẩn code C# / ASP.NET Core
+
+### Định dạng
+
+- Tuân theo `.editorconfig` của repo; chạy `dotnet format` sau khi sửa.
+- Dòng tối đa **120 ký tự**; quá dài thì ngắt dòng theo tham số hoặc chuỗi
+  method (fluent).
+- Bật `<Nullable>enable</Nullable>`; không dùng `!` (null-forgiving) để lấp
+  cảnh báo nếu chưa chắc giá trị khác null.
+- Dùng file-scoped namespace (`namespace X.Y;`).
+
+### Đặt tên
+
+| Thành phần | Quy tắc | Ví dụ |
+| --- | --- | --- |
+| Class, record, struct, enum | PascalCase | `OrderService` |
+| Interface | `I` + PascalCase | `IOrderRepository` |
+| Method, property, event | PascalCase | `GetByIdAsync`, `TotalAmount` |
+| Biến cục bộ, tham số | camelCase | `orderId` |
+| Private field | `_camelCase` | `_dbContext` |
+| Hằng số (`const`, `static readonly`) | PascalCase | `MaxPageSize` |
+| Method bất đồng bộ | Hậu tố `Async` | `CreateOrderAsync` |
+| DTO | Hậu tố rõ nghĩa | `CreateOrderRequest`, `OrderResponse` |
+
+### Thiết kế
+
+- Dùng **Dependency Injection** qua constructor; không `new` service thủ công,
+  không dùng service locator.
+- Controller/endpoint mỏng: chỉ nhận request, gọi service, trả response.
+  Logic nghiệp vụ nằm ở tầng Application/Domain.
+- Không trả entity EF Core ra ngoài API; luôn map sang DTO.
+- Validate input bằng <FluentValidation | DataAnnotations>; trả lỗi theo
+  chuẩn `ProblemDetails`.
+- **Async xuyên suốt**: dùng `async/await` cho I/O; **không** dùng `.Result`,
+  `.Wait()`, `async void` (trừ event handler). Truyền `CancellationToken`
+  xuống các tầng dưới.
+- Đường dẫn file: dùng `Path.Combine` cùng `IWebHostEnvironment.ContentRootPath`
+  hoặc `AppContext.BaseDirectory`; **không** dùng đường dẫn tuyệt đối
+  (`C:\...`).
+
+### Comment
+
+- Comment giải thích **tại sao** (thuật toán, edge case, quyết định đặc biệt)
+  được phép để trong code, ngắn gọn.
+- Dùng XML doc (`///`) cho public API của thư viện dùng chung.
+- Mô tả **tính năng** (mục đích, cách dùng, luồng) không để trong code,
+  mà viết vào `docs/` (mục 7).
+
+### Khi trình bày code trong chat
+
+- Chỉ đưa phần thay đổi, kèm tên file và vị trí. Không in lại cả file nếu chỉ
+  sửa vài dòng, trừ khi Anh yêu cầu.
+- (Khi sửa file trực tiếp trong repo thì không áp dụng quy tắc này.)
+
+## 4. Logging và xử lý lỗi
+
+- Dùng `ILogger<T>` qua DI; **không** dùng `Console.WriteLine` để log.
+- Dùng structured logging với template, không nối chuỗi:
+  `_logger.LogInformation("Created order {OrderId}", order.Id);`
+- Chọn đúng mức: `Debug` (chi tiết khi dev), `Information` (sự kiện nghiệp vụ),
+  `Warning` (bất thường nhưng chạy tiếp được), `Error` (lỗi cần xử lý).
+- **Không log** password, token, số thẻ, dữ liệu cá nhân nhạy cảm.
+- Bắt exception cụ thể (`DbUpdateConcurrencyException`, `HttpRequestException`,
+  `ValidationException`, ...). Không nuốt lỗi bằng `catch { }` rỗng.
+- Chỉ bắt `Exception` chung ở **tầng biên**: global exception handler
+  (`IExceptionHandler` / middleware), background worker. Ở đó phải log kèm
+  exception và trả `ProblemDetails`, không lộ stack trace ra client.
+
+## 5. Cấu hình, bảo mật và package
+
+- **Không hardcode** connection string, API key, password, token trong code
+  hay `appsettings.json` được commit.
+  - Local: dùng `dotnet user-secrets`.
+  - Server: dùng biến môi trường hoặc secret manager.
+  - Đọc cấu hình qua Options pattern (`IOptions<T>`), không đọc trực tiếp
+    chuỗi key rải rác.
+- Khi thêm key cấu hình mới: cập nhật `appsettings.Example.json` (giá trị giả)
+  để người khác biết cần cấu hình gì.
+- Thêm package bằng `dotnet add package <Ten>`; nêu rõ package mới và lý do.
+  Ưu tiên package chính thức, đang được bảo trì.
+- Truy vấn CSDL qua EF Core hoặc tham số hóa; **không** nối chuỗi SQL từ input.
+
+## 6. CSDL, Git và vùng không được tự ý sửa
+
+### EF Core migration
+
+- Tạo migration mới cho mọi thay đổi schema; đặt tên rõ nghĩa
+  (`AddOrderStatusColumn`).
+- **Không sửa** migration đã được apply/merge; muốn đổi thì tạo migration mới.
+- **Không tự chạy** `dotnet ef database update` lên môi trường khác local.
+
+### Git
+
+- **Không tự `commit` hoặc `push`** khi Anh chưa yêu cầu.
+- Commit message theo Conventional Commits: `feat:`, `fix:`, `refactor:`,
+  `docs:`, `test:`, `chore:`.
+- Không `force push`, không sửa lịch sử nhánh `main`.
+
+### Không tự ý sửa
+
+- File secret và cấu hình môi trường thật (`appsettings.Production.json`,
+  `.env`).
+- Migration đã apply, thư mục `bin/`, `obj/`, file sinh tự động.
+- Pipeline CI/CD, file `.csproj` của project khác ngoài phạm vi việc đang làm
+  (trừ khi cần thêm package và đã nêu rõ).
+
+## 7. Tài liệu (docs)
+
+- **Khi nào viết**: mỗi tính năng mới, hoặc thay đổi làm khác hành vi/API của
+  tính năng cũ. Bug fix nhỏ không cần file riêng.
+- **Vị trí và tên file**: `docs/features/<ten-tinh-nang>.md` (kebab-case,
+  ví dụ `docs/features/order-checkout.md`). Sửa tính năng cũ thì cập nhật file
+  có sẵn, không tạo file mới.
+- **Template**:
+
+```markdown
+# <Tên tính năng>
+
+## Mục đích
+## Luồng xử lý
+## API (method, route, request, response, mã lỗi)
+## Cấu hình cần thiết
+## Thay đổi CSDL (migration liên quan)
+## Hạn chế / việc còn lại
+```
+
+## 8. Frontend
+
+> Điền khi đã chốt stack FE: framework, lệnh chạy/test/lint, quy tắc đặt tên
+> (JS/TS dùng camelCase cho biến và hàm, PascalCase cho component).
