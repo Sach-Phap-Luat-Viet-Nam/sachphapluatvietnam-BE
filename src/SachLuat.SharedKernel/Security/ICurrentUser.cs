@@ -7,5 +7,10 @@ public interface ICurrentUser
 
     bool IsAuthenticated => UserId is not null;
 
+    /// <summary>Id Super Admin đang fast login vào tài khoản này; null khi người dùng tự đăng nhập.</summary>
+    long? ImpersonatorUserId { get; }
+
+    bool IsImpersonated => ImpersonatorUserId is not null;
+
     bool IsInRole(string role);
 }
