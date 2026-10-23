@@ -9,8 +9,8 @@ modular monolith để thêm module mới đúng quy ước.
 
 | Công cụ | Phiên bản | Ghi chú |
 | --- | --- | --- |
-| .NET SDK | 10.0.x (hoặc mới hơn) | Dự án nhắm `net10.0` (LTS). SDK 11 vẫn build được nhưng đang là bản preview. |
-| Docker Desktop | bản mới nhất | Cần bật WSL2 trên Windows. Miễn phí cho doanh nghiệp nhỏ, kiểm tra điều khoản license nếu công ty lớn. |
+| .NET SDK | 10.0.x | Ghim trong `global.json` (tự chọn bản 10.0 mới nhất đã cài, bỏ qua SDK 11 preview). |
+| Docker | Docker Desktop (backend WSL2), hoặc Docker Engine cài trong distro WSL | Docker Desktop miễn phí cho doanh nghiệp nhỏ; công ty lớn cần license, khi đó dùng Docker Engine trong WSL. |
 | IDE | Visual Studio 2026 / Rider / VS Code + C# Dev Kit | Test chạy bằng Microsoft.Testing.Platform. |
 
 ## Chạy lần đầu
@@ -26,7 +26,7 @@ docker compose up -d
 
 # 3. Khai báo connection string (lưu ngoài repo, không commit)
 dotnet user-secrets set "ConnectionStrings:Default" \
-  "Host=localhost;Port=5432;Database=sachluat;Username=sachluat;Password=<mật khẩu trong .env>" \
+  "Host=localhost;Port=5433;Database=sachluat;Username=sachluat;Password=<mật khẩu trong .env>" \
   --project src/SachLuat.Api
 
 # 4. Chạy API
@@ -42,9 +42,20 @@ Sau khi chạy:
 Nếu thiếu connection string, API dừng ngay khi khởi động với lỗi
 `Connection string 'Default' is not configured`.
 
+### Docker Engine trong WSL (không dùng Docker Desktop)
+
+- Chạy compose từ Windows: `wsl -d Ubuntu --cd "<đường dẫn repo dạng /mnt/c/...>" -- docker compose up -d`,
+  hoặc mở terminal Ubuntu, `cd` vào repo rồi chạy `docker compose up -d`.
+- **WSL tự tắt distro khi không còn tiến trình `wsl` nào mở**, kéo theo Docker và PostgreSQL tắt theo.
+  Dấu hiệu: `/health/ready` trả 503, Npgsql báo `actively refused`, `wsl -l -v` hiện `Stopped`.
+  Cách xử lý: giữ một terminal Ubuntu mở trong lúc làm việc. Container có `restart: unless-stopped`
+  nên tự chạy lại khi Docker khởi động.
+- Sau khi container vừa chạy, `wslrelay` cần vài giây mới chuyển tiếp cổng sang `localhost` của Windows.
+- Cổng mặc định là **5433** (không phải 5432) để tránh trùng với PostgreSQL của dự án khác trên cùng máy.
+
 ## Cấu trúc solution
 
-```
+```text
 SachLuat.slnx
 Directory.Build.props        # net10.0, Nullable, analyzer cho mọi project
 Directory.Packages.props     # version package tập trung (Central Package Management)

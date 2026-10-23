@@ -22,6 +22,7 @@ Tài liệu này là nguồn tham chiếu duy nhất (single source of truth) ch
 | Phiên bản | Ngày | Người sửa | Nội dung thay đổi |
 | --- | --- | --- | --- |
 | 1.0 | 23/10/2026 | Chủ dự án | Khởi tạo tài liệu |
+| 1.1 | 23/10/2026 | Đội phát triển | Chốt backend ASP.NET Core .NET 10, modular monolith, EF Core; định dạng lỗi theo Problem Details (mục 9, 11.1, 14.1) |
 
 **Quy ước trong tài liệu**
 
@@ -499,23 +500,29 @@ Khách và nhân viên đều đi qua CDN; hai giao diện gọi chung một bac
 | Biên | CDN + WAF (Cloudflare) | Cache ảnh/tĩnh, chống DDoS, chặn bot xấu |
 | Giao diện | Storefront (Next.js, SSR) | Trang khách hàng, tối ưu SEO |
 | Giao diện | Admin (Next.js hoặc React SPA) | Trang quản trị |
-| Ứng dụng | Backend API (NestJS / Laravel) | Module: Auth, Catalog, Inventory, Cart, Order, Payment, Shipping, Promotion, Content, Notification, Report |
+| Ứng dụng | Backend API (ASP.NET Core, .NET 10) | Module: Auth, Catalog, Inventory, Cart, Order, Payment, Shipping, Promotion, Content, Notification, Report |
 | Ứng dụng | Worker xử lý nền + hàng đợi | Gửi email/ZNS, đồng bộ vận đơn, phát hành hóa đơn, xuất báo cáo |
 | Dữ liệu | PostgreSQL | Dữ liệu chính (giao dịch) |
-| Dữ liệu | Redis | Cache, phiên, giỏ hàng, hàng đợi, rate limit |
+| Dữ liệu | Redis | Cache, phiên, giỏ hàng, rate limit |
 | Dữ liệu | Meilisearch / Elasticsearch | Tìm kiếm không dấu, gợi ý |
 | Dữ liệu | Object storage (S3-compatible) | Ảnh bìa, file đọc thử, hóa đơn PDF |
 | Bên thứ ba | Cổng thanh toán, vận chuyển, hóa đơn điện tử, email/SMS/ZNS, GA4 | Xem mục 12 |
 
 ### 9.2. Công nghệ đề xuất
 
+Backend, CSDL/ORM và cấu trúc solution **đã chốt** ngày 23/10/2026; các hạng mục còn lại vẫn là đề xuất.
+Chi tiết dựng môi trường và quy tắc module: `docs/setup.md`.
+
 | Hạng mục | Lựa chọn chính | Phương án thay thế | Lý do |
 | --- | --- | --- | --- |
 | Frontend | Next.js (React, TypeScript) + Tailwind CSS | Nuxt (Vue) | SSR tốt cho SEO, cộng đồng lớn |
-| Backend | NestJS (Node.js, TypeScript) | Laravel (PHP), Spring Boot | Chung ngôn ngữ với frontend, cấu trúc module rõ |
-| CSDL | PostgreSQL 16 | MySQL 8 | Giao dịch chặt chẽ, JSONB, full-text |
+| Backend (đã chốt) | ASP.NET Core trên .NET 10 LTS (C#), Controllers | NestJS (Node.js), Laravel (PHP) | Hiệu năng cao, kiểu dữ liệu chặt, hỗ trợ dài hạn đến 11/2028 |
+| Cấu trúc (đã chốt) | Modular monolith: mỗi module một project, một schema CSDL | Clean Architecture 4 tầng | Ranh giới module rõ, tách thành service riêng được khi tải tăng |
+| CSDL / ORM (đã chốt) | PostgreSQL 16 + EF Core (Npgsql), tên bảng/cột `snake_case` | MySQL 8; Dapper | Giao dịch chặt chẽ, JSONB, full-text; migration quản lý schema |
 | Tìm kiếm | Meilisearch | Elasticsearch | Nhẹ, hỗ trợ bỏ dấu, dễ vận hành |
-| Cache/Queue | Redis + BullMQ | RabbitMQ | Đơn giản, đủ cho tải giai đoạn 1 |
+| Cache | Redis | — | Cache, phiên, giỏ hàng, rate limit |
+| Hàng đợi / worker (chưa chốt) | Hangfire | `BackgroundService` + bảng job trong PostgreSQL; RabbitMQ | Chốt khi làm module Notification; BullMQ ở bản trước chỉ dùng được với Node.js |
+| Kiểm thử backend | xUnit v3 + NSubstitute + AwesomeAssertions | NUnit, Moq | Chuẩn phổ biến của .NET, license mã nguồn mở |
 | Hạ tầng | VPS/Cloud tại Việt Nam (Viettel IDC, VNG Cloud, FPT Cloud) hoặc AWS Singapore | Bizfly Cloud | Độ trễ thấp cho khách Việt Nam |
 | Container | Docker + Docker Compose (giai đoạn 1); Kubernetes khi mở rộng | — | Triển khai nhất quán |
 | CI/CD | GitHub Actions / GitLab CI | — | Tự động test, build, deploy |
@@ -655,12 +662,18 @@ Khách và nhân viên đều đi qua CDN; hai giao diện gọi chung một bac
 
 ## 11. Thiết kế API
 
-API theo chuẩn REST, JSON, tiền tố `/api/v1`; xác thực bằng JWT (access token 15 phút + refresh token 30 ngày trong cookie HttpOnly); tài liệu tự sinh bằng OpenAPI/Swagger.
+API theo chuẩn REST, JSON, tiền tố `/api/v1`; xác thực bằng JWT (access token 15 phút + refresh token 30 ngày trong cookie HttpOnly); tài liệu tự sinh bằng OpenAPI (giao diện tra cứu Scalar tại `/scalar` ở môi trường Development).
 
 ### 11.1. Quy ước chung
 
 - Phân trang: `?page=1&limit=24`; trả về `meta: {page, limit, total}`.
-- Định dạng lỗi thống nhất: `{"error": {"code": "OUT_OF_STOCK", "message": "Sách đã hết hàng", "details": {...}}}`.
+- Định dạng lỗi thống nhất theo chuẩn **Problem Details (RFC 9457)**, `Content-Type: application/problem+json`,
+  có thêm `code` (mã lỗi nghiệp vụ ở mục 16.2) và `traceId` (để tra log):
+  `{"type": "...", "title": "Sách đã hết hàng hoặc không đủ số lượng", "status": 409, "code": "OUT_OF_STOCK", "traceId": "00-..."}`.
+  - `title`: thông báo tiếng Việt hiển thị được cho khách.
+  - Lỗi validation (400, `code = VALIDATION_ERROR`) có thêm `errors`: `{"tenTruong": ["thông báo lỗi"]}`.
+  - Lỗi không có mã nghiệp vụ riêng dùng mã chung: `NOT_FOUND`, `UNAUTHORIZED`, `FORBIDDEN`, `INTERNAL_ERROR`, ...
+  - Lỗi 500 không trả chi tiết kỹ thuật; tra cứu bằng `traceId`.
 - Mã HTTP: 200/201 thành công; 400 dữ liệu sai; 401 chưa đăng nhập; 403 không có quyền; 404 không tìm thấy; 409 xung đột (hết hàng, trùng ISBN); 422 lỗi nghiệp vụ; 429 quá nhiều yêu cầu; 500 lỗi hệ thống.
 - API tạo đơn và thanh toán nhận header `Idempotency-Key` để tránh tạo trùng đơn khi khách bấm nhiều lần.
 
@@ -797,8 +810,8 @@ Không ra mắt khi còn lỗi mức Nghiêm trọng hoặc Cao; mọi luồng �
 
 | Loại | Phạm vi | Người thực hiện | Công cụ gợi ý |
 | --- | --- | --- | --- |
-| Unit test | Hàm nghiệp vụ: tính giá, khuyến mãi, tồn kho, phí ship | Lập trình viên | Jest / PHPUnit |
-| Integration test | API + CSDL + webhook giả lập | Lập trình viên | Supertest, Postman/Newman |
+| Unit test | Hàm nghiệp vụ: tính giá, khuyến mãi, tồn kho, phí ship | Lập trình viên | xUnit (backend), Jest (frontend) |
+| Integration test | API + CSDL + webhook giả lập | Lập trình viên | WebApplicationFactory (ASP.NET Core), Postman/Newman |
 | End-to-end (E2E) | Luồng khách: tìm → giỏ → thanh toán → theo dõi đơn | QA | Playwright / Cypress |
 | Kiểm thử thủ công | Theo test case từ tiêu chí chấp nhận mục 6.3 | QA | Bảng test case |
 | Hiệu năng / tải | Trang chủ, tìm kiếm, đặt hàng ở 1.000 người đồng thời | QA / DevOps | k6, JMeter |
@@ -838,7 +851,7 @@ Không ra mắt khi còn lỗi mức Nghiêm trọng hoặc Cao; mọi luồng �
 
 **Bảo trì và hỗ trợ sau ra mắt**: 3 tháng bảo hành sửa lỗi miễn phí (đề xuất trong hợp đồng); cam kết phản hồi sự cố Nghiêm trọng trong 1 giờ, Cao trong 4 giờ làm việc; cập nhật bảo mật thư viện hằng tháng.
 
-**Tài liệu bàn giao**: mã nguồn, tài liệu API (Swagger), sơ đồ hạ tầng, hướng dẫn deploy, tài khoản hệ thống, hướng dẫn sử dụng Admin (có video) cho từng vai trò.
+**Tài liệu bàn giao**: mã nguồn, tài liệu API (OpenAPI), sơ đồ hạ tầng, hướng dẫn deploy, tài khoản hệ thống, hướng dẫn sử dụng Admin (có video) cho từng vai trò.
 
 ## 15. Kế hoạch dự án
 
@@ -864,7 +877,7 @@ Không ra mắt khi còn lỗi mức Nghiêm trọng hoặc Cao; mọi luồng �
 | Business Analyst | 1 | Tuần 1–8, hỗ trợ đến UAT |
 | UI/UX Designer | 1 | Tuần 3–10 |
 | Frontend Developer | 2 | Tuần 5–20 |
-| Backend Developer | 2 | Tuần 5–20 |
+| Backend Developer (.NET) | 2 | Tuần 5–20 |
 | QA / Tester | 1 | Tuần 8–20 |
 | DevOps (bán thời gian) | 1 | Tuần 5 trở đi |
 | Phía doanh nghiệp: biên tập nhập liệu, kho, kế toán, CSKH | 3–5 | UAT và nhập dữ liệu |
@@ -961,5 +974,6 @@ Không ra mắt khi còn lỗi mức Nghiêm trọng hoặc Cao; mọi luồng �
 - Chọn 1 hay 2 đơn vị vận chuyển; có cho khách chọn không?
 - Thời điểm xuất hóa đơn điện tử: khi thanh toán hay khi giao thành công?
 - Có làm chương trình tích điểm ngay ở MVP không?
-- Tự xây dựng (custom) hay dùng nền tảng có sẵn (Haravan/Sapo/WooCommerce)?
+- ~~Tự xây dựng (custom) hay dùng nền tảng có sẵn (Haravan/Sapo/WooCommerce)?~~ Đã chốt: tự xây dựng,
+  backend ASP.NET Core (23/10/2026).
 - Tên miền chính thức?
