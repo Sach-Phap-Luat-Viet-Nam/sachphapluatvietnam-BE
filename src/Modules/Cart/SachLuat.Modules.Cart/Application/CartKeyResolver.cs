@@ -19,6 +19,9 @@ internal sealed class CartKeyResolver(
 
     private readonly CartOptions _options = options.Value;
 
+    // Cookie vừa tạo chỉ có trong response; giữ lại để các lần đọc sau trong cùng request thấy đúng giỏ.
+    private Guid? _createdGuestId;
+
     public string? UserCartKey => currentUser.UserId is { } userId
         ? _options.KeyPrefix + "u:" + userId.ToString(CultureInfo.InvariantCulture)
         : null;
@@ -28,7 +31,8 @@ internal sealed class CartKeyResolver(
     private HttpContext HttpContext => httpContextAccessor.HttpContext
         ?? throw new InvalidOperationException("Cart is only available within an HTTP request.");
 
-    private Guid? GuestId => Guid.TryParseExact(HttpContext.Request.Cookies[CookieName], "N", out var id) ? id : null;
+    private Guid? GuestId => _createdGuestId
+        ?? (Guid.TryParseExact(HttpContext.Request.Cookies[CookieName], "N", out var id) ? id : null);
 
     /// <summary>Key để ghi: thành viên dùng giỏ tài khoản; khách chưa có cookie thì tạo mới.</summary>
     public string GetOrCreateWritableKey()
@@ -44,6 +48,7 @@ internal sealed class CartKeyResolver(
         }
 
         var guestId = Guid.NewGuid();
+        _createdGuestId = guestId;
         HttpContext.Response.Cookies.Append(CookieName, guestId.ToString("N"), new CookieOptions
         {
             HttpOnly = true,
@@ -56,6 +61,9 @@ internal sealed class CartKeyResolver(
         return _options.KeyPrefix + "g:" + guestId.ToString("N");
     }
 
-    public void DeleteGuestCookie() =>
+    public void DeleteGuestCookie()
+    {
+        _createdGuestId = null;
         HttpContext.Response.Cookies.Delete(CookieName, new CookieOptions { Path = "/" + ApiRoutes.V1 });
+    }
 }

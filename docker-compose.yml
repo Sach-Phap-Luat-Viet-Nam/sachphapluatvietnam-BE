@@ -20,5 +20,21 @@ services:
       timeout: 5s
       retries: 10
 
+  # Giỏ hàng (FR-30). appendonly để giỏ không mất khi container khởi động lại.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres-data:
+  redis-data:

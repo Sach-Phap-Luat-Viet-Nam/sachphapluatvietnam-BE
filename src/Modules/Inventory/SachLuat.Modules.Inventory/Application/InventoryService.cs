@@ -94,11 +94,10 @@ internal sealed class InventoryService(
         var now = Now();
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var reservations = await ActiveReservationsAsync(reference, ReservationStatus.Active, cancellationToken);
-        var unitCosts = new Dictionary<long, decimal>();
 
         foreach (var reservation in reservations)
         {
-            var totalCost = await TakeFifoAsync(
+            await TakeFifoAsync(
                 reservation.SkuId, reservation.Quantity, TransactionType.Sale, reference, note: null, cancellationToken);
             await dbContext.StockItems
                 .Where(stock => stock.SkuId == reservation.SkuId)
@@ -108,12 +107,24 @@ internal sealed class InventoryService(
                         .SetProperty(stock => stock.UpdatedAt, now),
                     cancellationToken);
             reservation.MarkDeducted();
-            unitCosts[reservation.SkuId] = decimal.Round(totalCost / reservation.Quantity, 0);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return unitCosts;
+
+        // Tính từ thẻ kho thay vì từ vòng lặp trên: gọi lại sau khi đã trừ vẫn trả đúng giá vốn.
+        var sales = await (
+                from sale in dbContext.Transactions.AsNoTracking()
+                join batch in dbContext.PrintBatches.AsNoTracking() on sale.PrintBatchId equals batch.Id
+                where sale.Reference == reference && sale.Type == TransactionType.Sale
+                select new { sale.SkuId, Quantity = -sale.Quantity, batch.UnitCost })
+            .ToListAsync(cancellationToken);
+        return sales
+            .GroupBy(sale => sale.SkuId)
+            .ToDictionary(
+                group => group.Key,
+                group => decimal.Round(
+                    group.Sum(sale => sale.Quantity * sale.UnitCost) / group.Sum(sale => sale.Quantity), 0));
     }
 
     public async Task RestockAsync(string reference, CancellationToken cancellationToken)

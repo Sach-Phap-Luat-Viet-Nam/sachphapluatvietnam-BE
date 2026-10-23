@@ -1,0 +1,170 @@
+using SachLuat.SharedKernel.Domain;
+
+namespace SachLuat.Modules.Ordering.Domain;
+
+internal sealed class Order : AuditableEntity
+{
+    private readonly List<OrderItem> _items = [];
+    private readonly List<OrderStatusLog> _statusLogs = [];
+
+    private Order(
+        string orderCode,
+        long? userId,
+        string customerName,
+        string phone,
+        string? email,
+        ShippingAddress shippingAddress,
+        PaymentMethod paymentMethod,
+        InvoiceInfo? invoiceInfo,
+        string? note,
+        string? idempotencyKey)
+    {
+        OrderCode = orderCode;
+        UserId = userId;
+        CustomerName = customerName;
+        Phone = phone;
+        Email = email;
+        ShippingAddress = shippingAddress;
+        PaymentMethod = paymentMethod;
+        PaymentStatus = PaymentStatus.Unpaid;
+        OrderType = OrderType.Retail;
+        InvoiceRequired = invoiceInfo is not null;
+        InvoiceInfo = invoiceInfo;
+        Note = note;
+        IdempotencyKey = idempotencyKey;
+    }
+
+    // EF Core
+    private Order()
+    {
+    }
+
+    public string OrderCode { get; private set; } = string.Empty;
+
+    /// <summary>Null với khách vãng lai (FR-33).</summary>
+    public long? UserId { get; private set; }
+
+    public string CustomerName { get; private set; } = string.Empty;
+
+    public string Phone { get; private set; } = string.Empty;
+
+    public string? Email { get; private set; }
+
+    // Owned type bắt buộc: constructor luôn gán, EF Core luôn nạp khi đọc đơn; null! chỉ cho constructor rỗng của EF.
+    public ShippingAddress ShippingAddress { get; private set; } = null!;
+
+    public decimal Subtotal { get; private set; }
+
+    public decimal Discount { get; private set; }
+
+    public decimal ShippingFee { get; private set; }
+
+    public decimal Total { get; private set; }
+
+    public PaymentMethod PaymentMethod { get; private set; }
+
+    public PaymentStatus PaymentStatus { get; private set; }
+
+    public OrderStatus Status { get; private set; }
+
+    public OrderType OrderType { get; private set; }
+
+    public bool InvoiceRequired { get; private set; }
+
+    public InvoiceInfo? InvoiceInfo { get; private set; }
+
+    public string? Note { get; private set; }
+
+    public string? IdempotencyKey { get; private set; }
+
+    /// <summary>Hạn thanh toán online; quá hạn thì job tự hủy và hoàn tồn tạm giữ (BR-10 bước 4).</summary>
+    public DateTime? PaymentExpiresAt { get; private set; }
+
+    public IReadOnlyCollection<OrderItem> Items => _items;
+
+    public IReadOnlyCollection<OrderStatusLog> StatusLogs => _statusLogs;
+
+    /// <summary>
+    /// Tạo đơn: COD → <c>pending_confirm</c>; thanh toán trước → <c>pending_payment</c> kèm hạn thanh toán.
+    /// </summary>
+    public static Order Create(
+        string orderCode,
+        long? userId,
+        string customerName,
+        string phone,
+        string? email,
+        ShippingAddress shippingAddress,
+        PaymentMethod paymentMethod,
+        InvoiceInfo? invoiceInfo,
+        string? note,
+        string? idempotencyKey,
+        IReadOnlyCollection<OrderItem> items,
+        decimal shippingFee,
+        DateTime now,
+        TimeSpan paymentTimeout)
+    {
+        var order = new Order(
+            orderCode, userId, customerName, phone, email, shippingAddress, paymentMethod, invoiceInfo, note,
+            idempotencyKey);
+        order._items.AddRange(items);
+        order.Subtotal = items.Sum(item => item.LineTotal);
+        order.ShippingFee = shippingFee;
+        order.Total = order.Subtotal - order.Discount + shippingFee;
+
+        if (paymentMethod == PaymentMethod.Cod)
+        {
+            order.Status = OrderStatus.PendingConfirm;
+        }
+        else
+        {
+            order.Status = OrderStatus.PendingPayment;
+            order.PaymentExpiresAt = now.Add(paymentTimeout);
+        }
+
+        order._statusLogs.Add(new OrderStatusLog(null, order.Status, userId, null, now));
+        return order;
+    }
+
+    public bool CanTransitionTo(OrderStatus target) => OrderStatusMachine.CanTransition(Status, target);
+
+    public void ChangeStatus(OrderStatus target, long? changedBy, string? note, DateTime now)
+    {
+        if (!CanTransitionTo(target))
+        {
+            throw OrderErrors.InvalidTransition(Status, target);
+        }
+
+        if (target == OrderStatus.Refunded && PaymentStatus != PaymentStatus.Paid)
+        {
+            throw OrderErrors.OrderNotPaid();
+        }
+
+        _statusLogs.Add(new OrderStatusLog(Status, target, changedBy, note, now));
+        Status = target;
+
+        PaymentStatus = target switch
+        {
+            OrderStatus.Paid => PaymentStatus.Paid,
+            OrderStatus.Refunded => PaymentStatus.Refunded,
+            // COD: thu tiền khi giao thành công; đối soát với đơn vị vận chuyển làm ở FR-74.
+            OrderStatus.Delivered when PaymentMethod == PaymentMethod.Cod => PaymentStatus.Paid,
+            _ => PaymentStatus,
+        };
+
+        if (target != OrderStatus.PendingPayment)
+        {
+            PaymentExpiresAt = null;
+        }
+    }
+
+    public void SetCostPrices(IReadOnlyDictionary<long, decimal> costPrices)
+    {
+        foreach (var item in _items)
+        {
+            if (costPrices.TryGetValue(item.SkuId, out var cost))
+            {
+                item.SetCostPrice(cost);
+            }
+        }
+    }
+}
