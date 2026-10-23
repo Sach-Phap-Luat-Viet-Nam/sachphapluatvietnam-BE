@@ -34,6 +34,7 @@ await app.ApplyModuleMigrationsAsync();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseMiddleware<TrustedProxyMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

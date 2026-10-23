@@ -14,7 +14,14 @@ internal static class SecurityExtensions
         var rateLimiting = configuration.GetSection(RateLimitingOptions.SectionName).Get<RateLimitingOptions>()
             ?? new RateLimitingOptions();
 
-        // Sau reverse proxy/CDN cần cấu hình ForwardedHeaders để RemoteIpAddress là IP thật của khách.
+        services.AddOptions<TrustedProxyOptions>()
+            .Bind(configuration.GetSection(TrustedProxyOptions.SectionName))
+            .Validate(
+                options => options.Secret.Length is 0 or >= TrustedProxyOptions.MinSecretLength,
+                $"TrustedProxy:Secret must be empty or at least {TrustedProxyOptions.MinSecretLength} characters.")
+            .ValidateOnStart();
+
+        // RemoteIpAddress là IP thật của khách khi request đi qua proxy FE (xem TrustedProxyMiddleware).
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;

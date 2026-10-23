@@ -36,6 +36,10 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
 
 - **Super Admin đầu tiên**: tạo lúc khởi động từ cấu hình `Auth:BootstrapAdmin` nếu email chưa tồn tại.
 - **Rate limit** (NFR-13): nhóm `/auth/*` và `/orders/lookup` tối đa 10 request/phút/IP (cấu hình được), vượt → 429.
+  - IP thật của khách: FE (Next.js trên Vercel) proxy `/api/v1/*` sang backend, gửi kèm `X-Client-Ip` và
+    `X-Proxy-Secret`. `TrustedProxyMiddleware` chỉ tin `X-Client-Ip` khi secret khớp `TrustedProxy:Secret`,
+    rồi xóa header secret. Không dùng `X-Forwarded-For` vì Render nối thêm giá trị client gửi nên giả được IP.
+  - Chưa cấu hình secret, hoặc secret sai: dùng IP kết nối (sau Render là IP proxy, mọi khách chung quota).
 
 ## API (method, route, request, response, mã lỗi)
 
@@ -71,6 +75,7 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 | `Auth:RefreshTokenDays`, `Auth:SessionRefreshTokenHours`, `Auth:TotpIssuer` | Mặc định 30 ngày / 12 giờ |
 | `Auth:BootstrapAdmin:Email`, `Auth:BootstrapAdmin:Password` | **Bí mật**, chỉ cần lần đầu |
 | `RateLimiting:AuthPermitPerMinute` | Mặc định 10 |
+| `TrustedProxy:Secret` | **Bí mật**, trống hoặc ≥ 32 ký tự, phải trùng `PROXY_SECRET` bên FE. Render: `TrustedProxy__Secret` |
 
 ## Thay đổi CSDL (migration liên quan)
 
@@ -84,4 +89,4 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 - Chưa có mã khôi phục 2FA; mã TOTP vừa dùng chưa bị chặn dùng lại trong cùng 30 giây.
 - Hai tab cùng refresh một lúc có thể bị coi là dùng lại token và bị đăng xuất.
 - Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền.
-- Sau reverse proxy cần cấu hình `ForwardedHeaders` để rate limit theo IP thật.
+- Request gọi thẳng vào Render (không qua FE) bị tính theo IP proxy của Render, dùng chung một quota.
