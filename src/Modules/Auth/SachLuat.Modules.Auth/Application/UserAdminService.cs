@@ -12,6 +12,7 @@ namespace SachLuat.Modules.Auth.Application;
 internal sealed class UserAdminService(
     UserManager<AppUser> userManager,
     AuthService authService,
+    TokenService tokenService,
     ILogger<UserAdminService> logger)
 {
     public async Task<PagedResponse<UserResponse>> ListStaffAsync(PagedQuery query, CancellationToken cancellationToken)
@@ -67,5 +68,32 @@ internal sealed class UserAdminService(
         logger.LogInformation(
             "User {ActorUserId} set roles of user {UserId} to {Roles}", actorUserId, userId, desired);
         return await authService.ToResponseAsync(user);
+    }
+
+    /// <summary>
+    /// Fast login: Super Admin lấy access token của tài khoản dưới cấp (không phải Super Admin).
+    /// Không cấp refresh token để không ghi đè cookie phiên của chính admin; hết hạn thì gọi lại.
+    /// </summary>
+    public async Task<AuthResponse> ImpersonateAsync(long actorUserId, long userId)
+    {
+        var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
+            ?? throw AuthErrors.UserNotFound();
+        var roles = await userManager.GetRolesAsync(user);
+        if (user.Id == actorUserId || roles.Contains(Roles.SuperAdmin))
+        {
+            throw AuthErrors.CannotImpersonate();
+        }
+
+        // Policy users_admin đã bắt admin qua 2FA nên phiên vào hộ cũng mang amr=mfa.
+        var accessToken = tokenService.CreateAccessToken(user, roles, isMultiFactor: true, impersonatorId: actorUserId);
+        logger.LogWarning("User {ActorUserId} impersonated user {UserId}", actorUserId, user.Id);
+
+        return new AuthResponse(
+            accessToken.Token,
+            "Bearer",
+            accessToken.ExpiresInSeconds,
+            await authService.ToResponseAsync(user),
+            AuthClaimTypes.LoginViaAdmin,
+            actorUserId);
     }
 }

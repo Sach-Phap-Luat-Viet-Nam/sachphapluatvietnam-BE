@@ -245,7 +245,12 @@ internal sealed class AuthService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var response = new AuthResponse(
-            accessToken.Token, "Bearer", accessToken.ExpiresInSeconds, await ToResponseAsync(user));
+            accessToken.Token,
+            "Bearer",
+            accessToken.ExpiresInSeconds,
+            await ToResponseAsync(user),
+            AuthClaimTypes.LoginViaPortal,
+            ImpersonatorId: null);
         return new AuthResult(response, new IssuedRefreshToken(refreshToken, expiresAt, isPersistent));
     }
 

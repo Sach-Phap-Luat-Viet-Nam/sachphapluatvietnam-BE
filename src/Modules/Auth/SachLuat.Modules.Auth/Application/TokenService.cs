@@ -28,18 +28,32 @@ internal sealed class TokenService(IOptions<JwtOptions> jwtOptions, TimeProvider
     public static SymmetricSecurityKey CreateSigningKey(JwtOptions options) =>
         new(Encoding.UTF8.GetBytes(options.SigningKey));
 
+    public static string LoginVia(long? impersonatorId) =>
+        impersonatorId is null ? AuthClaimTypes.LoginViaPortal : AuthClaimTypes.LoginViaAdmin;
+
     public static string HashRefreshToken(string token) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
-    public AccessToken CreateAccessToken(AppUser user, IEnumerable<string> roles, bool isMultiFactor)
+    /// <param name="impersonatorId">Id Super Admin khi fast login; null khi người dùng tự đăng nhập.</param>
+    public AccessToken CreateAccessToken(
+        AppUser user,
+        IEnumerable<string> roles,
+        bool isMultiFactor,
+        long? impersonatorId = null)
     {
         var claims = new List<Claim>
         {
             new(AuthClaimTypes.Subject, user.Id.ToString(CultureInfo.InvariantCulture)),
             new(AuthClaimTypes.Email, user.Email ?? string.Empty),
             new(AuthClaimTypes.AuthenticationMethod, isMultiFactor ? AuthClaimTypes.MultiFactor : AuthClaimTypes.Password),
+            new(AuthClaimTypes.LoginVia, LoginVia(impersonatorId)),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
         };
+        if (impersonatorId is { } actorId)
+        {
+            claims.Add(new Claim(AuthClaimTypes.ImpersonatorId, actorId.ToString(CultureInfo.InvariantCulture)));
+        }
+
         claims.AddRange(roles.Select(role => new Claim(AuthClaimTypes.Role, role)));
 
         var lifetime = TimeSpan.FromMinutes(_jwt.AccessTokenMinutes);

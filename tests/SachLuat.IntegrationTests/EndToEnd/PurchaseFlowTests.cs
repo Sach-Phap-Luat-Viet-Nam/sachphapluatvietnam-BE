@@ -30,16 +30,31 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         await admin.EnableTwoFactorAsync();
 
         // 2. Tạo thủ kho; thủ kho cũng phải bật 2FA.
-        await admin.PostAsync("/api/v1/admin/users", new
+        var keeperId = (await admin.PostAsync("/api/v1/admin/users", new
         {
             email = "kho@e2e.test",
             fullName = "Thủ kho",
             password = "kho-password-123",
             roles = new[] { "warehouse_keeper" },
-        }, HttpStatusCode.Created);
+        }, HttpStatusCode.Created)).GetProperty("id").GetInt64();
         using var keeper = new ApiClient(factory);
-        await keeper.LoginAsync("kho@e2e.test", "kho-password-123");
+        var keeperSession = await keeper.LoginAsync("kho@e2e.test", "kho-password-123");
+        keeperSession.GetProperty("loginVia").GetString().Should().Be("portal");
         await keeper.EnableTwoFactorAsync();
+
+        // 2b. Fast login: Super Admin vào hộ thủ kho (chỉ access token, cờ loginVia=admin); không vào được chính mình.
+        var adminId = adminSession.GetProperty("user").GetProperty("id").GetInt64();
+        var impersonated = await admin.PostAsync($"/api/v1/admin/users/{keeperId}/impersonate");
+        impersonated.GetProperty("loginVia").GetString().Should().Be("admin");
+        impersonated.GetProperty("impersonatorId").GetInt64().Should().Be(adminId);
+        using var asKeeper = new ApiClient(factory)
+        {
+            AccessToken = impersonated.GetProperty("accessToken").GetString(),
+        };
+        (await asKeeper.GetAsync("/api/v1/me")).GetProperty("email").GetString().Should().Be("kho@e2e.test");
+        var selfImpersonation = await admin.PostAsync(
+            $"/api/v1/admin/users/{adminId}/impersonate", expected: HttpStatusCode.UnprocessableEntity);
+        selfImpersonation.GetProperty("code").GetString().Should().Be("CANNOT_IMPERSONATE");
 
         // 3. Catalog: danh mục, tác giả, văn bản, đầu sách, ấn bản đang bán, SKU.
         var categoryId = (await admin.PostAsync("/api/v1/admin/categories",

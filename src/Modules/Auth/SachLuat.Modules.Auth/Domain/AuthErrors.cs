@@ -15,6 +15,7 @@ internal static class AuthErrors
     public const string UserNotFoundCode = "USER_NOT_FOUND";
     public const string RoleInvalidCode = "ROLE_INVALID";
     public const string CannotRemoveOwnAdminCode = "CANNOT_REMOVE_OWN_ADMIN";
+    public const string CannotImpersonateCode = "CANNOT_IMPERSONATE";
     public const string IdentityErrorCode = "IDENTITY_ERROR";
 
     public static BusinessException InvalidCredentials() => new(
@@ -48,6 +49,9 @@ internal static class AuthErrors
 
     public static BusinessException CannotRemoveOwnAdmin() => new(
         CannotRemoveOwnAdminCode, "Không thể tự gỡ quyền Super Admin của chính mình");
+
+    public static BusinessException CannotImpersonate() => new(
+        CannotImpersonateCode, "Không thể đăng nhập nhanh vào chính mình hoặc tài khoản Super Admin khác");
 
     public static BusinessException IdentityFailed(IEnumerable<string> errors) =>
         new(IdentityErrorCode, string.Join("; ", errors));

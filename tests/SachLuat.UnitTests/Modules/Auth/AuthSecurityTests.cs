@@ -2,9 +2,11 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using Microsoft.IdentityModel.JsonWebTokens;
 using SachLuat.Modules.Auth.Application;
 using SachLuat.Modules.Auth.Domain;
 using SachLuat.Modules.Auth.Infrastructure;
+using SachLuat.SharedKernel.Security;
 using Xunit;
 
 namespace SachLuat.UnitTests.Modules.Auth;
@@ -61,6 +63,33 @@ public sealed class AuthSecurityTests
         var accessToken = service.CreateAccessToken(new AppUser { Id = 42, Email = "a@b.vn" }, ["customer"], false);
 
         (await service.ValidateTwoFactorTicketAsync(accessToken.Token)).Should().BeNull();
+    }
+
+    [Fact]
+    public void AccessToken_SelfLogin_IsMarkedPortalWithoutImpersonator()
+    {
+        var service = new TokenService(Options.Create(Jwt), TimeProvider.System);
+
+        var token = new JsonWebToken(
+            service.CreateAccessToken(new AppUser { Id = 42, Email = "a@b.vn" }, ["customer"], false).Token);
+
+        token.GetClaim(AuthClaimTypes.LoginVia).Value.Should().Be(AuthClaimTypes.LoginViaPortal);
+        token.TryGetClaim(AuthClaimTypes.ImpersonatorId, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void AccessToken_Impersonated_IsMarkedAdminWithImpersonator()
+    {
+        var service = new TokenService(Options.Create(Jwt), TimeProvider.System);
+
+        var token = new JsonWebToken(service.CreateAccessToken(
+            new AppUser { Id = 42, Email = "a@b.vn" }, ["warehouse_keeper"], isMultiFactor: true, impersonatorId: 1)
+            .Token);
+
+        token.GetClaim(AuthClaimTypes.Subject).Value.Should().Be("42");
+        token.GetClaim(AuthClaimTypes.LoginVia).Value.Should().Be(AuthClaimTypes.LoginViaAdmin);
+        token.GetClaim(AuthClaimTypes.ImpersonatorId).Value.Should().Be("1");
+        token.GetClaim(AuthClaimTypes.AuthenticationMethod).Value.Should().Be(AuthClaimTypes.MultiFactor);
     }
 
     [Fact]

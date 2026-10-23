@@ -33,7 +33,15 @@ internal sealed record UserResponse(
     bool TwoFactorEnabled,
     bool RequiresTwoFactorSetup);
 
-internal sealed record AuthResponse(string AccessToken, string TokenType, int ExpiresIn, UserResponse User);
+/// <param name="LoginVia"><c>portal</c> (tự đăng nhập) hoặc <c>admin</c> (Super Admin fast login).</param>
+/// <param name="ImpersonatorId">Id Super Admin đang fast login, null khi <paramref name="LoginVia"/> = <c>portal</c>.</param>
+internal sealed record AuthResponse(
+    string AccessToken,
+    string TokenType,
+    int ExpiresIn,
+    UserResponse User,
+    string LoginVia,
+    long? ImpersonatorId);
 
 /// <summary>
 /// <see cref="RequiresTwoFactor"/> = true: gọi tiếp <c>/auth/login/2fa</c> với <see cref="TwoFactorToken"/>;

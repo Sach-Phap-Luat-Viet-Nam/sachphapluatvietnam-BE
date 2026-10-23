@@ -23,4 +23,8 @@ internal sealed class AdminUsersController(UserAdminService userAdminService, IC
     [HttpPut("{id:long}/roles")]
     public Task<UserResponse> SetRoles(long id, SetRolesRequest request) =>
         userAdminService.SetRolesAsync(currentUser.RequireUserId(), id, request);
+
+    [HttpPost("{id:long}/impersonate")]
+    public Task<AuthResponse> Impersonate(long id) =>
+        userAdminService.ImpersonateAsync(currentUser.RequireUserId(), id);
 }

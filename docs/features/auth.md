@@ -35,6 +35,21 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
 | `users_admin` | super_admin | `/admin/users` |
 
 - **Super Admin đầu tiên**: tạo lúc khởi động từ cấu hình `Auth:BootstrapAdmin` nếu email chưa tồn tại.
+- **Fast login (Super Admin vào hộ tài khoản)**:
+  - `POST /admin/users/{id}/impersonate` (policy `users_admin`) trả `AuthResponse` của tài khoản đích, dùng để
+    hỗ trợ, kiểm tra lỗi giúp nhân viên/khách hàng mà không cần mật khẩu của họ.
+  - Chỉ vào hộ tài khoản **dưới cấp**: mọi tài khoản không có vai trò `super_admin`, không phải chính mình.
+    Ngược lại → `CANNOT_IMPERSONATE` (422).
+  - Chỉ cấp **access token 15 phút**, không có refresh token, không ghi cookie, nên phiên của chính admin
+    (cookie `sl_refresh`) giữ nguyên. Hết hạn thì gọi lại API.
+  - Token mang `amr=mfa` (admin đã qua 2FA) và vai trò của tài khoản đích. Không chặn thao tác nào
+    trong phiên vào hộ.
+  - Mỗi lần fast login ghi log `Warning` kèm `ActorUserId`, `TargetUserId`.
+- **Cờ đường đăng nhập**: mọi access token có claim `login_via`:
+  - `portal`: người dùng tự đăng nhập (login, 2FA, register, refresh). Token cũ không có claim này coi là `portal`.
+  - `admin`: Super Admin fast login; kèm claim `impersonator_id` = id của admin.
+  - `AuthResponse` trả thêm `loginVia`, `impersonatorId`. Module khác đọc qua `ICurrentUser.ImpersonatorUserId`
+    / `ICurrentUser.IsImpersonated`.
 - **Rate limit** (NFR-13): nhóm `/auth/*` và `/orders/lookup` tối đa 10 request/phút/IP (cấu hình được), vượt → 429.
   - IP thật của khách: FE (Next.js trên Vercel) proxy `/api/v1/*` sang backend, gửi kèm `X-Client-Ip` và
     `X-Proxy-Secret`. `TrustedProxyMiddleware` chỉ tin `X-Client-Ip` khi secret khớp `TrustedProxy:Secret`,
@@ -59,12 +74,14 @@ Tiền tố `/api/v1`.
 | GET | `/admin/users` | users_admin | Danh sách nhân viên (phân trang) |
 | POST | `/admin/users` | users_admin | `{email, fullName, password, roles[]}` → 201 |
 | PUT | `/admin/users/{id}/roles` | users_admin | `{roles[]}` |
+| POST | `/admin/users/{id}/impersonate` | users_admin | → `AuthResponse` của tài khoản đích (`loginVia: "admin"`), không cookie |
 
-`AuthResponse`: `{accessToken, tokenType: "Bearer", expiresIn, user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, ...}}`.
+`AuthResponse`: `{accessToken, tokenType: "Bearer", expiresIn, loginVia: "portal" | "admin", impersonatorId?,
+user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, ...}}`.
 
 Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (409), `INVALID_REFRESH_TOKEN` (401),
 `TWO_FACTOR_TOKEN_INVALID` (401), `OTP_INVALID` (400), `TWO_FACTOR_ALREADY_ENABLED` (409),
-`CANNOT_REMOVE_OWN_ADMIN` (422), `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429).
+`CANNOT_REMOVE_OWN_ADMIN` (422), `CANNOT_IMPERSONATE` (422), `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429).
 
 ## Cấu hình cần thiết
 
@@ -88,5 +105,8 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 - Chưa có đăng nhập mạng xã hội (FR-02), tài khoản tổ chức (FR-09), sổ địa chỉ (FR-06), xóa tài khoản (FR-08).
 - Chưa có mã khôi phục 2FA; mã TOTP vừa dùng chưa bị chặn dùng lại trong cùng 30 giây.
 - Hai tab cùng refresh một lúc có thể bị coi là dùng lại token và bị đăng xuất.
-- Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền.
+- Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền và fast login (hiện chỉ ghi log).
+- Fast login không chặn thao tác nào (đổi mật khẩu, bật 2FA... thay người dùng); access token vào hộ không thu hồi
+  được trước hạn 15 phút.
+- `GET /admin/users` mới chỉ liệt kê nhân viên; muốn fast login khách hàng thì Admin cần biết id khách.
 - Request gọi thẳng vào Render (không qua FE) bị tính theo IP proxy của Render, dùng chung một quota.
