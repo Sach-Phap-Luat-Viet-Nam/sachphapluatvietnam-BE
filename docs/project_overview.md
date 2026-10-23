@@ -24,6 +24,7 @@ Tài liệu này là nguồn tham chiếu duy nhất (single source of truth) ch
 | 1.0 | 23/10/2026 | Chủ dự án | Khởi tạo tài liệu |
 | 1.1 | 23/10/2026 | Đội phát triển | Chốt backend ASP.NET Core .NET 10, modular monolith, EF Core; định dạng lỗi theo Problem Details (mục 9, 11.1, 14.1) |
 | 1.2 | 23/10/2026 | Đội phát triển | Mục 10: tồn kho tách khỏi `skus` sang module Inventory; thêm cột ấn bản, bảng categories/authors; mục 16.2: mã lỗi Admin của Catalog |
+| 1.3 | 23/10/2026 | Đội phát triển | Triển khai Auth, Catalog API, Inventory, Cart (Redis), Ordering; mục 11.3, 16.2 cập nhật mã lỗi |
 
 **Quy ước trong tài liệu**
 
@@ -521,7 +522,7 @@ Chi tiết dựng môi trường và quy tắc module: `docs/setup.md`.
 | Cấu trúc (đã chốt) | Modular monolith: mỗi module một project, một schema CSDL | Clean Architecture 4 tầng | Ranh giới module rõ, tách thành service riêng được khi tải tăng |
 | CSDL / ORM (đã chốt) | PostgreSQL 16 + EF Core (Npgsql), tên bảng/cột `snake_case` | MySQL 8; Dapper | Giao dịch chặt chẽ, JSONB, full-text; migration quản lý schema |
 | Tìm kiếm | Meilisearch | Elasticsearch | Nhẹ, hỗ trợ bỏ dấu, dễ vận hành |
-| Cache | Redis | — | Cache, phiên, giỏ hàng, rate limit |
+| Cache | Redis (đã dùng cho giỏ hàng) | — | Cache, phiên, giỏ hàng, rate limit |
 | Hàng đợi / worker (chưa chốt) | Hangfire | `BackgroundService` + bảng job trong PostgreSQL; RabbitMQ | Chốt khi làm module Notification; BullMQ ở bản trước chỉ dùng được với Node.js |
 | Kiểm thử backend | xUnit v3 + NSubstitute + AwesomeAssertions | NUnit, Moq | Chuẩn phổ biến của .NET, license mã nguồn mở |
 | Hạ tầng | VPS/Cloud tại Việt Nam (Viettel IDC, VNG Cloud, FPT Cloud) hoặc AWS Singapore | Bizfly Cloud | Độ trễ thấp cho khách Việt Nam |
@@ -712,6 +713,10 @@ API theo chuẩn REST, JSON, tiền tố `/api/v1`; xác thực bằng JWT (acce
 | POST | /wholesale-quotes | Gửi yêu cầu báo giá sỉ | Không |
 
 ### 11.3. API quản trị (Admin)
+
+Đã triển khai giai đoạn 1 (23/10/2026): books, editions, skus, categories, authors, legal-documents,
+inventory (phiếu nhập có duyệt, thẻ kho, tồn thấp, xuất thủ công), orders, users; route và request chi tiết ở
+`docs/features/*.md`. Mọi API Admin yêu cầu đăng nhập có 2FA.
 
 Tiền tố `/api/v1/admin`, mọi endpoint kiểm tra quyền theo vai trò: `/books`, `/editions`, `/skus`, `/print-batches`, `/inventory/transactions`, `/inventory/stocktakes`, `/orders` (+ `/orders/{id}/status`, `/orders/{id}/shipments`), `/returns`, `/customers`, `/reviews`, `/promotions`, `/coupons`, `/posts`, `/banners`, `/reports/{type}`, `/users`, `/roles`, `/audit-logs`, `/settings`, `/imports` (Excel).
 
@@ -960,6 +965,19 @@ Không ra mắt khi còn lỗi mức Nghiêm trọng hoặc Cao; mọi luồng �
 | PRICE\_INVALID | 422 | (Admin) Giá phải là số nguyên VNĐ lớn hơn 0, giá bán không vượt giá bìa |
 | EDITION\_NOT\_FOUND | 404 | (Admin) Không tìm thấy ấn bản trong đầu sách |
 | CATEGORY\_PARENT\_INVALID | 422 | (Admin) Danh mục cha không hợp lệ |
+| CART\_EMPTY | 422 | Giỏ hàng đang trống |
+| SKU\_NOT\_AVAILABLE | 422 | Sách hiện không bán, vui lòng xóa khỏi giỏ |
+| PAYMENT\_METHOD\_NOT\_SUPPORTED | 422 | Phương thức thanh toán chưa được hỗ trợ |
+| IDEMPOTENCY\_KEY\_REUSED | 409 | Idempotency-Key đã được dùng cho đơn khác |
+| ORDER\_INVALID\_TRANSITION | 409 | (Admin) Không thể chuyển đơn sang trạng thái này (mục 16.1) |
+| INVALID\_CREDENTIALS | 401 | Email hoặc mật khẩu không đúng |
+| ACCOUNT\_LOCKED | 423 | Tài khoản tạm khóa 15 phút do đăng nhập sai nhiều lần |
+| EMAIL\_TAKEN | 409 | Email đã được đăng ký |
+| RECEIPT\_SELF\_APPROVAL | 403 | (Admin) Người lập phiếu nhập không được tự duyệt |
+| BATCH\_CODE\_DUPLICATE | 409 | (Admin) Mã lô đã tồn tại cho SKU này |
+
+Danh sách đầy đủ mã lỗi theo module: `docs/features/*.md`. Lỗi chung (`VALIDATION_ERROR`, `UNAUTHORIZED`,
+`FORBIDDEN`, `NOT_FOUND`, `INTERNAL_ERROR`) suy ra từ mã HTTP.
 
 ### 16.3. Checklist ra mắt
 
