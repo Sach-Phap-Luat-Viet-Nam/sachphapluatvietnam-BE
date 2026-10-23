@@ -142,6 +142,23 @@ dotnet test --solution SachLuat.slnx
 dotnet format SachLuat.slnx --verify-no-changes
 ```
 
+Test chạm CSDL thật (`tests/SachLuat.IntegrationTests/Catalog`) chỉ chạy khi có biến môi trường
+`SACHLUAT_TEST_DB`, nếu không sẽ bị skip. Dùng database riêng, test tự chạy migration và tự tạo database:
+
+```bash
+export SACHLUAT_TEST_DB="Host=localhost;Port=5433;Database=sachluat_test;Username=sachluat;Password=<mật khẩu>"
+dotnet test --solution SachLuat.slnx
+```
+
+## Đổi mật khẩu PostgreSQL local
+
+`POSTGRES_PASSWORD` trong `.env` chỉ có tác dụng **lần đầu** container khởi tạo dữ liệu. Đổi sau đó thì:
+
+- Giữ dữ liệu: đổi mật khẩu trong DB cho khớp `.env`
+  (`docker compose exec postgres psql -U sachluat -d postgres` rồi `ALTER USER sachluat PASSWORD '...';`).
+- Hoặc xóa sạch dữ liệu và khởi tạo lại: `docker compose down -v && docker compose up -d`.
+- Sau đó cập nhật lại `user-secrets` (bước 3 ở trên). Dấu hiệu lệch mật khẩu: `28P01: password authentication failed`.
+
 ## Hạn chế / việc còn lại
 
 - Chưa có entity và migration nào: cần chốt thiết kế bảng ở mục 10 trước.

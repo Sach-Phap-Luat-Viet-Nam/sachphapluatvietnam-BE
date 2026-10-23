@@ -84,3 +84,7 @@ dotnet_naming_style.ends_with_async.capitalization = pascal_case
 # Analyzer
 dotnet_diagnostic.CA2007.severity = none # ConfigureAwait: ASP.NET Core không có SynchronizationContext
 dotnet_diagnostic.CA1848.severity = suggestion # LoggerMessage delegate: tối ưu sau khi cần
+
+# Migration do EF Core sinh: không áp style rule, không để dotnet format sửa.
+[**/Migrations/*.cs]
+generated_code = true

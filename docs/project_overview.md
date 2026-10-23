@@ -23,6 +23,7 @@ Tài liệu này là nguồn tham chiếu duy nhất (single source of truth) ch
 | --- | --- | --- | --- |
 | 1.0 | 23/10/2026 | Chủ dự án | Khởi tạo tài liệu |
 | 1.1 | 23/10/2026 | Đội phát triển | Chốt backend ASP.NET Core .NET 10, modular monolith, EF Core; định dạng lỗi theo Problem Details (mục 9, 11.1, 14.1) |
+| 1.2 | 23/10/2026 | Đội phát triển | Mục 10: tồn kho tách khỏi `skus` sang module Inventory; thêm cột ấn bản, bảng categories/authors; mục 16.2: mã lỗi Admin của Catalog |
 
 **Quy ước trong tài liệu**
 
@@ -582,6 +583,8 @@ Chi tiết dựng môi trường và quy tắc module: `docs/setup.md`.
 | updated\_to\_date | DATE |  | Ngày văn bản mới nhất |
 | pages, size, weight\_gram | INT / VARCHAR / INT |  | Số trang, khổ, trọng lượng (tính ship) |
 | preview\_file\_url | VARCHAR |  | File đọc thử |
+| cover\_image\_url | VARCHAR(500) |  | Ảnh bìa của ấn bản (bước 4 của BR-01) |
+| table\_of\_contents | TEXT |  | Mục lục |
 | release\_date | DATE |  | Ngày phát hành |
 | is\_latest | BOOLEAN | Tối đa 1 bản/đầu sách | BR-02 |
 | status | ENUM |  | draft, upcoming, on\_sale, discontinued, clearance |
@@ -596,12 +599,13 @@ Chi tiết dựng môi trường và quy tắc module: `docs/setup.md`.
 | cover\_type | ENUM |  | paperback, hardcover |
 | list\_price | DECIMAL(12,0) | NOT NULL | Giá bìa |
 | sale\_price | DECIMAL(12,0) | NOT NULL | Giá bán |
-| stock\_available | INT | ≥ 0 | Tồn khả dụng |
-| stock\_reserved | INT | ≥ 0 | Tạm giữ (BR-11) |
-| low\_stock\_threshold | INT | Mặc định 50 |  |
 | allow\_preorder | BOOLEAN |  |  |
 
-**print\_batches — Lô in**
+> Tồn kho (`stock_available`, `stock_reserved` cho BR-11, `low_stock_threshold` mặc định 50) **không** nằm trong
+> `skus`: chuyển sang module Inventory (chốt 23/10/2026), tham chiếu `sku_id`, để việc khóa dòng khi trừ kho
+> nằm gọn trong một module. Mỗi ấn bản tối đa một SKU cho mỗi `cover_type`.
+
+**print\_batches — Lô in** (module Inventory)
 
 | Trường | Kiểu | Ghi chú |
 | --- | --- | --- |
@@ -650,6 +654,10 @@ Chi tiết dựng môi trường và quy tắc module: `docs/setup.md`.
 **shipments**: id, order\_id, carrier, tracking\_code, fee, cod\_amount, status, events (JSONB), delivered\_at.
 
 **inventory\_transactions**: id, sku\_id, batch\_id, type (import, sale, return, adjust, damage, gift), quantity (+/−), reference (mã đơn/phiếu), created\_by, note, created\_at.
+
+**categories**: id, name, slug (duy nhất khi chưa xóa), parent\_id (cây danh mục), sort\_order, deleted\_at.
+
+**authors**: id, name, slug (duy nhất khi chưa xóa), biography, sort\_order, deleted\_at.
 
 **Các bảng khác**: users, roles, permissions, user\_roles, addresses, categories, book\_categories, authors, book\_authors, reviews, wishlists, carts, cart\_items, promotions, coupons, order\_coupons, return\_requests, invoices, posts, pages, banners, subscriptions (đăng ký nhận tin ấn bản mới), loyalty\_points, audit\_logs, settings.
 
@@ -945,6 +953,13 @@ Không ra mắt khi còn lỗi mức Nghiêm trọng hoặc Cao; mọi luồng �
 | OTP\_INVALID | 400 | Mã OTP không đúng hoặc đã hết hạn |
 | TOO\_MANY\_REQUESTS | 429 | Bạn thao tác quá nhanh, vui lòng thử lại sau |
 | ISBN\_DUPLICATE | 409 | (Admin) ISBN đã tồn tại |
+| ISBN\_INVALID | 422 | (Admin) ISBN không hợp lệ (13 chữ số, 978/979, đúng số kiểm tra) |
+| SLUG\_INVALID | 422 | (Admin) Slug chỉ gồm chữ thường không dấu, số và dấu gạch nối |
+| SKU\_CODE\_INVALID | 422 | (Admin) Mã SKU chỉ gồm chữ in hoa, số và dấu gạch nối |
+| SKU\_COVER\_DUPLICATE | 409 | (Admin) Ấn bản đã có SKU cho loại bìa này |
+| PRICE\_INVALID | 422 | (Admin) Giá phải là số nguyên VNĐ lớn hơn 0, giá bán không vượt giá bìa |
+| EDITION\_NOT\_FOUND | 404 | (Admin) Không tìm thấy ấn bản trong đầu sách |
+| CATEGORY\_PARENT\_INVALID | 422 | (Admin) Danh mục cha không hợp lệ |
 
 ### 16.3. Checklist ra mắt
 
