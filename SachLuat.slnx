@@ -1,5 +1,20 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="docker-compose.yml" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/SachLuat.Api/SachLuat.Api.csproj" />
+    <Project Path="src/SachLuat.SharedKernel/SachLuat.SharedKernel.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Catalog/">
+    <Project Path="src/Modules/Catalog/SachLuat.Modules.Catalog/SachLuat.Modules.Catalog.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SachLuat.IntegrationTests/SachLuat.IntegrationTests.csproj" />
+    <Project Path="tests/SachLuat.UnitTests/SachLuat.UnitTests.csproj" />
   </Folder>
 </Solution>
