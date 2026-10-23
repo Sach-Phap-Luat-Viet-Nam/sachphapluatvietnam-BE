@@ -35,8 +35,39 @@ Tồn kho, lô in và thẻ kho **không** thuộc Catalog mà thuộc module In
 
 ## API (method, route, request, response, mã lỗi)
 
-Chưa có. Bước tiếp theo: API storefront `GET /api/v1/books/{slug}`, `GET /api/v1/categories` và API admin
-CRUD (cần chốt thư viện validate và phân quyền).
+Tiền tố `/api/v1`. Enum trong JSON và query string dạng snake_case (`on_sale`, `paperback`).
+
+**Website (không cần đăng nhập)** — chỉ đầu sách `active` có ấn bản mới nhất đã công bố:
+
+| Method | Route | Mô tả |
+| --- | --- | --- |
+| GET | `/books?q=&category=&type=&audience=&cover=&minPrice=&maxPrice=&legalDocument=&sort=&page=&limit=` | Danh sách (FR-12, FR-13, FR-14); `sort`: `newest`, `price_asc`, `price_desc`; `limit` mặc định 24, tối đa 100 |
+| GET | `/books/{slug}` | Chi tiết + ấn bản (mới nhất trước, `isLatest` cho cảnh báo BR-03) + SKU (`inStock`, `discountPercent`) + văn bản pháp luật |
+| GET | `/categories` | Cây danh mục |
+
+Danh sách trả `{items, meta: {page, limit, total}}`; mỗi item lấy giá SKU rẻ nhất của ấn bản mới nhất.
+`category` gồm cả danh mục con; `legalDocument` khớp văn bản gắn với ấn bản hoặc nhãn "Cập nhật đến".
+
+**Admin** (policy `catalog_admin`: super_admin, product_manager, bắt buộc 2FA):
+
+| Method | Route | Mô tả |
+| --- | --- | --- |
+| GET | `/admin/books?q=&status=` | Danh sách mọi trạng thái |
+| GET/PUT | `/admin/books/{id}` | Chi tiết (mọi ấn bản, tồn từng SKU) / sửa |
+| POST | `/admin/books` | Tạo: `{title, slug, bookType, status, description?, targetAudiences[], metaTitle?, metaDescription?, categoryIds[], authorIds[]}` |
+| POST | `/admin/books/{id}/editions` | Thêm ấn bản; ấn bản đầu tiên tự là mới nhất |
+| PUT | `/admin/editions/{id}` | Sửa ấn bản (ISBN, QĐXB, "cập nhật đến", trạng thái, `legalDocumentIds[]`, ...) |
+| POST | `/admin/editions/{id}/set-latest` | Đổi ấn bản mới nhất (BR-02) |
+| POST | `/admin/editions/{id}/skus` | `{skuCode, coverType, listPrice, salePrice, allowPreorder}` |
+| PUT | `/admin/skus/{id}` | `{listPrice, salePrice, allowPreorder}` |
+| GET/POST/PUT/DELETE | `/admin/categories`, `/admin/authors`, `/admin/legal-documents` | CRUD, xóa là xóa mềm |
+
+Các API sửa đầu sách/ấn bản/SKU trả lại toàn bộ đầu sách (`AdminBookResponse`).
+Mã lỗi thêm: `SLUG_DUPLICATE` (409), `SKU_CODE_DUPLICATE` (409), `CATEGORY_HAS_CHILDREN` (409),
+`REFERENCE_NOT_FOUND` (422, id danh mục/tác giả/văn bản không tồn tại), `NOT_FOUND` (404).
+
+**Cho module khác**: `ICatalogSkuReader` (project `SachLuat.Modules.Catalog.Contracts`) trả snapshot SKU
+(tên sách, ấn bản, ISBN, giá, `isSellable` = đầu sách active và ấn bản `on_sale`/`clearance`).
 
 ## Cấu hình cần thiết
 
@@ -61,9 +92,9 @@ phải có migration cập nhật giá trị cũ.
 
 ## Hạn chế / việc còn lại
 
-- Chưa có API, validator đầu vào và phân quyền Admin.
+- Tìm kiếm tạm dùng `ILIKE` theo tên sách/ISBN, chưa tìm không dấu, theo tác giả, gợi ý (FR-11): chờ Meilisearch.
+- Chưa có upload ảnh bìa/file đọc thử (chỉ lưu URL), watermark đọc thử (NFR-16).
 - Chưa có concurrency token cho chỉnh sửa đồng thời trên Admin.
 - Thứ tự tác giả trong một đầu sách chưa lưu (`book_authors` chưa có `sort_order`).
-- Tag (FR-61) chưa có bảng.
-- Tìm kiếm không dấu (FR-11) sẽ dùng Meilisearch, chưa làm.
-- Mã lỗi `ISBN_DUPLICATE` từ unique index (khác đầu sách) cần map `DbUpdateException` → 409 khi làm API.
+- Tag (FR-61), combo (FR-16), giá sỉ theo bậc và lịch giá (FR-63), import Excel (FR-65) chưa làm.
+- Lọc "còn hàng", "đang giảm giá", sắp xếp "bán chạy", "đánh giá cao" (FR-12, FR-13) chưa làm.
