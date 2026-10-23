@@ -137,6 +137,8 @@ SachLuat.Modules.<Ten>/
 3. Thêm reference vào `SachLuat.Api.csproj` và `new <Ten>Module()` vào `builder.AddModules(...)` trong `Program.cs`.
 4. `dotnet sln SachLuat.slnx add <đường dẫn csproj> --solution-folder src/Modules/<Ten>`.
 5. Thêm module vào `ModuleModelTests` để test phát hiện thiếu migration.
+6. Thêm dòng `COPY` file `.csproj` của module (và `.Contracts` nếu có) vào `Dockerfile` trước bước
+   `dotnet restore`; thiếu thì build image lỗi `NETSDK1004: Assets file ... not found`.
 
 ## Migration
 
@@ -218,7 +220,7 @@ build Release với `-warnaserror` → toàn bộ test, có PostgreSQL 16 và Re
 
 ## Hạn chế / việc còn lại
 
-- Chưa có Dockerfile cho API và bước deploy; CI mới kiểm tra, chưa build image.
+- CI mới kiểm tra, chưa build Docker image (`Dockerfile` ở gốc repo) nên lỗi thiếu `COPY` csproj chỉ lộ ra lúc deploy.
 - Chưa có hàng đợi/worker riêng (Hangfire hoặc tương đương), Meilisearch, module Notification (email/ZNS),
   Promotion, Payment, Shipping, Content, Report.
 - Chưa có nhật ký thao tác hệ thống (FR-98).
