@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SachLuat.Modules.Auth.Domain;
 using SachLuat.SharedKernel.Persistence;
-using SachLuat.SharedKernel.Security;
+using SecurityRoles = SachLuat.SharedKernel.Security.Roles;
 
 namespace SachLuat.Modules.Auth.Infrastructure.Persistence;
 
@@ -28,7 +28,7 @@ internal sealed class AuthDbContext(DbContextOptions<AuthDbContext> options)
         {
             role.ToTable("roles");
             // Vai trò cố định theo bảng 4.2, seed qua migration. ConcurrencyStamp cố định để migration ổn định.
-            role.HasData(Roles.All.Select((name, index) => new AppRole(name)
+            role.HasData(SecurityRoles.All.Select((name, index) => new AppRole(name)
             {
                 Id = index + 1,
                 NormalizedName = name.ToUpperInvariant(),

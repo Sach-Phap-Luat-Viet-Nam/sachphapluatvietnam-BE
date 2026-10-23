@@ -13,8 +13,15 @@
   <Folder Name="/src/Modules/Auth/">
     <Project Path="src/Modules/Auth/SachLuat.Modules.Auth/SachLuat.Modules.Auth.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Cart/">
+    <Project Path="src/Modules/Cart/SachLuat.Modules.Cart.Contracts/SachLuat.Modules.Cart.Contracts.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Catalog/">
+    <Project Path="src/Modules/Catalog/SachLuat.Modules.Catalog.Contracts/SachLuat.Modules.Catalog.Contracts.csproj" />
     <Project Path="src/Modules/Catalog/SachLuat.Modules.Catalog/SachLuat.Modules.Catalog.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Inventory/">
+    <Project Path="src/Modules/Inventory/SachLuat.Modules.Inventory.Contracts/SachLuat.Modules.Inventory.Contracts.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SachLuat.IntegrationTests/SachLuat.IntegrationTests.csproj" />

@@ -11,6 +11,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\SachLuat.SharedKernel\SachLuat.SharedKernel.csproj" />
+    <ProjectReference Include="..\SachLuat.Modules.Catalog.Contracts\SachLuat.Modules.Catalog.Contracts.csproj" />
+    <ProjectReference Include="..\..\Inventory\SachLuat.Modules.Inventory.Contracts\SachLuat.Modules.Inventory.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

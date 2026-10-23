@@ -43,4 +43,25 @@ internal static class CatalogErrors
 
     public static BusinessException CategoryParentInvalid() =>
         new(CategoryParentInvalidCode, "Danh mục cha không hợp lệ");
+
+    public const string SlugDuplicateCode = "SLUG_DUPLICATE";
+    public const string SkuCodeDuplicateCode = "SKU_CODE_DUPLICATE";
+    public const string CategoryHasChildrenCode = "CATEGORY_HAS_CHILDREN";
+    public const string ReferenceNotFoundCode = "REFERENCE_NOT_FOUND";
+
+    public static BusinessException NotFound(string label) =>
+        new(ErrorCodes.NotFound, $"Không tìm thấy {label}", StatusCodes.Status404NotFound);
+
+    /// <summary>Id tham chiếu trong request (danh mục, tác giả, văn bản) không tồn tại.</summary>
+    public static BusinessException ReferenceNotFound(string label) =>
+        new(ReferenceNotFoundCode, $"Có {label} không tồn tại");
+
+    public static BusinessException SlugDuplicate() =>
+        new(SlugDuplicateCode, "Slug đã được sử dụng", StatusCodes.Status409Conflict);
+
+    public static BusinessException SkuCodeDuplicate() =>
+        new(SkuCodeDuplicateCode, "Mã SKU đã tồn tại", StatusCodes.Status409Conflict);
+
+    public static BusinessException CategoryHasChildren() => new(
+        CategoryHasChildrenCode, "Không thể xóa danh mục còn danh mục con", StatusCodes.Status409Conflict);
 }

@@ -27,4 +27,11 @@ public sealed class SnakeCaseEnumConverter<TEnum>() : ValueConverter<TEnum, stri
     public static TEnum FromProvider(string value) => FromProviderMap.TryGetValue(value, out var result)
         ? result
         : throw new InvalidOperationException($"Database value '{value}' is not valid for enum {typeof(TEnum).Name}.");
+
+    /// <summary>Đọc giá trị snake_case từ query string (model binding mặc định không hiểu <c>on_sale</c>).</summary>
+    public static bool TryParse(string? value, out TEnum result)
+    {
+        result = default;
+        return value is not null && FromProviderMap.TryGetValue(value, out result);
+    }
 }
