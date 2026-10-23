@@ -11,4 +11,13 @@ public static class AuthClaimTypes
 
     public const string Password = "pwd";
     public const string MultiFactor = "mfa";
+
+    /// <summary>Đường đăng nhập: <c>portal</c> (tự đăng nhập) hoặc <c>admin</c> (Super Admin fast login).</summary>
+    public const string LoginVia = "login_via";
+
+    public const string LoginViaPortal = "portal";
+    public const string LoginViaAdmin = "admin";
+
+    /// <summary>Id Super Admin đã fast login vào tài khoản, chỉ có khi <c>login_via=admin</c>.</summary>
+    public const string ImpersonatorId = "impersonator_id";
 }
