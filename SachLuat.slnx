@@ -15,6 +15,7 @@
   </Folder>
   <Folder Name="/src/Modules/Cart/">
     <Project Path="src/Modules/Cart/SachLuat.Modules.Cart.Contracts/SachLuat.Modules.Cart.Contracts.csproj" />
+    <Project Path="src/Modules/Cart/SachLuat.Modules.Cart/SachLuat.Modules.Cart.csproj" />
   </Folder>
   <Folder Name="/src/Modules/Catalog/">
     <Project Path="src/Modules/Catalog/SachLuat.Modules.Catalog.Contracts/SachLuat.Modules.Catalog.Contracts.csproj" />
@@ -22,6 +23,10 @@
   </Folder>
   <Folder Name="/src/Modules/Inventory/">
     <Project Path="src/Modules/Inventory/SachLuat.Modules.Inventory.Contracts/SachLuat.Modules.Inventory.Contracts.csproj" />
+    <Project Path="src/Modules/Inventory/SachLuat.Modules.Inventory/SachLuat.Modules.Inventory.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Ordering/">
+    <Project Path="src/Modules/Ordering/SachLuat.Modules.Ordering/SachLuat.Modules.Ordering.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SachLuat.IntegrationTests/SachLuat.IntegrationTests.csproj" />

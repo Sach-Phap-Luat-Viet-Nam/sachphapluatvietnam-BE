@@ -177,9 +177,10 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
         if (!string.IsNullOrWhiteSpace(query.Q))
         {
             // Tạm dùng ILIKE; tìm không dấu và theo tác giả/ISBN sẽ chuyển sang Meilisearch (FR-11).
-            var pattern = $"%{EscapeLike(query.Q.Trim())}%";
-            books = books.Where(book => EF.Functions.ILike(book.Title, pattern, @"\")
-                || book.Editions.Any(edition => edition.Isbn == query.Q.Trim()));
+            var term = query.Q.Trim();
+            var pattern = LikePatterns.Contains(term);
+            books = books.Where(book => EF.Functions.ILike(book.Title, pattern, LikePatterns.EscapeCharacter)
+                || book.Editions.Any(edition => edition.Isbn == term));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Category))
@@ -201,10 +202,10 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
         if (!string.IsNullOrWhiteSpace(query.LegalDocument))
         {
             var number = query.LegalDocument.Trim();
-            var pattern = $"%{EscapeLike(number)}%";
+            var pattern = LikePatterns.Contains(number);
             books = books.Where(book => book.Editions.Any(edition =>
                 edition.LegalDocuments.Any(document => document.DocNumber == number)
-                || EF.Functions.ILike(edition.UpdatedToText ?? string.Empty, pattern, @"\")));
+                || EF.Functions.ILike(edition.UpdatedToText ?? string.Empty, pattern, LikePatterns.EscapeCharacter)));
         }
 
         var hasCover = SnakeCaseEnumConverter<CoverType>.TryParse(query.Cover, out var cover);
@@ -254,9 +255,4 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
 
         return result;
     }
-
-    private static string EscapeLike(string value) =>
-        value.Replace(@"\", @"\\", StringComparison.Ordinal)
-            .Replace("%", @"\%", StringComparison.Ordinal)
-            .Replace("_", @"\_", StringComparison.Ordinal);
 }

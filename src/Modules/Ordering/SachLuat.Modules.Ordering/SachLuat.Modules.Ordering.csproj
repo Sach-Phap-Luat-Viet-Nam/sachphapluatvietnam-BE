@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SachLuat.UnitTests" />
+    <InternalsVisibleTo Include="SachLuat.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\SachLuat.SharedKernel\SachLuat.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\Catalog\SachLuat.Modules.Catalog.Contracts\SachLuat.Modules.Catalog.Contracts.csproj" />
+    <ProjectReference Include="..\..\Inventory\SachLuat.Modules.Inventory.Contracts\SachLuat.Modules.Inventory.Contracts.csproj" />
+    <ProjectReference Include="..\..\Cart\SachLuat.Modules.Cart.Contracts\SachLuat.Modules.Cart.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+</Project>
