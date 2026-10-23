@@ -3,7 +3,7 @@
 ## Mục đích
 
 Hướng dẫn dựng môi trường local cho backend Sách Luật Việt Nam và giải thích cấu trúc
-modular monolith để thêm module mới đúng quy ước.
+modular monolith để thêm module mới đúng quy ước. Chi tiết từng tính năng: `docs/features/*.md`.
 
 ## Yêu cầu
 
@@ -20,16 +20,20 @@ modular monolith để thêm module mới đúng quy ước.
 dotnet tool restore
 dotnet restore
 
-# 2. Khởi động PostgreSQL
-cp .env.example .env          # rồi đổi POSTGRES_PASSWORD trong .env
+# 2. Khởi động PostgreSQL (cổng 5433) và Redis (cổng 6380)
+cp .env.example .env          # rồi đặt POSTGRES_PASSWORD trong .env
 docker compose up -d
 
-# 3. Khai báo connection string (lưu ngoài repo, không commit)
+# 3. Khai báo bí mật (lưu ngoài repo, không commit)
 dotnet user-secrets set "ConnectionStrings:Default" \
   "Host=localhost;Port=5433;Database=sachluat;Username=sachluat;Password=<mật khẩu trong .env>" \
   --project src/SachLuat.Api
+dotnet user-secrets set "Jwt:SigningKey" "$(openssl rand -base64 48)" --project src/SachLuat.Api
+# Super Admin đầu tiên (tạo lúc khởi động nếu email chưa có; xóa 2 dòng này sau khi đã tạo)
+dotnet user-secrets set "Auth:BootstrapAdmin:Email" "<email>" --project src/SachLuat.Api
+dotnet user-secrets set "Auth:BootstrapAdmin:Password" "<mật khẩu ≥ 8 ký tự>" --project src/SachLuat.Api
 
-# 4. Chạy API
+# 4. Chạy API (Development tự áp migration của mọi module khi khởi động)
 dotnet run --project src/SachLuat.Api
 ```
 
@@ -37,82 +41,117 @@ Sau khi chạy:
 
 - API reference (Scalar): <http://localhost:5279/scalar> (chỉ ở môi trường Development)
 - OpenAPI JSON: <http://localhost:5279/openapi/v1.json>
-- Health: `/health/live` (tiến trình còn sống), `/health/ready` (đã kết nối được CSDL)
+- Health: `/health/live` (tiến trình còn sống), `/health/ready` (đã kết nối được CSDL và Redis)
+- Đăng nhập Super Admin → bật 2FA (`/auth/2fa/setup`, `/auth/2fa/enable`) trước khi gọi API Admin,
+  xem `docs/features/auth.md`.
 
-Nếu thiếu connection string, API dừng ngay khi khởi động với lỗi
-`Connection string 'Default' is not configured`.
+Thiếu cấu hình bắt buộc thì API dừng ngay khi khởi động (ví dụ `Connection string 'Default' is not configured`,
+lỗi validate `JwtOptions`).
+
+Lần đầu áp migration mỗi schema, log EF có dòng `fail: ... Failed executing DbCommand ... __EFMigrationsHistory`:
+đây là EF thử đọc bảng lịch sử chưa tồn tại rồi tạo, không phải lỗi.
 
 ### Docker Engine trong WSL (không dùng Docker Desktop)
 
 - Chạy compose từ Windows: `wsl -d Ubuntu --cd "<đường dẫn repo dạng /mnt/c/...>" -- docker compose up -d`,
   hoặc mở terminal Ubuntu, `cd` vào repo rồi chạy `docker compose up -d`.
-- **WSL tự tắt distro khi không còn tiến trình `wsl` nào mở**, kéo theo Docker và PostgreSQL tắt theo.
+- **WSL tự tắt distro khi không còn tiến trình `wsl` nào mở**, kéo theo Docker, PostgreSQL, Redis tắt theo.
   Dấu hiệu: `/health/ready` trả 503, Npgsql báo `actively refused`, `wsl -l -v` hiện `Stopped`.
   Cách xử lý: giữ một terminal Ubuntu mở trong lúc làm việc. Container có `restart: unless-stopped`
   nên tự chạy lại khi Docker khởi động.
 - Sau khi container vừa chạy, `wslrelay` cần vài giây mới chuyển tiếp cổng sang `localhost` của Windows.
-- Cổng mặc định là **5433** (không phải 5432) để tránh trùng với PostgreSQL của dự án khác trên cùng máy.
+- Cổng mặc định **5433** (PostgreSQL) và **6380** (Redis) để không trùng dịch vụ của dự án khác trên cùng máy.
 
 ## Cấu trúc solution
 
 ```text
 SachLuat.slnx
-Directory.Build.props        # net10.0, Nullable, analyzer cho mọi project
-Directory.Packages.props     # version package tập trung (Central Package Management)
-global.json                  # bật Microsoft.Testing.Platform cho dotnet test
-docker-compose.yml           # PostgreSQL 16 cho local
+Directory.Build.props          # net10.0, Nullable, analyzer cho mọi project
+Directory.Packages.props       # version package tập trung (Central Package Management)
+global.json                    # ghim SDK 10, bật Microsoft.Testing.Platform cho dotnet test
+docker-compose.yml             # PostgreSQL 16 + Redis 7 cho local
+.github/workflows/ci.yml       # CI: format, build, test (kèm PostgreSQL + Redis)
 src/
-  SachLuat.Api/              # Host: Program.cs, middleware, xử lý lỗi, đăng ký module
-  SachLuat.SharedKernel/     # Dùng chung: IModule, BusinessException, ErrorCodes, ApiRoutes
+  SachLuat.Api/                # Host: Program.cs, xử lý lỗi, bảo mật, đăng ký module
+  SachLuat.SharedKernel/       # IModule, BusinessException, ErrorCodes, ApiRoutes, Roles/Policies,
+                               # ICurrentUser, PagedQuery, FluentValidationFilter, AuditableEntity
   Modules/
-    Catalog/
-      SachLuat.Modules.Catalog/
-        CatalogModule.cs     # Điểm đăng ký DI của module
-        Domain/              # Entity, value object
-        Application/         # Use case, DTO, validator
-        Infrastructure/
-          Persistence/       # CatalogDbContext, cấu hình entity, Migrations/
-        Controllers/         # Controller của module (public)
+    Auth/                      # Identity + JWT + 2FA (schema auth)
+    Catalog/                   # Đầu sách, ấn bản, SKU (schema catalog) + Catalog.Contracts
+    Inventory/                 # Tồn kho, phiếu nhập, lô in (schema inventory) + Inventory.Contracts
+    Cart/                      # Giỏ hàng trên Redis + Cart.Contracts
+    Ordering/                  # Đơn hàng (schema ordering)
 tests/
   SachLuat.UnitTests/
-  SachLuat.IntegrationTests/ # WebApplicationFactory<Program>
+  SachLuat.IntegrationTests/   # WebApplicationFactory<Program>, test CSDL thật, end-to-end
+```
+
+Bên trong một module:
+
+```text
+SachLuat.Modules.<Ten>/
+  <Ten>Module.cs               # Đăng ký DI, DbContext, health check, MigrateAsync
+  Domain/                      # Entity, quy tắc nghiệp vụ, mã lỗi
+  Application/                 # Service, DTO, validator (FluentValidation)
+  Infrastructure/Persistence/  # DbContext, Migrations/
+  Controllers/
 ```
 
 ### Quy tắc ranh giới module
 
-- Mỗi module là **một project**. Mọi thứ để `internal`, trừ class `XxxModule` và controller.
-- Mỗi module sở hữu **một schema PostgreSQL riêng** (`catalog`, `ordering`, ...) và một `DbContext` riêng,
-  có bảng `__EFMigrationsHistory` riêng trong schema đó.
-- Tên bảng/cột tự chuyển sang `snake_case` (package `EFCore.NamingConventions`) để khớp thiết kế dữ liệu
-  ở mục 10 của `project_overview.md`.
-- Module **không** reference trực tiếp project của module khác. Khi cần giao tiếp, tạo project
-  `SachLuat.Modules.<Ten>.Contracts` chứa interface/DTO công khai.
+- Mỗi module là **một project**. Mọi thứ để `internal`, kể cả controller (host nạp controller internal qua
+  `InternalControllerFeatureProvider`); chỉ `<Ten>Module` là public.
+- Mỗi module sở hữu **một schema PostgreSQL riêng** và một `DbContext` riêng, có bảng `__EFMigrationsHistory`
+  riêng trong schema đó. **Không đặt khóa ngoại chéo schema**; chỉ lưu id và kiểm tra qua contract.
+- Tên bảng/cột tự chuyển sang `snake_case` (package `EFCore.NamingConventions`); enum lưu chuỗi snake_case.
+- Module **không** reference project của module khác, chỉ reference `SachLuat.Modules.<Ten>.Contracts`
+  (interface + DTO public). Hiện có: `ICatalogSkuReader`, `IInventoryService`, `ICurrentCart`.
+- Thao tác giữa hai module không chung transaction: thiết kế idempotent theo mã tham chiếu (ví dụ mã đơn) và
+  có bước bù trừ khi lỗi (xem `docs/features/ordering.md`).
+
+## Quy ước API
+
+- Route: `ApiRoutes.V1` (`api/v1`), `ApiRoutes.AdminV1` (`api/v1/admin`).
+- Validate bằng FluentValidation: khai báo `AbstractValidator<TRequest>` trong module, `FluentValidationFilter`
+  tự chạy và trả 400 `VALIDATION_ERROR` với `errors` theo tên field camelCase.
+- Phân trang: kế thừa `PagedQuery` (`page`, `limit` mặc định 24, tối đa 100), validator kế thừa
+  `PagedQueryValidator<T>`; trả `PagedResponse<T>` = `{items, meta: {page, limit, total}}`.
+- Enum trong JSON dạng snake_case. Enum trong query string là `string` rồi parse bằng
+  `SnakeCaseEnumConverter<T>.TryParse` (model binding mặc định không hiểu `on_sale`).
+- API Admin: `[Authorize(Policy = Policies.Xxx)]`, mọi policy yêu cầu đăng nhập có 2FA.
+- Người dùng hiện tại: inject `ICurrentUser` (`UserId`, `RequireUserId()`).
 
 ## Thêm module mới
 
-1. Tạo `src/Modules/<Ten>/SachLuat.Modules.<Ten>/SachLuat.Modules.<Ten>.csproj`, copy cấu trúc csproj
-   của Catalog (FrameworkReference `Microsoft.AspNetCore.App`, reference SharedKernel, package EF Core).
-2. Tạo `<Ten>Module : IModule` đăng ký `DbContext` (schema riêng) và service của module.
-3. Thêm reference vào `SachLuat.Api.csproj` và thêm `new <Ten>Module()` vào `builder.AddModules(...)`
-   trong `Program.cs`.
-4. `dotnet sln SachLuat.slnx add <đường dẫn csproj>`.
+1. Tạo `src/Modules/<Ten>/SachLuat.Modules.<Ten>/SachLuat.Modules.<Ten>.csproj` theo mẫu module có sẵn
+   (FrameworkReference `Microsoft.AspNetCore.App`, reference SharedKernel, `InternalsVisibleTo` hai project test).
+2. Tạo `<Ten>Module : IModule`: đăng ký `DbContext` (schema riêng, `AuditableEntityInterceptor`), service,
+   `AddValidatorsFromAssembly(..., includeInternalTypes: true)`, health check; `MigrateAsync` áp migration.
+3. Thêm reference vào `SachLuat.Api.csproj` và `new <Ten>Module()` vào `builder.AddModules(...)` trong `Program.cs`.
+4. `dotnet sln SachLuat.slnx add <đường dẫn csproj> --solution-folder src/Modules/<Ten>`.
+5. Thêm module vào `ModuleModelTests` để test phát hiện thiếu migration.
 
 ## Migration
 
-Mỗi module tạo migration cho `DbContext` của chính nó:
+Mỗi module tạo migration cho `DbContext` của chính nó (`<Ten>` = Auth, Catalog, Inventory, Ordering):
 
 ```bash
 dotnet ef migrations add <TenMigration> \
-  --project src/Modules/Catalog/SachLuat.Modules.Catalog \
+  --project src/Modules/<Ten>/SachLuat.Modules.<Ten> \
   --startup-project src/SachLuat.Api \
-  --context CatalogDbContext \
+  --context <Ten>DbContext \
   --output-dir Infrastructure/Persistence/Migrations
 
 dotnet ef database update \
-  --project src/Modules/Catalog/SachLuat.Modules.Catalog \
+  --project src/Modules/<Ten>/SachLuat.Modules.<Ten> \
   --startup-project src/SachLuat.Api \
-  --context CatalogDbContext
+  --context <Ten>DbContext
 ```
+
+- `Database:ApplyMigrationsOnStartup` = true ở `appsettings.Development.json` (tự áp khi chạy local),
+  **false** ở `appsettings.json`: production áp migration bằng bước deploy riêng.
+- Sau `migrations add` mà chạy `migrations script --no-build` thì phải build lại trước, nếu không script thiếu
+  migration mới.
 
 ## Xử lý lỗi (API)
 
@@ -124,15 +163,13 @@ Mọi lỗi trả `application/problem+json` (RFC 9457), có thêm `code` và `t
   "title": "Sách đã hết hàng hoặc không đủ số lượng",
   "status": 409,
   "code": "OUT_OF_STOCK",
-  "traceId": "0HN..."
+  "traceId": "00-..."
 }
 ```
 
-- Lỗi nghiệp vụ: `throw new BusinessException("OUT_OF_STOCK", "<thông báo cho khách>", 409);`
-  (mặc định 422).
+- Lỗi nghiệp vụ: `throw new BusinessException("OUT_OF_STOCK", "<thông báo cho khách>", 409);` (mặc định 422).
 - Lỗi không lường trước: trả 500, `code = INTERNAL_ERROR`, không lộ message/stack trace; chi tiết nằm trong log.
-- 404 routing, 405, lỗi validation model: `code` suy ra từ mã HTTP (`ErrorCodes.FromStatusCode`).
-- Route dùng hằng số `ApiRoutes.V1` (`api/v1`) và `ApiRoutes.AdminV1` (`api/v1/admin`).
+- 401, 403, 404, 405, 429, lỗi validation: `code` suy ra từ mã HTTP (`ErrorCodes.FromStatusCode`).
 
 ## Kiểm tra trước khi báo xong
 
@@ -142,29 +179,42 @@ dotnet test --solution SachLuat.slnx
 dotnet format SachLuat.slnx --verify-no-changes
 ```
 
-Test chạm CSDL thật (`tests/SachLuat.IntegrationTests/Catalog`) chỉ chạy khi có biến môi trường
-`SACHLUAT_TEST_DB`, nếu không sẽ bị skip. Dùng database riêng, test tự chạy migration và tự tạo database:
+Test cần dịch vụ thật chỉ chạy khi có biến môi trường, nếu không sẽ bị skip:
+
+| Biến | Dùng cho | Ví dụ local |
+| --- | --- | --- |
+| `SACHLUAT_TEST_DB` | Test persistence Catalog (database trong biến) và end-to-end (database `sachluat_e2e`, bị xóa và tạo lại mỗi lần chạy) | `Host=localhost;Port=5433;Database=sachluat_test;Username=sachluat;Password=<mật khẩu>` |
+| `SACHLUAT_TEST_REDIS` | End-to-end (giỏ hàng) | `localhost:6380` |
 
 ```bash
 export SACHLUAT_TEST_DB="Host=localhost;Port=5433;Database=sachluat_test;Username=sachluat;Password=<mật khẩu>"
+export SACHLUAT_TEST_REDIS="localhost:6380"
 dotnet test --solution SachLuat.slnx
 ```
+
+Test end-to-end (`tests/SachLuat.IntegrationTests/EndToEnd`) chạy trọn luồng: Super Admin bật 2FA, tạo thủ kho,
+nhập Catalog, phiếu nhập được duyệt, khách đặt hàng, đóng gói trừ kho FIFO, hủy đơn hoàn kho, tự hủy đơn quá hạn.
+
+## CI
+
+`.github/workflows/ci.yml` chạy trên mỗi push lên `main` và mỗi pull request: restore → kiểm tra format →
+build Release với `-warnaserror` → toàn bộ test, có PostgreSQL 16 và Redis 7 dạng service container.
 
 ## Đổi mật khẩu PostgreSQL local
 
 `POSTGRES_PASSWORD` trong `.env` chỉ có tác dụng **lần đầu** container khởi tạo dữ liệu. Đổi sau đó thì:
 
 - Giữ dữ liệu: đổi mật khẩu trong DB cho khớp `.env`
-  (`docker compose exec postgres psql -U sachluat -d postgres` rồi `ALTER USER sachluat PASSWORD '...';`).
+  (`docker compose exec postgres psql -U sachluat -d sachluat` rồi `ALTER USER sachluat PASSWORD '...';`).
 - Hoặc xóa sạch dữ liệu và khởi tạo lại: `docker compose down -v && docker compose up -d`.
-- Sau đó cập nhật lại `user-secrets` (bước 3 ở trên). Dấu hiệu lệch mật khẩu: `28P01: password authentication failed`.
+- Sau đó cập nhật lại `user-secrets`. Dấu hiệu lệch mật khẩu: `28P01: password authentication failed`.
 
 ## Hạn chế / việc còn lại
 
-- Chưa có entity và migration nào: cần chốt thiết kế bảng ở mục 10 trước.
-- Mục 9 (công nghệ: NestJS, BullMQ) và 11.1 (định dạng lỗi) của `project_overview.md` chưa cập nhật theo
-  quyết định dùng ASP.NET Core và `ProblemDetails`.
-- Chưa chọn thư viện validate (FluentValidation hay DataAnnotations), xác thực JWT, hàng đợi nền
-  cho worker, Redis, Meilisearch.
-- Khóa ngoại xuyên module (ví dụ `order_items` → `skus`) cần quyết định: FK chéo schema hay chỉ lưu ID.
-- Chưa có Dockerfile cho API và pipeline CI.
+- Chưa có Dockerfile cho API và bước deploy; CI mới kiểm tra, chưa build image.
+- Chưa có hàng đợi/worker riêng (Hangfire hoặc tương đương), Meilisearch, module Notification (email/ZNS),
+  Promotion, Payment, Shipping, Content, Report.
+- Chưa có nhật ký thao tác hệ thống (FR-98).
+- Container PostgreSQL local hiện không có database `postgres` mặc định (image chuẩn luôn có). Test end-to-end
+  đã tránh phụ thuộc (dùng `template1`); các công cụ khác cần tạo database mới có thể báo
+  `3D000: database "postgres" does not exist`, khi đó tạo lại bằng `CREATE DATABASE postgres;`.
