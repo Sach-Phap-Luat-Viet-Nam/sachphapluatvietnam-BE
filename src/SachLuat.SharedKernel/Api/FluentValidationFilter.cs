@@ -37,7 +37,7 @@ public sealed class FluentValidationFilter : IAsyncActionFilter
 
             foreach (var error in result.Errors)
             {
-                context.ModelState.AddModelError(ToCamelCasePath(error.PropertyName), error.ErrorMessage);
+                context.ModelState.AddModelError(error.PropertyName, error.ErrorMessage);
             }
         }
 
@@ -46,6 +46,15 @@ public sealed class FluentValidationFilter : IAsyncActionFilter
             var problemDetails = services.GetRequiredService<ProblemDetailsFactory>()
                 .CreateValidationProblemDetails(
                     context.HttpContext, context.ModelState, StatusCodes.Status400BadRequest);
+
+            // ModelState không phân biệt hoa thường và giữ cách viết của key đầu tiên (model binding dùng
+            // tên property "Limit"), nên đổi key sang camelCase ở đây để khớp tên field JSON.
+            var errors = problemDetails.Errors.ToList();
+            problemDetails.Errors.Clear();
+            foreach (var (key, messages) in errors)
+            {
+                problemDetails.Errors[ToCamelCasePath(key)] = messages;
+            }
             context.Result = new ObjectResult(problemDetails)
             {
                 StatusCode = StatusCodes.Status400BadRequest,
