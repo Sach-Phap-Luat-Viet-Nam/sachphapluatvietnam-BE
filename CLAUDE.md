@@ -7,21 +7,29 @@
 - **Backend**: ASP.NET Core **.NET 10 (LTS)**, C#, kiến trúc **modular monolith**
 - **Kiểu API**: Controllers, tiền tố `api/v1` (`ApiRoutes.V1`), lỗi trả `ProblemDetails` + `code`
 - **CSDL / ORM**: PostgreSQL 16 + EF Core (Npgsql), mỗi module một schema và một `DbContext`,
-  tên bảng/cột `snake_case`
+  tên bảng/cột `snake_case`, không khóa ngoại chéo schema. Giỏ hàng lưu Redis 7.
+- **Module hiện có**: Auth (Identity + JWT + 2FA), Catalog, Inventory, Cart, Ordering
+  (mô tả từng module: `docs/features/*.md`)
+- **Bảo mật**: JWT 15 phút + refresh token cookie HttpOnly; API Admin dùng `Policies.*`, bắt buộc 2FA
+- **Validate**: FluentValidation (`FluentValidationFilter` tự chạy); phân trang `PagedQuery`
 - **Test**: xUnit v3 (Microsoft.Testing.Platform) + NSubstitute + AwesomeAssertions
-  (fork Apache-2.0 của FluentAssertions; FluentAssertions 8+ là license thương mại)
+  (fork Apache-2.0 của FluentAssertions; FluentAssertions 8+ là license thương mại).
+  Test cần dịch vụ thật dùng biến `SACHLUAT_TEST_DB`, `SACHLUAT_TEST_REDIS` (thiếu thì skip)
+- **CI**: GitHub Actions `.github/workflows/ci.yml` (format, build `-warnaserror`, test kèm PostgreSQL + Redis)
 - **Frontend**: Next.js (React, TypeScript) + Tailwind CSS, repo riêng (quy tắc FE ở mục 8)
-- Hướng dẫn cài đặt, quy tắc module, thêm module mới: `docs/setup.md`
+- Hướng dẫn cài đặt, quy tắc module, thêm module mới, quy ước API: `docs/setup.md`
 
 ### Cấu trúc thư mục
 
 ```
 src/
-  SachLuat.Api/                 # Host: Program.cs, middleware, xử lý lỗi, đăng ký module
-  SachLuat.SharedKernel/        # IModule, BusinessException, ErrorCodes, ApiRoutes
+  SachLuat.Api/                 # Host: Program.cs, xử lý lỗi, bảo mật, đăng ký module
+  SachLuat.SharedKernel/        # IModule, BusinessException, ErrorCodes, ApiRoutes, Roles/Policies,
+                                # ICurrentUser, PagedQuery, AuditableEntity, SnakeCaseEnumConverter
   Modules/
+    <Ten>/SachLuat.Modules.<Ten>.Contracts/   # Interface/DTO public cho module khác dùng
     <Ten>/SachLuat.Modules.<Ten>/
-      <Ten>Module.cs            # Đăng ký DI, DbContext của module
+      <Ten>Module.cs            # Đăng ký DI, DbContext, MigrateAsync của module
       Domain/                   # Entity, value object
       Application/              # Use case, DTO, validator
       Infrastructure/Persistence/ # DbContext, cấu hình entity, Migrations/
@@ -34,14 +42,14 @@ docs/
   features/                     # Mỗi tính năng một file .md (mục 7)
 ```
 
-- Trong module, mọi thứ để `internal` trừ `<Ten>Module` và controller. Module không reference
-  trực tiếp module khác; cần giao tiếp thì tạo project `SachLuat.Modules.<Ten>.Contracts`.
+- Trong module, mọi thứ để `internal` (kể cả controller, DTO); chỉ `<Ten>Module` public. Module không
+  reference trực tiếp module khác, chỉ reference `SachLuat.Modules.<Ten>.Contracts`.
 
 ### Lệnh thường dùng
 
 ```bash
 dotnet tool restore
-docker compose up -d              # PostgreSQL local (cần file .env, xem .env.example)
+docker compose up -d              # PostgreSQL :5433 + Redis :6380 (cần file .env, xem .env.example)
 dotnet build SachLuat.slnx
 dotnet run --project src/SachLuat.Api
 dotnet test --solution SachLuat.slnx
@@ -120,7 +128,7 @@ Một thay đổi chỉ được báo là xong khi:
 - Controller/endpoint mỏng: chỉ nhận request, gọi service, trả response.
   Logic nghiệp vụ nằm ở tầng Application/Domain.
 - Không trả entity EF Core ra ngoài API; luôn map sang DTO.
-- Validate input bằng <FluentValidation | DataAnnotations>; trả lỗi theo
+- Validate input bằng FluentValidation (validator `internal` trong module); trả lỗi theo
   chuẩn `ProblemDetails`.
 - **Async xuyên suốt**: dùng `async/await` cho I/O; **không** dùng `.Result`,
   `.Wait()`, `async void` (trừ event handler). Truyền `CancellationToken`
