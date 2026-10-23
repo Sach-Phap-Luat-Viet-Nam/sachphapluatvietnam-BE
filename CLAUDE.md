@@ -8,7 +8,7 @@
 - **Kiểu API**: Controllers, tiền tố `api/v1` (`ApiRoutes.V1`), lỗi trả `ProblemDetails` + `code`
 - **CSDL / ORM**: PostgreSQL 16 + EF Core (Npgsql), mỗi module một schema và một `DbContext`,
   tên bảng/cột `snake_case`, không khóa ngoại chéo schema. Giỏ hàng lưu Redis 7.
-- **Module hiện có**: Auth (Identity + JWT + 2FA), Catalog, Inventory, Cart, Ordering
+- **Module hiện có**: Auth (Identity + JWT + 2FA), Catalog, Inventory, Cart, Ordering, Content (popup)
   (mô tả từng module: `docs/features/*.md`)
 - **Bảo mật**: JWT 15 phút + refresh token cookie HttpOnly; API Admin dùng `Policies.*`, bắt buộc 2FA
 - **Validate**: FluentValidation (`FluentValidationFilter` tự chạy); phân trang `PagedQuery`

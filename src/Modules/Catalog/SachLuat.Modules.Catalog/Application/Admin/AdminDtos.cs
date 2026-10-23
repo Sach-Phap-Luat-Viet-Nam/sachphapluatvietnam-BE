@@ -97,12 +97,3 @@ internal sealed record AdminBookResponse(
 internal sealed record CategoryResponse(long Id, string Name, string Slug, long? ParentId, int SortOrder);
 
 internal sealed record AuthorResponse(long Id, string Name, string Slug, string? Biography, int SortOrder);
-
-/// <summary>Các field FE gửi kèm file (multipart) lên <see cref="UploadUrl"/>.</summary>
-internal sealed record UploadSignatureResponse(
-    string UploadUrl,
-    string ApiKey,
-    long Timestamp,
-    string Folder,
-    string AllowedFormats,
-    string Signature);

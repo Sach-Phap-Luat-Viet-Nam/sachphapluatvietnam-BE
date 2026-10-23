@@ -33,6 +33,7 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
 | `orders_read` | super_admin, order_manager, customer_service, accountant | Xem đơn Admin |
 | `orders_manage` | super_admin, order_manager | Đổi trạng thái đơn |
 | `users_admin` | super_admin | `/admin/users` |
+| `content_admin` | super_admin, marketing | `/admin/popups`, `/admin/uploads/popup-signature` |
 
 - **Super Admin đầu tiên**: tạo lúc khởi động từ cấu hình `Auth:BootstrapAdmin` nếu email chưa tồn tại.
 - **Fast login (Super Admin vào hộ tài khoản)**:

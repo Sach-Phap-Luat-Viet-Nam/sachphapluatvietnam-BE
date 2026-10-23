@@ -2,12 +2,11 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
-using SachLuat.Modules.Catalog.Domain;
-using SachLuat.Modules.Catalog.Infrastructure.Cloudinary;
 using SachLuat.SharedKernel.Errors;
+using SachLuat.SharedKernel.Media;
 using Xunit;
 
-namespace SachLuat.UnitTests.Modules.Catalog;
+namespace SachLuat.UnitTests.SharedKernel;
 
 public sealed class CloudinaryUploadSignerTests
 {
@@ -25,7 +24,7 @@ public sealed class CloudinaryUploadSignerTests
     }
 
     [Fact]
-    public void CreateCoverSignature_SignsFolderFormatsAndTimestampWithoutExposingSecret()
+    public void CreateSignature_SignsFolderFormatsAndTimestampWithoutExposingSecret()
     {
         var signer = CreateSigner(new CloudinaryOptions
         {
@@ -34,7 +33,7 @@ public sealed class CloudinaryUploadSignerTests
             ApiSecret = "test-secret",
         });
 
-        var response = signer.CreateCoverSignature();
+        var response = signer.CreateSignature("sachluat/covers");
 
         response.UploadUrl.Should().Be("https://api.cloudinary.com/v1_1/demo-cloud/image/upload");
         response.ApiKey.Should().Be("123456");
@@ -46,15 +45,41 @@ public sealed class CloudinaryUploadSignerTests
     }
 
     [Fact]
-    public void CreateCoverSignature_NotConfigured_Throws503()
+    public void CreateSignature_DifferentFolder_SignsThatFolder()
+    {
+        var options = new CloudinaryOptions { CloudName = "demo-cloud", ApiKey = "123456", ApiSecret = "test-secret" };
+        var signer = CreateSigner(options);
+
+        var popup = signer.CreateSignature(options.PopupFolder);
+
+        popup.Folder.Should().Be("sachluat/popups");
+        popup.Signature.Should().NotBe(signer.CreateSignature(options.CoverFolder).Signature);
+    }
+
+    [Fact]
+    public void CreateSignature_NotConfigured_Throws503()
     {
         var signer = CreateSigner(new CloudinaryOptions { CloudName = "demo-cloud" });
 
-        var act = () => signer.CreateCoverSignature();
+        var act = () => signer.CreateSignature("sachluat/covers");
 
         act.Should().Throw<BusinessException>()
-            .Where(exception => exception.Code == CatalogErrors.UploadNotConfiguredCode
+            .Where(exception => exception.Code == MediaErrors.UploadNotConfiguredCode
                 && exception.StatusCode == StatusCodes.Status503ServiceUnavailable);
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("https://res.cloudinary.com/demo-cloud/image/upload/v1/sachluat/popups/tet.jpg", true)]
+    [InlineData("https://res.cloudinary.com/other-cloud/image/upload/tet.jpg", false)]
+    [InlineData("https://example.com/tet.jpg", false)]
+    public void AcceptsImageUrl_OnlyOwnCloudinaryWhenConfigured(string? url, bool expected)
+    {
+        var options = new CloudinaryOptions { CloudName = "demo-cloud", ApiKey = "123456", ApiSecret = "test-secret" };
+
+        options.AcceptsImageUrl(url).Should().Be(expected);
+        new CloudinaryOptions().AcceptsImageUrl(url).Should().BeTrue();
     }
 
     private static CloudinaryUploadSigner CreateSigner(CloudinaryOptions options) => new(

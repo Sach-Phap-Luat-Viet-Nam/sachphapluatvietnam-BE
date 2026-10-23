@@ -64,9 +64,4 @@ internal static class CatalogErrors
 
     public static BusinessException CategoryHasChildren() => new(
         CategoryHasChildrenCode, "Không thể xóa danh mục còn danh mục con", StatusCodes.Status409Conflict);
-
-    public const string UploadNotConfiguredCode = "UPLOAD_NOT_CONFIGURED";
-
-    public static BusinessException UploadNotConfigured() => new(
-        UploadNotConfiguredCode, "Chưa cấu hình dịch vụ lưu ảnh", StatusCodes.Status503ServiceUnavailable);
 }

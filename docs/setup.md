@@ -74,13 +74,15 @@ docker-compose.yml             # PostgreSQL 16 + Redis 7 cho local
 src/
   SachLuat.Api/                # Host: Program.cs, xử lý lỗi, bảo mật, đăng ký module
   SachLuat.SharedKernel/       # IModule, BusinessException, ErrorCodes, ApiRoutes, Roles/Policies,
-                               # ICurrentUser, PagedQuery, FluentValidationFilter, AuditableEntity
+                               # ICurrentUser, PagedQuery, FluentValidationFilter, AuditableEntity,
+                               # Media (ký upload Cloudinary dùng chung)
   Modules/
     Auth/                      # Identity + JWT + 2FA (schema auth)
     Catalog/                   # Đầu sách, ấn bản, SKU (schema catalog) + Catalog.Contracts
     Inventory/                 # Tồn kho, phiếu nhập, lô in (schema inventory) + Inventory.Contracts
     Cart/                      # Giỏ hàng trên Redis + Cart.Contracts
     Ordering/                  # Đơn hàng (schema ordering)
+    Content/                   # Nội dung: popup quảng cáo (schema content)
 tests/
   SachLuat.UnitTests/
   SachLuat.IntegrationTests/   # WebApplicationFactory<Program>, test CSDL thật, end-to-end
@@ -138,7 +140,7 @@ SachLuat.Modules.<Ten>/
 
 ## Migration
 
-Mỗi module tạo migration cho `DbContext` của chính nó (`<Ten>` = Auth, Catalog, Inventory, Ordering):
+Mỗi module tạo migration cho `DbContext` của chính nó (`<Ten>` = Auth, Catalog, Inventory, Ordering, Content):
 
 ```bash
 dotnet ef migrations add <TenMigration> \

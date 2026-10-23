@@ -13,6 +13,7 @@ public static class Policies
     public const string OrdersRead = "orders_read";
     public const string OrdersManage = "orders_manage";
     public const string UsersAdmin = "users_admin";
+    public const string ContentAdmin = "content_admin";
 
     public static readonly IReadOnlyDictionary<string, string[]> StaffRoles = new Dictionary<string, string[]>
     {
@@ -22,5 +23,6 @@ public static class Policies
         [OrdersRead] = [Roles.SuperAdmin, Roles.OrderManager, Roles.CustomerService, Roles.Accountant],
         [OrdersManage] = [Roles.SuperAdmin, Roles.OrderManager],
         [UsersAdmin] = [Roles.SuperAdmin],
+        [ContentAdmin] = [Roles.SuperAdmin, Roles.Marketing],
     };
 }

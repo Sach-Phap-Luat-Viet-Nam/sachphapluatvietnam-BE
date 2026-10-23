@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Options;
 using SachLuat.Modules.Catalog.Application.Admin;
 using SachLuat.Modules.Catalog.Domain;
-using SachLuat.Modules.Catalog.Infrastructure.Cloudinary;
+using SachLuat.SharedKernel.Media;
 using Xunit;
 
 namespace SachLuat.UnitTests.Modules.Catalog;

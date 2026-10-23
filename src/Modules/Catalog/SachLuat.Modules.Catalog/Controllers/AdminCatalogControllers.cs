@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using SachLuat.Modules.Catalog.Application.Admin;
 using SachLuat.Modules.Catalog.Application.Storefront;
-using SachLuat.Modules.Catalog.Infrastructure.Cloudinary;
 using SachLuat.SharedKernel.Api;
+using SachLuat.SharedKernel.Media;
 using SachLuat.SharedKernel.Security;
 
 namespace SachLuat.Modules.Catalog.Controllers;
@@ -157,8 +158,9 @@ internal sealed class AdminLegalDocumentsController(ReferenceDataAdminService se
 [ApiController]
 [Authorize(Policy = Policies.CatalogAdmin)]
 [Route(ApiRoutes.AdminV1 + "/uploads")]
-internal sealed class AdminUploadsController(CloudinaryUploadSigner signer) : ControllerBase
+internal sealed class AdminUploadsController(CloudinaryUploadSigner signer, IOptions<CloudinaryOptions> options)
+    : ControllerBase
 {
     [HttpPost("cover-signature")]
-    public UploadSignatureResponse CreateCoverSignature() => signer.CreateCoverSignature();
+    public UploadSignatureResponse CreateCoverSignature() => signer.CreateSignature(options.Value.CoverFolder);
 }

@@ -2,8 +2,8 @@ using FluentValidation;
 using Microsoft.Extensions.Options;
 using SachLuat.Modules.Catalog.Domain;
 using SachLuat.Modules.Catalog.Domain.Editions;
-using SachLuat.Modules.Catalog.Infrastructure.Cloudinary;
 using SachLuat.SharedKernel.Api;
+using SachLuat.SharedKernel.Media;
 using SachLuat.SharedKernel.Persistence;
 
 namespace SachLuat.Modules.Catalog.Application.Admin;
@@ -67,12 +67,8 @@ internal sealed class UpsertEditionRequestValidator : AbstractValidator<UpsertEd
         RuleFor(request => request.Pages).GreaterThan(0);
         RuleFor(request => request.Size).MaximumLength(50);
         RuleFor(request => request.WeightGram).GreaterThan(0);
-        RuleFor(request => request.CoverImageUrl).MaximumLength(500);
-        // Chưa cấu hình Cloudinary (local/test) thì chấp nhận mọi link để vẫn nhập liệu được.
-        RuleFor(request => request.CoverImageUrl)
-            .Must(url => url is not null && url.StartsWith(cloudinary.ImageUrlPrefix, StringComparison.Ordinal))
-            .When(request => cloudinary.IsConfigured && !string.IsNullOrWhiteSpace(request.CoverImageUrl))
-            .WithMessage("Ảnh bìa phải được tải lên Cloudinary của hệ thống");
+        RuleFor(request => request.CoverImageUrl).MaximumLength(500)
+            .Must(cloudinary.AcceptsImageUrl).WithMessage("Ảnh bìa phải được tải lên Cloudinary của hệ thống");
         RuleFor(request => request.PreviewFileUrl).MaximumLength(500);
     }
 }

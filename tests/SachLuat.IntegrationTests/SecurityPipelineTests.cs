@@ -13,6 +13,7 @@ public sealed class SecurityPipelineTests(ApiFactory factory) : IClassFixture<Ap
     [InlineData("/api/v1/admin/orders")]
     [InlineData("/api/v1/admin/inventory/receipts")]
     [InlineData("/api/v1/admin/users")]
+    [InlineData("/api/v1/admin/popups")]
     [InlineData("/api/v1/me")]
     public async Task ProtectedEndpoint_WithoutToken_Returns401ProblemDetails(string path)
     {
@@ -26,13 +27,14 @@ public sealed class SecurityPipelineTests(ApiFactory factory) : IClassFixture<Ap
         body.RootElement.GetProperty("code").GetString().Should().Be(ErrorCodes.Unauthorized);
     }
 
-    [Fact]
-    public async Task CoverUploadSignature_WithoutToken_Returns401()
+    [Theory]
+    [InlineData("/api/v1/admin/uploads/cover-signature")]
+    [InlineData("/api/v1/admin/uploads/popup-signature")]
+    public async Task UploadSignature_WithoutToken_Returns401(string path)
     {
         using var client = factory.CreateClient();
 
-        var response = await client.PostAsync(
-            "/api/v1/admin/uploads/cover-signature", content: null, TestContext.Current.CancellationToken);
+        var response = await client.PostAsync(path, content: null, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }

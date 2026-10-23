@@ -21,6 +21,9 @@
     <Project Path="src/Modules/Catalog/SachLuat.Modules.Catalog.Contracts/SachLuat.Modules.Catalog.Contracts.csproj" />
     <Project Path="src/Modules/Catalog/SachLuat.Modules.Catalog/SachLuat.Modules.Catalog.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Content/">
+    <Project Path="src/Modules/Content/SachLuat.Modules.Content/SachLuat.Modules.Content.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Inventory/">
     <Project Path="src/Modules/Inventory/SachLuat.Modules.Inventory.Contracts/SachLuat.Modules.Inventory.Contracts.csproj" />
     <Project Path="src/Modules/Inventory/SachLuat.Modules.Inventory/SachLuat.Modules.Inventory.csproj" />

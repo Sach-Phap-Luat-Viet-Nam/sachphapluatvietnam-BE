@@ -6,6 +6,7 @@ using SachLuat.Api.Security;
 using SachLuat.Modules.Auth;
 using SachLuat.Modules.Cart;
 using SachLuat.Modules.Catalog;
+using SachLuat.Modules.Content;
 using SachLuat.Modules.Inventory;
 using SachLuat.Modules.Ordering;
 using SachLuat.SharedKernel.Api;
@@ -26,7 +27,8 @@ builder.AddModules(
     new CatalogModule(),
     new InventoryModule(),
     new CartModule(),
-    new OrderingModule());
+    new OrderingModule(),
+    new ContentModule());
 
 var app = builder.Build();
 

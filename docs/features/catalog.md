@@ -86,6 +86,8 @@ Mã lỗi thêm: `UPLOAD_NOT_CONFIGURED` (503, chưa cấu hình Cloudinary), `S
 - `Cloudinary:CloudName`, `Cloudinary:ApiKey`, `Cloudinary:ApiSecret` (**bí mật**): lấy ở Cloudinary Console.
   Local dùng user-secrets, Render dùng `Cloudinary__CloudName`, ... Thiếu thì API ký trả 503 và không kiểm tra link.
 - `Cloudinary:CoverFolder`: mặc định `sachluat/covers`.
+- Tài khoản Cloudinary dùng chung với module Content (ảnh popup, xem `docs/features/popup.md`); code ký nằm ở
+  `SachLuat.SharedKernel.Media`.
 
 ## Thay đổi CSDL (migration liên quan)
 
