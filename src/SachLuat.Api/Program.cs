@@ -1,7 +1,14 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using SachLuat.Api.ErrorHandling;
 using SachLuat.Api.Modules;
+using SachLuat.Api.Security;
+using SachLuat.Modules.Auth;
+using SachLuat.Modules.Cart;
 using SachLuat.Modules.Catalog;
+using SachLuat.Modules.Inventory;
+using SachLuat.Modules.Ordering;
+using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.HealthChecks;
 using Scalar.AspNetCore;
 
@@ -10,11 +17,20 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddApiProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
+builder.Services.AddApiSecurity(builder.Configuration);
+builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection(DatabaseOptions.SectionName));
+builder.Services.AddScoped<IValidator<PagedQuery>, PagedQueryValidator<PagedQuery>>();
 
 builder.AddModules(
-    new CatalogModule());
+    new AuthModule(),
+    new CatalogModule(),
+    new InventoryModule(),
+    new CartModule(),
+    new OrderingModule());
 
 var app = builder.Build();
+
+await app.ApplyModuleMigrationsAsync();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
@@ -31,15 +47,17 @@ else
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 
-// live: tiến trình còn chạy (không check phụ thuộc); ready: sẵn sàng nhận request (check CSDL, ...).
+// live: tiến trình còn chạy (không check phụ thuộc); ready: sẵn sàng nhận request (check CSDL, Redis, ...).
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains(HealthCheckTags.Ready),
 });
 
-app.Run();
+await app.RunAsync();

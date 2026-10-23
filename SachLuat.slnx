@@ -10,6 +10,9 @@
     <Project Path="src/SachLuat.SharedKernel/SachLuat.SharedKernel.csproj" />
   </Folder>
   <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Auth/">
+    <Project Path="src/Modules/Auth/SachLuat.Modules.Auth/SachLuat.Modules.Auth.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Catalog/">
     <Project Path="src/Modules/Catalog/SachLuat.Modules.Catalog/SachLuat.Modules.Catalog.csproj" />
   </Folder>
