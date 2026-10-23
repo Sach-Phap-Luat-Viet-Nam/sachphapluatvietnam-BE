@@ -10,4 +10,7 @@ namespace SachLuat.SharedKernel.Modules;
 public interface IModule
 {
     void AddServices(IServiceCollection services, IConfiguration configuration);
+
+    /// <summary>Áp migration của các DbContext thuộc module (chỉ gọi khi bật cấu hình, xem docs/setup.md).</summary>
+    Task MigrateAsync(IServiceProvider services, CancellationToken cancellationToken);
 }
