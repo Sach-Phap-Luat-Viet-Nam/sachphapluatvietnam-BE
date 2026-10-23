@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SachLuat.Modules.Catalog.Application.Admin;
 using SachLuat.Modules.Catalog.Application.Storefront;
+using SachLuat.Modules.Catalog.Infrastructure.Cloudinary;
 using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.Security;
 
@@ -151,4 +152,13 @@ internal sealed class AdminLegalDocumentsController(ReferenceDataAdminService se
         await service.DeleteLegalDocumentAsync(id, cancellationToken);
         return NoContent();
     }
+}
+
+[ApiController]
+[Authorize(Policy = Policies.CatalogAdmin)]
+[Route(ApiRoutes.AdminV1 + "/uploads")]
+internal sealed class AdminUploadsController(CloudinaryUploadSigner signer) : ControllerBase
+{
+    [HttpPost("cover-signature")]
+    public UploadSignatureResponse CreateCoverSignature() => signer.CreateCoverSignature();
 }

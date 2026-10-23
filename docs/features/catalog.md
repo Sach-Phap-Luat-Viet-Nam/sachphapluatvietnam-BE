@@ -61,10 +61,21 @@ Danh sách trả `{items, meta: {page, limit, total}}`; mỗi item lấy giá SK
 | POST | `/admin/editions/{id}/skus` | `{skuCode, coverType, listPrice, salePrice, allowPreorder}` |
 | PUT | `/admin/skus/{id}` | `{listPrice, salePrice, allowPreorder}` |
 | GET/POST/PUT/DELETE | `/admin/categories`, `/admin/authors`, `/admin/legal-documents` | CRUD, xóa là xóa mềm |
+| POST | `/admin/uploads/cover-signature` | Chữ ký upload ảnh bìa lên Cloudinary (xem mục Ảnh bìa) |
 
 Các API sửa đầu sách/ấn bản/SKU trả lại toàn bộ đầu sách (`AdminBookResponse`).
-Mã lỗi thêm: `SLUG_DUPLICATE` (409), `SKU_CODE_DUPLICATE` (409), `CATEGORY_HAS_CHILDREN` (409),
+Mã lỗi thêm: `UPLOAD_NOT_CONFIGURED` (503, chưa cấu hình Cloudinary), `SLUG_DUPLICATE` (409), `SKU_CODE_DUPLICATE` (409), `CATEGORY_HAS_CHILDREN` (409),
 `REFERENCE_NOT_FOUND` (422, id danh mục/tác giả/văn bản không tồn tại), `NOT_FOUND` (404).
+
+**Ảnh bìa (Cloudinary, upload có ký)**: file không đi qua API.
+
+1. Admin FE gọi `POST /admin/uploads/cover-signature` → `{uploadUrl, apiKey, timestamp, folder, allowedFormats,
+   signature}`. Chữ ký chỉ có hiệu lực 1 giờ (giới hạn của Cloudinary).
+2. FE gửi `multipart/form-data` tới `uploadUrl` với field `file` cùng **đúng** `api_key`, `timestamp`, `folder`,
+   `allowed_formats`, `signature` (thêm/bớt tham số thì chữ ký sai). Cloudinary trả `secure_url`.
+3. FE lưu `secure_url` vào `coverImageUrl` qua `PUT /admin/editions/{id}`. Khi đã cấu hình Cloudinary, link phải
+   bắt đầu bằng `https://res.cloudinary.com/{CloudName}/image/upload/`, nếu không trả 400 `VALIDATION_ERROR`.
+4. Khi hiển thị, FE nên chèn `f_auto,q_auto` sau `/image/upload/` để Cloudinary tự nén.
 
 **Cho module khác**: `ICatalogSkuReader` (project `SachLuat.Modules.Catalog.Contracts`) trả snapshot SKU
 (tên sách, ấn bản, ISBN, giá, `isSellable` = đầu sách active và ấn bản `on_sale`/`clearance`).
@@ -72,6 +83,9 @@ Mã lỗi thêm: `SLUG_DUPLICATE` (409), `SKU_CODE_DUPLICATE` (409), `CATEGORY_H
 ## Cấu hình cần thiết
 
 - `ConnectionStrings:Default` (user-secrets ở local), xem `docs/setup.md`.
+- `Cloudinary:CloudName`, `Cloudinary:ApiKey`, `Cloudinary:ApiSecret` (**bí mật**): lấy ở Cloudinary Console.
+  Local dùng user-secrets, Render dùng `Cloudinary__CloudName`, ... Thiếu thì API ký trả 503 và không kiểm tra link.
+- `Cloudinary:CoverFolder`: mặc định `sachluat/covers`.
 
 ## Thay đổi CSDL (migration liên quan)
 
@@ -93,7 +107,8 @@ phải có migration cập nhật giá trị cũ.
 ## Hạn chế / việc còn lại
 
 - Tìm kiếm tạm dùng `ILIKE` theo tên sách/ISBN, chưa tìm không dấu, theo tác giả, gợi ý (FR-11): chờ Meilisearch.
-- Chưa có upload ảnh bìa/file đọc thử (chỉ lưu URL), watermark đọc thử (NFR-16).
+- Ảnh bìa đã upload được qua Cloudinary; chưa xóa ảnh cũ trên Cloudinary khi đổi ảnh (ảnh mồ côi).
+- Chưa có upload file đọc thử (chỉ lưu URL), watermark đọc thử (NFR-16).
 - Chưa có concurrency token cho chỉnh sửa đồng thời trên Admin.
 - Thứ tự tác giả trong một đầu sách chưa lưu (`book_authors` chưa có `sort_order`).
 - Tag (FR-61), combo (FR-16), giá sỉ theo bậc và lịch giá (FR-63), import Excel (FR-65) chưa làm.

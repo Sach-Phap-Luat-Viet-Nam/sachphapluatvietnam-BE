@@ -8,6 +8,7 @@ using SachLuat.Modules.Catalog.Application;
 using SachLuat.Modules.Catalog.Application.Admin;
 using SachLuat.Modules.Catalog.Application.Storefront;
 using SachLuat.Modules.Catalog.Contracts;
+using SachLuat.Modules.Catalog.Infrastructure.Cloudinary;
 using SachLuat.Modules.Catalog.Infrastructure.Persistence;
 using SachLuat.SharedKernel.Configuration;
 using SachLuat.SharedKernel.HealthChecks;
@@ -35,6 +36,8 @@ public sealed class CatalogModule : IModule
         services.AddScoped<CatalogAdminService>();
         services.AddScoped<ReferenceDataAdminService>();
         services.AddScoped<ICatalogSkuReader, CatalogSkuReader>();
+        services.Configure<CloudinaryOptions>(configuration.GetSection(CloudinaryOptions.SectionName));
+        services.AddSingleton<CloudinaryUploadSigner>();
         services.AddValidatorsFromAssembly(typeof(CatalogModule).Assembly, includeInternalTypes: true);
 
         services.AddHealthChecks()

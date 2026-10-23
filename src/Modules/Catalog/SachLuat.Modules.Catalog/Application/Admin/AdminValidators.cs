@@ -1,6 +1,8 @@
 using FluentValidation;
+using Microsoft.Extensions.Options;
 using SachLuat.Modules.Catalog.Domain;
 using SachLuat.Modules.Catalog.Domain.Editions;
+using SachLuat.Modules.Catalog.Infrastructure.Cloudinary;
 using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.Persistence;
 
@@ -49,8 +51,10 @@ internal sealed class UpsertBookRequestValidator : AbstractValidator<UpsertBookR
 
 internal sealed class UpsertEditionRequestValidator : AbstractValidator<UpsertEditionRequest>
 {
-    public UpsertEditionRequestValidator()
+    public UpsertEditionRequestValidator(IOptions<CloudinaryOptions> cloudinaryOptions)
     {
+        var cloudinary = cloudinaryOptions.Value;
+
         RuleFor(request => request.Isbn).Must(isbn => Isbn13.TryNormalize(isbn, out _))
             .WithMessage("ISBN không hợp lệ (13 chữ số, bắt đầu bằng 978 hoặc 979, đúng số kiểm tra)");
         RuleFor(request => request.Publisher).NotEmpty().MaximumLength(255);
@@ -64,6 +68,11 @@ internal sealed class UpsertEditionRequestValidator : AbstractValidator<UpsertEd
         RuleFor(request => request.Size).MaximumLength(50);
         RuleFor(request => request.WeightGram).GreaterThan(0);
         RuleFor(request => request.CoverImageUrl).MaximumLength(500);
+        // Chưa cấu hình Cloudinary (local/test) thì chấp nhận mọi link để vẫn nhập liệu được.
+        RuleFor(request => request.CoverImageUrl)
+            .Must(url => url is not null && url.StartsWith(cloudinary.ImageUrlPrefix, StringComparison.Ordinal))
+            .When(request => cloudinary.IsConfigured && !string.IsNullOrWhiteSpace(request.CoverImageUrl))
+            .WithMessage("Ảnh bìa phải được tải lên Cloudinary của hệ thống");
         RuleFor(request => request.PreviewFileUrl).MaximumLength(500);
     }
 }

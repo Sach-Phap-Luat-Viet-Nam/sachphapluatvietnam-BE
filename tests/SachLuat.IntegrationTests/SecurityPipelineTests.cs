@@ -27,6 +27,17 @@ public sealed class SecurityPipelineTests(ApiFactory factory) : IClassFixture<Ap
     }
 
     [Fact]
+    public async Task CoverUploadSignature_WithoutToken_Returns401()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsync(
+            "/api/v1/admin/uploads/cover-signature", content: null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task InvalidQuery_Returns400WithFieldErrors()
     {
         using var client = factory.CreateClient();
