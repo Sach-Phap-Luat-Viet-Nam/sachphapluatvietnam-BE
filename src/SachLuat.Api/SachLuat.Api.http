@@ -5,7 +5,10 @@ Accept: application/json
 
 ###
 
-GET {{SachLuat.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+GET {{SachLuat.Api_HostAddress}}/health/live
+
+###
+
+GET {{SachLuat.Api_HostAddress}}/health/ready
 
 ###
