@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/*.user
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+.env
+.env.*
+docs/
+tests/
+TestResults/
+state/
+docker-compose.yml
+**/appsettings.Development.json
