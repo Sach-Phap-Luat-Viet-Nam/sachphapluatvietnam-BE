@@ -27,6 +27,22 @@ internal static class SecurityExtensions
                 }));
         });
 
+        var cors = configuration.GetSection(ApiCorsOptions.SectionName).Get<ApiCorsOptions>() ?? new ApiCorsOptions();
+
+        // Header Origin của trình duyệt không có "/" cuối, nên bỏ "/" để cấu hình dán nguyên URL vẫn khớp.
+        var allowedOrigins = cors.AllowedOrigins
+            .Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Select(origin => origin.Trim().TrimEnd('/'))
+            .ToArray();
+
+        // AllowCredentials để cookie sl_refresh/sl_cart đi kèm request; vì vậy không được dùng AllowAnyOrigin.
+        services.AddCors(options => options.AddDefaultPolicy(policy => policy
+            .WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials()
+            .SetPreflightMaxAge(TimeSpan.FromMinutes(10))));
+
         return services;
     }
 }

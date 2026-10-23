@@ -120,6 +120,9 @@ SachLuat.Modules.<Ten>/
   `SnakeCaseEnumConverter<T>.TryParse` (model binding mặc định không hiểu `on_sale`).
 - API Admin: `[Authorize(Policy = Policies.Xxx)]`, mọi policy yêu cầu đăng nhập có 2FA.
 - Người dùng hiện tại: inject `ICurrentUser` (`UserId`, `RequireUserId()`).
+- CORS: chỉ origin trong `Cors:AllowedOrigins` (`appsettings.json`) được gọi API, có `AllowCredentials` để
+  cookie `sl_refresh`/`sl_cart` đi kèm (FE gọi `fetch` với `credentials: "include"`). Origin ghi dạng
+  `scheme://host[:port]`. Server có thể ghi đè bằng biến môi trường `Cors__AllowedOrigins__0`, `__1`, ...
 
 ## Thêm module mới
 
