@@ -2,43 +2,56 @@
 
 ## 0. Tổng quan dự án
 
-> Điền các mục `<...>` cho đúng dự án. Phần này giúp Claude hiểu bối cảnh
-> mà không phải đoán.
-
-- **Dự án**: <mô tả ngắn: dự án làm gì, cho ai>
-- **Backend**: ASP.NET Core (<.NET version, ví dụ .NET 8/10>), C#
-- **Kiểu API**: <Controllers | Minimal API>
-- **CSDL / ORM**: <SQL Server | PostgreSQL> + <EF Core | Dapper>
-- **Test**: <xUnit | NUnit> + <Moq | NSubstitute> + FluentAssertions
-- **Frontend**: <React | Angular | Razor | ...> (quy tắc FE ở mục 8)
+- **Dự án**: Website thương mại điện tử bán trực tiếp (D2C) sách pháp luật do Sách Luật Việt Nam
+  tự biên soạn và in (mã `SLVN-WEB`). Đặc tả đầy đủ: `docs/project_overview.md`.
+- **Backend**: ASP.NET Core **.NET 10 (LTS)**, C#, kiến trúc **modular monolith**
+- **Kiểu API**: Controllers, tiền tố `api/v1` (`ApiRoutes.V1`), lỗi trả `ProblemDetails` + `code`
+- **CSDL / ORM**: PostgreSQL 16 + EF Core (Npgsql), mỗi module một schema và một `DbContext`,
+  tên bảng/cột `snake_case`
+- **Test**: xUnit v3 (Microsoft.Testing.Platform) + NSubstitute + AwesomeAssertions
+  (fork Apache-2.0 của FluentAssertions; FluentAssertions 8+ là license thương mại)
+- **Frontend**: Next.js (React, TypeScript) + Tailwind CSS, repo riêng (quy tắc FE ở mục 8)
+- Hướng dẫn cài đặt, quy tắc module, thêm module mới: `docs/setup.md`
 
 ### Cấu trúc thư mục
 
 ```
 src/
-  <Project>.Api/            # Controllers/Endpoints, Program.cs, middleware
-  <Project>.Application/    # Use case, service, DTO, validator
-  <Project>.Domain/         # Entity, value object, interface nghiệp vụ
-  <Project>.Infrastructure/ # EF Core DbContext, repository, tích hợp ngoài
+  SachLuat.Api/                 # Host: Program.cs, middleware, xử lý lỗi, đăng ký module
+  SachLuat.SharedKernel/        # IModule, BusinessException, ErrorCodes, ApiRoutes
+  Modules/
+    <Ten>/SachLuat.Modules.<Ten>/
+      <Ten>Module.cs            # Đăng ký DI, DbContext của module
+      Domain/                   # Entity, value object
+      Application/              # Use case, DTO, validator
+      Infrastructure/Persistence/ # DbContext, cấu hình entity, Migrations/
+      Controllers/
 tests/
-  <Project>.UnitTests/
-  <Project>.IntegrationTests/
+  SachLuat.UnitTests/
+  SachLuat.IntegrationTests/
 docs/
-  features/                 # Mỗi tính năng một file .md (mục 7)
+  setup.md
+  features/                     # Mỗi tính năng một file .md (mục 7)
 ```
+
+- Trong module, mọi thứ để `internal` trừ `<Ten>Module` và controller. Module không reference
+  trực tiếp module khác; cần giao tiếp thì tạo project `SachLuat.Modules.<Ten>.Contracts`.
 
 ### Lệnh thường dùng
 
 ```bash
-dotnet restore
-dotnet build
-dotnet run --project src/<Project>.Api
-dotnet test
-dotnet format                     # format theo .editorconfig
-dotnet format --verify-no-changes # kiểm tra format (dùng trước khi báo xong)
+dotnet tool restore
+docker compose up -d              # PostgreSQL local (cần file .env, xem .env.example)
+dotnet build SachLuat.slnx
+dotnet run --project src/SachLuat.Api
+dotnet test --solution SachLuat.slnx
+dotnet format SachLuat.slnx                     # format theo .editorconfig
+dotnet format SachLuat.slnx --verify-no-changes # kiểm tra format (dùng trước khi báo xong)
 dotnet ef migrations add <TenMigration> \
-  --project src/<Project>.Infrastructure \
-  --startup-project src/<Project>.Api
+  --project src/Modules/<Ten>/SachLuat.Modules.<Ten> \
+  --startup-project src/SachLuat.Api \
+  --context <Ten>DbContext \
+  --output-dir Infrastructure/Persistence/Migrations
 ```
 
 ### Định nghĩa "xong việc"
@@ -204,5 +217,8 @@ Một thay đổi chỉ được báo là xong khi:
 
 ## 8. Frontend
 
-> Điền khi đã chốt stack FE: framework, lệnh chạy/test/lint, quy tắc đặt tên
-> (JS/TS dùng camelCase cho biến và hàm, PascalCase cho component).
+- Stack: Next.js (React, TypeScript) + Tailwind CSS; Storefront render SSR (SEO), Admin là
+  Next.js hoặc React SPA. Nằm ở repo riêng, không nằm trong repo backend này.
+- Đặt tên: camelCase cho biến và hàm, PascalCase cho component.
+- Gọi API qua `api/v1`, đọc lỗi từ field `code` của `ProblemDetails`.
+- > Bổ sung lệnh chạy/test/lint khi đã dựng repo FE.
