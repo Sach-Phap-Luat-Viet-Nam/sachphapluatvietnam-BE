@@ -43,12 +43,15 @@ internal sealed class CatalogSkuReader(CatalogDbContext dbContext, TimeProvider 
                             && schedule.SalePrice < sku.SalePrice)
                         .Select(schedule => (decimal?)schedule.SalePrice)
                         .FirstOrDefault() ?? sku.SalePrice,
+                    RegularSalePrice = sku.SalePrice,
                     edition.WeightGram,
                     edition.CoverImageUrl,
                     edition.IsLatest,
                     EditionStatus = edition.Status,
+                    CategoryIds = book.Categories.Select(category => category.Id).ToList(),
                 })
             .ToListAsync(cancellationToken);
+        var parentOf = await ParentMapAsync(rows.Any(row => row.CategoryIds.Count > 0), cancellationToken);
 
         return rows.ToDictionary(row => row.Id, row => new SkuInfo(
             row.Id,
@@ -62,10 +65,34 @@ internal sealed class CatalogSkuReader(CatalogDbContext dbContext, TimeProvider 
             SnakeCaseEnumConverter<CoverType>.ToProvider(row.CoverType),
             row.ListPrice,
             row.CurrentPrice,
+            row.RegularSalePrice,
             row.WeightGram,
             row.CoverImageUrl,
             row.IsLatest,
+            WithAncestors(row.CategoryIds, parentOf),
             IsSellable: row.BookStatus == BookStatus.Active
                 && row.EditionStatus is EditionStatus.OnSale or EditionStatus.Clearance));
+    }
+
+    // Mỗi lần nạp cả cây danh mục (vài chục dòng) rẻ hơn truy vấn đệ quy cho từng sách.
+    private async Task<IReadOnlyDictionary<long, long?>> ParentMapAsync(bool needed, CancellationToken cancellationToken) =>
+        needed
+            ? await dbContext.Categories.AsNoTracking()
+                .ToDictionaryAsync(category => category.Id, category => category.ParentId, cancellationToken)
+            : new Dictionary<long, long?>();
+
+    private static List<long> WithAncestors(IEnumerable<long> categoryIds, IReadOnlyDictionary<long, long?> parentOf)
+    {
+        var result = new HashSet<long>();
+        foreach (var id in categoryIds)
+        {
+            // Chặn vòng lặp dữ liệu hỏng: HashSet.Add trả false khi đã gặp.
+            for (long? current = id; current is { } value && result.Add(value); )
+            {
+                current = parentOf.GetValueOrDefault(value);
+            }
+        }
+
+        return [.. result];
     }
 }

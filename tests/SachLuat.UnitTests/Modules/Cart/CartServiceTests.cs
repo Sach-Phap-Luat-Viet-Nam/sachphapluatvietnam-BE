@@ -102,7 +102,7 @@ public sealed class CartServiceTests
 
     private static SkuInfo Sku(bool isSellable) => new(
         SkuId, "SLVN-BLDS-2026-BM", 1, "Bộ luật Dân sự", "bo-luat-dan-su", 1, null, "9780306406157", "paperback",
-        200_000m, 150_000m, 500, null, IsLatestEdition: true, IsSellable: isSellable);
+        200_000m, 150_000m, 150_000m, 500, null, IsLatestEdition: true, CategoryIds: [], IsSellable: isSellable);
 
     private sealed class InMemoryCartStore : ICartStore
     {

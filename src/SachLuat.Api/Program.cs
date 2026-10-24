@@ -9,6 +9,7 @@ using SachLuat.Modules.Catalog;
 using SachLuat.Modules.Content;
 using SachLuat.Modules.Inventory;
 using SachLuat.Modules.Ordering;
+using SachLuat.Modules.Shipping;
 using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.HealthChecks;
 using Scalar.AspNetCore;
@@ -28,7 +29,8 @@ builder.AddModules(
     new InventoryModule(),
     new CartModule(),
     new OrderingModule(),
-    new ContentModule());
+    new ContentModule(),
+    new ShippingModule());
 
 var app = builder.Build();
 

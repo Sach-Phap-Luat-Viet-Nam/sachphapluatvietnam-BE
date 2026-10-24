@@ -18,6 +18,9 @@ public static class Policies
     public const string UsersAdmin = "users_admin";
     public const string ContentAdmin = "content_admin";
 
+    /// <summary>Vùng giao hàng, biểu phí, ngưỡng miễn ship (FR-99).</summary>
+    public const string ShippingAdmin = "shipping_admin";
+
     public static readonly IReadOnlyDictionary<string, string[]> StaffRoles = new Dictionary<string, string[]>
     {
         [CatalogAdmin] = [Roles.SuperAdmin, Roles.ProductManager],
@@ -28,5 +31,6 @@ public static class Policies
         [OrdersManage] = [Roles.SuperAdmin, Roles.OrderManager],
         [UsersAdmin] = [Roles.SuperAdmin],
         [ContentAdmin] = [Roles.SuperAdmin, Roles.Marketing],
+        [ShippingAdmin] = [Roles.SuperAdmin, Roles.OrderManager],
     };
 }

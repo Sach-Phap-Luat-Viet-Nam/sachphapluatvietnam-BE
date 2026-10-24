@@ -31,6 +31,10 @@
   <Folder Name="/src/Modules/Ordering/">
     <Project Path="src/Modules/Ordering/SachLuat.Modules.Ordering/SachLuat.Modules.Ordering.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Shipping/">
+    <Project Path="src/Modules/Shipping/SachLuat.Modules.Shipping.Contracts/SachLuat.Modules.Shipping.Contracts.csproj" />
+    <Project Path="src/Modules/Shipping/SachLuat.Modules.Shipping/SachLuat.Modules.Shipping.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SachLuat.IntegrationTests/SachLuat.IntegrationTests.csproj" />
     <Project Path="tests/SachLuat.UnitTests/SachLuat.UnitTests.csproj" />
