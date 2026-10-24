@@ -58,17 +58,15 @@ internal sealed class UserAdminService(
         return await authService.ToResponseAsync(user);
     }
 
+    /// <summary>
+    /// Đổi vai trò tài khoản dưới cấp. Không đổi vai trò của chính mình hay Super Admin khác (chỉ có 1–2 tài khoản,
+    /// quản lý ngoài giao diện), tránh tự gỡ quyền hoặc tự cấp thêm quyền.
+    /// </summary>
     public async Task<UserResponse> SetRolesAsync(long actorUserId, long userId, SetRolesRequest request)
     {
-        var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
-            ?? throw AuthErrors.UserNotFound();
+        var user = await FindManageableUserAsync(actorUserId, userId);
         var desired = request.Roles.Distinct(StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
         var current = (await userManager.GetRolesAsync(user)).ToHashSet(StringComparer.Ordinal);
-
-        if (actorUserId == userId && current.Contains(Roles.SuperAdmin) && !desired.Contains(Roles.SuperAdmin))
-        {
-            throw AuthErrors.CannotRemoveOwnAdmin();
-        }
 
         AuthService.EnsureSucceeded(await userManager.RemoveFromRolesAsync(user, current.Except(desired)));
         AuthService.EnsureSucceeded(await userManager.AddToRolesAsync(user, desired.Except(current)));

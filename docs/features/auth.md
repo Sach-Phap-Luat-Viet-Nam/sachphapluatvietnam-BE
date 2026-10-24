@@ -56,6 +56,8 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
   `USER_NOT_FOUND`.
 - **Super Admin quản lý tài khoản dưới cấp** (policy `users_admin`; đích không phải chính mình, không có vai trò
   `super_admin`, ngược lại → `CANNOT_MANAGE_USER` 422):
+  - **Đổi vai trò** `PUT /admin/users/{id}/roles`: không đổi được vai trò của chính mình hay Super Admin khác (chỉ có
+    1–2 tài khoản Super Admin), tránh tự gỡ hoặc tự cấp quyền.
   - **Đặt mật khẩu mới** `PUT /admin/users/{id}/password`: dùng khi nhân viên/khách quên mật khẩu. Đổi hash và
     security stamp trong một lần ghi, mở khóa nếu đang bị khóa do sai mật khẩu (`access_failed_count = 0`,
     `lockout_end = null`), thu hồi mọi phiên. Không gửi email, admin tự báo mật khẩu cho người dùng.
@@ -170,7 +172,7 @@ Checkbox "Lưu địa chỉ này" trên form đặt hàng: FE tự gọi `POST /
 
 Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (409), `INVALID_REFRESH_TOKEN` (401),
 `TWO_FACTOR_TOKEN_INVALID` (401), `OTP_INVALID` (400), `TWO_FACTOR_ALREADY_ENABLED` (409),
-`CANNOT_REMOVE_OWN_ADMIN` (422), `CANNOT_IMPERSONATE` (422), `CANNOT_MANAGE_USER` (422), `ACCOUNT_DISABLED` (403),
+`CANNOT_IMPERSONATE` (422), `CANNOT_MANAGE_USER` (422), `ACCOUNT_DISABLED` (403),
 `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429),
 `ADDRESS_NOT_FOUND` (404, kể cả địa chỉ của người khác), `ADDRESS_LIMIT_REACHED` (422),
 `SUPER_ADMIN_PORTAL_FORBIDDEN` (403).

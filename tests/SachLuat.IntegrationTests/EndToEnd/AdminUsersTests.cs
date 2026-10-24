@@ -89,6 +89,17 @@ public sealed class AdminUsersTests(EndToEndFactory factory)
         await admin.PostAsync($"/api/v1/admin/users/{customerId}/activate");
         await customer.LoginAsync(CustomerEmail, CustomerPassword);
 
+        // Không đổi vai trò của chính mình hay Super Admin khác.
+        var bootstrapAdminId = (await admin.GetAsync(
+                $"/api/v1/admin/users?q={Uri.EscapeDataString(EndToEndFactory.AdminEmail)}"))
+            .GetProperty("items")[0].GetProperty("id").GetInt64();
+        foreach (var targetId in new[] { adminId, bootstrapAdminId })
+        {
+            (await admin.PutAsync($"/api/v1/admin/users/{targetId}/roles",
+                    new { roles = new[] { "super_admin", "marketing" } }, HttpStatusCode.UnprocessableEntity))
+                .GetProperty("code").GetString().Should().Be("CANNOT_MANAGE_USER");
+        }
+
         // Khách hàng không gọi được API quản trị.
         await customer.GetAsync("/api/v1/admin/customers", HttpStatusCode.Forbidden);
     }
