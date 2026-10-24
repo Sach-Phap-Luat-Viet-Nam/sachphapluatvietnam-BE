@@ -87,7 +87,7 @@ internal sealed class CatalogSkuReader(CatalogDbContext dbContext, TimeProvider 
         foreach (var id in categoryIds)
         {
             // Chặn vòng lặp dữ liệu hỏng: HashSet.Add trả false khi đã gặp.
-            for (long? current = id; current is { } value && result.Add(value); )
+            for (long? current = id; current is { } value && result.Add(value);)
             {
                 current = parentOf.GetValueOrDefault(value);
             }

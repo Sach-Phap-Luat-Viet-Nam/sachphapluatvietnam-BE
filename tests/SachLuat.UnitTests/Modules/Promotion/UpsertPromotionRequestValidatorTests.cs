@@ -54,7 +54,9 @@ public sealed class UpsertPromotionRequestValidatorTests
     {
         var request = Request() with
         {
-            DiscountType = DiscountType.FixedAmount, DiscountValue = 50_000m, MaxDiscountAmount = 10_000m,
+            DiscountType = DiscountType.FixedAmount,
+            DiscountValue = 50_000m,
+            MaxDiscountAmount = 10_000m,
         };
 
         Validator().Validate(request).Errors.Should().Contain(error => error.PropertyName == "MaxDiscountAmount");
@@ -76,7 +78,9 @@ public sealed class UpsertPromotionRequestValidatorTests
     {
         var scoped = Request() with
         {
-            Kind = PromotionKind.FreeShipping, ScopeType = PromotionScopeType.Books, TargetIds = [1],
+            Kind = PromotionKind.FreeShipping,
+            ScopeType = PromotionScopeType.Books,
+            TargetIds = [1],
         };
         var excluding = Request() with { Kind = PromotionKind.FreeShipping, ExcludeOnSaleItems = true };
 

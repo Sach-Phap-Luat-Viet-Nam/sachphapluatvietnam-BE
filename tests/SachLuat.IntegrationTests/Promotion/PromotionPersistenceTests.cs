@@ -202,7 +202,9 @@ public sealed class PromotionPersistenceTests(PromotionDatabaseFixture fixture)
         var promotion = await admin.CreateAsync(
             Request("Theo sách") with
             {
-                Mode = PromotionMode.Coupon, ScopeType = PromotionScopeType.Books, TargetIds = [7, 8],
+                Mode = PromotionMode.Coupon,
+                ScopeType = PromotionScopeType.Books,
+                TargetIds = [7, 8],
             },
             CancellationToken);
         await admin.GenerateCouponsAsync(promotion.Id, new GenerateCouponsRequest(5, "GT-", null), CancellationToken);
