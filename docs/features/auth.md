@@ -113,6 +113,9 @@ Tiền tố `/api/v1`.
 | POST | `/auth/2fa/enable` | Bearer | `{code}` → `AuthResponse` (amr=mfa) |
 | GET/PATCH | `/me` | Bearer | Hồ sơ (FR-05) → `MeResponse`; PATCH nhận `{fullName, phoneNumber?, birthDate?, occupation?}` và ghi đè cả 4 field |
 | PUT | `/me/preferences` | Bearer | `{theme: "dark" \| "light"}` → `{theme}`: lưu giao diện storefront khách chọn |
+| POST | `/me/avatar/upload-signature` | Bearer | → `ReplaceUploadSignatureResponse`: chữ ký upload avatar lên Cloudinary (xem mục Ảnh đại diện) |
+| PUT | `/me/avatar` | Bearer | `{avatarUrl}` → `{avatarUrl}`: lưu `secure_url` vừa upload |
+| DELETE | `/me/avatar` | Bearer | → 204, bỏ avatar (`avatarUrl` về `null`) |
 | GET | `/me/addresses` | Bearer | Sổ địa chỉ (FR-06) → `AddressResponse[]`, mặc định đứng đầu |
 | POST | `/me/addresses` | Bearer | `UpsertAddressRequest` → 201 `AddressResponse[]` (cả sổ) |
 | PUT | `/me/addresses/{id}` | Bearer | `UpsertAddressRequest` → `AddressResponse[]` |
@@ -133,7 +136,23 @@ Tiền tố `/api/v1`.
 | POST | `/admin/users/{id}/impersonate` | users_admin | → `AuthResponse` của tài khoản đích (`loginVia: "admin"`), không cookie |
 
 `AuthResponse`: `{accessToken, tokenType: "Bearer", expiresIn, loginVia: "portal" | "admin", impersonatorId?,
-user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, isActive, theme, ...}}`.
+user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, isActive, theme, avatarUrl, ...}}`.
+
+**Ảnh đại diện** (`avatarUrl`): link ảnh hoặc `null` (chưa có, FE hiện ảnh mặc định). Có trong `UserResponse` (login,
+refresh, 2FA, register, fast login, danh sách/chi tiết nhân viên và khách ở Admin) và `MeResponse`. File không đi qua API:
+
+1. `POST /me/avatar/upload-signature` → `{uploadUrl, apiKey, timestamp, publicId, overwrite: true, allowedFormats,
+   signature}`. Chữ ký hiệu lực 1 giờ.
+2. FE gửi `multipart/form-data` tới `uploadUrl`: `file`, `api_key`, `timestamp`, `public_id`, `overwrite` (chuỗi
+   `true`), `allowed_formats`, `signature`. **Không** gửi `folder` (thư mục đã nằm trong `public_id`).
+3. `PUT /me/avatar {avatarUrl: secure_url}`.
+
+`public_id` = `{Cloudinary:AvatarFolder}/{userId}-{16 ký tự hex HMAC-SHA256(ApiSecret, userId)}`, cố định theo user:
+upload mới ghi đè ảnh cũ (mỗi user chiếm đúng một ảnh trên Cloudinary), không đoán được link avatar của người khác, và
+chữ ký của user này không ghi được vào ảnh người khác. Khi đã cấu hình Cloudinary, `PUT` chỉ nhận đúng
+`https://res.cloudinary.com/{CloudName}/image/upload/[v123/]{publicId}.{jpg|jpeg|png|webp}` của chính user, sai thì 422
+`AVATAR_URL_INVALID`. Chưa cấu hình (local/test) thì nhận mọi link `https`, còn bước 1 trả 503 `UPLOAD_NOT_CONFIGURED`.
+Link không phải `https` hoặc dài quá 500 ký tự → 400 `VALIDATION_ERROR`. `PUT`/`DELETE` chỉ cập nhật cột `avatar_url`.
 
 **Giao diện storefront** (`theme`): `"dark"`, `"light"` hoặc `null` (chưa chọn, FE dùng mặc định tối). Có trong `UserResponse`
 (login, refresh, 2FA, register, fast login) và `MeResponse`, nên FE biết ngay khi vào phiên. Lưu bằng
@@ -201,7 +220,8 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 `CANNOT_IMPERSONATE` (422), `CANNOT_MANAGE_USER` (422), `ACCOUNT_DISABLED` (403),
 `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429),
 `ADDRESS_NOT_FOUND` (404, kể cả địa chỉ của người khác), `ADDRESS_LIMIT_REACHED` (422),
-`SUPER_ADMIN_PORTAL_FORBIDDEN` (403), `REALTIME_UNAVAILABLE` (503).
+`SUPER_ADMIN_PORTAL_FORBIDDEN` (403), `REALTIME_UNAVAILABLE` (503), `AVATAR_URL_INVALID` (422),
+`UPLOAD_NOT_CONFIGURED` (503).
 
 ## Cấu hình cần thiết
 
@@ -213,6 +233,8 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 | `Auth:BootstrapAdmin:Email`, `Auth:BootstrapAdmin:Password` | **Bí mật**, chỉ cần lần đầu |
 | `RateLimiting:AuthPermitPerMinute` | Mặc định 10 |
 | `Pusher:AppId`, `Pusher:Key`, `Pusher:Secret`, `Pusher:Cluster` | Tùy chọn; thiếu bất kỳ khóa nào thì tắt realtime. `Secret` là **bí mật** (Render: `Pusher__Secret`). FE cần `NEXT_PUBLIC_PUSHER_KEY` và `NEXT_PUBLIC_PUSHER_CLUSTER` |
+| `Cloudinary:CloudName`, `Cloudinary:ApiKey`, `Cloudinary:ApiSecret` | Dùng chung với ảnh bìa/popup; `ApiSecret` là **bí mật**. Đổi `ApiSecret` thì `publicId` avatar đổi theo: avatar cũ vẫn hiển thị, lần upload sau sang ảnh mới |
+| `Cloudinary:AvatarFolder` | Mặc định `sachluat/avatars` |
 | `TrustedProxy:Secret` | **Bí mật**, trống hoặc ≥ 32 ký tự, phải trùng `PROXY_SECRET` bên FE. Render: `TrustedProxy__Secret` |
 
 ## Thay đổi CSDL (migration liên quan)
@@ -222,6 +244,9 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 
 `AddUserTheme`: thêm cột `auth.users.theme` (varchar(30), cho phép null, lưu `dark`/`light`). Chỉ thêm cột, dữ liệu cũ
 giữ nguyên (null). **Phải chạy migration lên CSDL production trước khi deploy bản này**, backend không tự migrate.
+
+`AddUserAvatarUrl`: cột `auth.users.avatar_url` (varchar(500), cho phép null). Chỉ thêm cột, dữ liệu cũ giữ nguyên
+(null). **Phải chạy migration lên CSDL production trước khi deploy bản này** (thiếu cột thì đọc user bị lỗi).
 
 `AddUserSessionVersion`: cột `auth.users.session_version` (integer, not null, mặc định 0). Chỉ thêm cột.
 **Phải chạy migration lên CSDL production trước khi deploy bản này** (thiếu cột thì mọi request có token đều lỗi).
@@ -241,5 +266,8 @@ Chỉ thêm bảng, không đổi dữ liệu cũ.
 - Chưa có mã khôi phục 2FA; mã TOTP vừa dùng chưa bị chặn dùng lại trong cùng 30 giây.
 - Mỗi request có token tốn thêm một truy vấn theo khóa chính (`session_version`); chưa cache.
 - Hai tab cùng refresh một lúc có thể bị coi là dùng lại token và bị đăng xuất.
+- Avatar: bỏ avatar không xóa ảnh trên Cloudinary (ảnh nằm chờ lần upload sau ghi đè); chưa giới hạn dung lượng file
+  ở phía Cloudinary (theo gói tài khoản) và chưa resize khi upload, FE nên resize khi hiển thị (`c_fill,w_..,h_..`).
+  Admin chưa đổi/xóa avatar hộ khách được.
 - Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền, fast login, đăng xuất hộ, đặt mật khẩu mới và vô hiệu hóa
   tài khoản (hiện chỉ ghi log).
