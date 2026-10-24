@@ -70,6 +70,9 @@ internal sealed record CreateStaffRequest(string Email, string FullName, string 
 
 internal sealed record SetRolesRequest(IReadOnlyList<string> Roles);
 
+/// <param name="RevokedSessions">Số phiên (refresh token còn hiệu lực) vừa bị thu hồi; 0 khi user không đăng nhập.</param>
+internal sealed record LogoutUserResponse(int RevokedSessions);
+
 internal sealed record UserResponse(
     long Id,
     string Email,

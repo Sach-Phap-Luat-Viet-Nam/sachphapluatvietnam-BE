@@ -82,6 +82,7 @@ Tiền tố `/api/v1`.
 | GET | `/admin/users` | users_admin | Danh sách nhân viên (phân trang) |
 | POST | `/admin/users` | users_admin | `{email, fullName, password, roles[]}` → 201 |
 | PUT | `/admin/users/{id}/roles` | users_admin | `{roles[]}` |
+| POST | `/admin/users/{id}/logout` | users_admin | Đăng xuất hộ: thu hồi mọi phiên của user trên mọi thiết bị → `{revokedSessions}` |
 | POST | `/admin/users/{id}/impersonate` | users_admin | → `AuthResponse` của tài khoản đích (`loginVia: "admin"`), không cookie |
 
 `AuthResponse`: `{accessToken, tokenType: "Bearer", expiresIn, loginVia: "portal" | "admin", impersonatorId?,
@@ -173,7 +174,9 @@ Chỉ thêm bảng, không đổi dữ liệu cũ.
 - Mỗi user chỉ lưu một bộ thông tin hóa đơn.
 - Chưa có mã khôi phục 2FA; mã TOTP vừa dùng chưa bị chặn dùng lại trong cùng 30 giây.
 - Hai tab cùng refresh một lúc có thể bị coi là dùng lại token và bị đăng xuất.
-- Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền và fast login (hiện chỉ ghi log).
+- Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền, fast login và đăng xuất hộ (hiện chỉ ghi log).
+- Đăng xuất hộ chỉ thu hồi refresh token: access token user đang cầm vẫn dùng được tới khi hết hạn (tối đa 15
+  phút). Muốn chặn ngay thì cần kiểm tra security stamp hoặc danh sách token bị chặn ở mỗi request (chưa làm).
 - Fast login không chặn thao tác nào (đổi mật khẩu, bật 2FA... thay người dùng); access token vào hộ không thu hồi
   được trước hạn 15 phút.
 - `GET /admin/users` mới chỉ liệt kê nhân viên; muốn fast login khách hàng thì Admin cần biết id khách.

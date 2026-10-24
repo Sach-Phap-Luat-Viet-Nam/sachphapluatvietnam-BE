@@ -71,6 +71,24 @@ internal sealed class UserAdminService(
     }
 
     /// <summary>
+    /// Đăng xuất hộ: thu hồi mọi phiên (refresh token) của user trên mọi thiết bị, ví dụ nhân viên nghỉ việc
+    /// hoặc tài khoản bị lộ. Access token đã cấp vẫn dùng được tới khi hết hạn (tối đa <c>Jwt:AccessTokenMinutes</c>).
+    /// </summary>
+    public async Task<LogoutUserResponse> LogoutUserAsync(
+        long actorUserId,
+        long userId,
+        CancellationToken cancellationToken)
+    {
+        var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
+            ?? throw AuthErrors.UserNotFound();
+
+        var revoked = await authService.RevokeAllAsync(user.Id, cancellationToken);
+        logger.LogWarning(
+            "User {ActorUserId} logged out user {UserId} ({RevokedSessions} sessions)", actorUserId, user.Id, revoked);
+        return new LogoutUserResponse(revoked);
+    }
+
+    /// <summary>
     /// Fast login: Super Admin lấy access token của tài khoản dưới cấp (không phải Super Admin).
     /// Không cấp refresh token để không ghi đè cookie phiên của chính admin; hết hạn thì gọi lại.
     /// </summary>

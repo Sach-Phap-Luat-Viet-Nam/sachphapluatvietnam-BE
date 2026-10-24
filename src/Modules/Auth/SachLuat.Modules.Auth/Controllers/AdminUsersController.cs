@@ -24,6 +24,10 @@ internal sealed class AdminUsersController(UserAdminService userAdminService, IC
     public Task<UserResponse> SetRoles(long id, SetRolesRequest request) =>
         userAdminService.SetRolesAsync(currentUser.RequireUserId(), id, request);
 
+    [HttpPost("{id:long}/logout")]
+    public Task<LogoutUserResponse> Logout(long id, CancellationToken cancellationToken) =>
+        userAdminService.LogoutUserAsync(currentUser.RequireUserId(), id, cancellationToken);
+
     [HttpPost("{id:long}/impersonate")]
     public Task<AuthResponse> Impersonate(long id) =>
         userAdminService.ImpersonateAsync(currentUser.RequireUserId(), id);

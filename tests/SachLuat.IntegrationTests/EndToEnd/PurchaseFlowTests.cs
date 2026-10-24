@@ -56,6 +56,23 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
             $"/api/v1/admin/users/{adminId}/impersonate", expected: HttpStatusCode.UnprocessableEntity);
         selfImpersonation.GetProperty("code").GetString().Should().Be("CANNOT_IMPERSONATE");
 
+        // 2c. Đăng xuất hộ: Super Admin thu hồi mọi phiên của một nhân viên; nhân viên không refresh được nữa.
+        var leaverId = (await admin.PostAsync("/api/v1/admin/users", new
+        {
+            email = "nghiviec@e2e.test",
+            fullName = "Nhân viên nghỉ việc",
+            password = "leaver-password-123",
+            roles = new[] { "customer_service" },
+        }, HttpStatusCode.Created)).GetProperty("id").GetInt64();
+        using var leaver = new ApiClient(factory);
+        await leaver.LoginAsync("nghiviec@e2e.test", "leaver-password-123");
+        (await admin.PostAsync($"/api/v1/admin/users/{leaverId}/logout"))
+            .GetProperty("revokedSessions").GetInt32().Should().Be(1);
+        (await leaver.PostAsync("/api/v1/auth/refresh", expected: HttpStatusCode.Unauthorized))
+            .GetProperty("code").GetString().Should().Be("INVALID_REFRESH_TOKEN");
+        (await admin.PostAsync("/api/v1/admin/users/999999/logout", expected: HttpStatusCode.NotFound))
+            .GetProperty("code").GetString().Should().Be("USER_NOT_FOUND");
+
         // 3. Catalog: danh mục, tác giả, văn bản, đầu sách, ấn bản đang bán, SKU.
         var categoryId = (await admin.PostAsync("/api/v1/admin/categories",
             new { name = "Dân sự", slug = "dan-su", sortOrder = 1 }, HttpStatusCode.Created)).GetProperty("id").GetInt64();

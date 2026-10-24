@@ -286,11 +286,12 @@ internal sealed class AuthService(
         }
     }
 
-    private async Task RevokeAllAsync(long userId, CancellationToken cancellationToken)
+    /// <summary>Thu hồi mọi refresh token còn hiệu lực của user; trả về số phiên bị thu hồi.</summary>
+    internal Task<int> RevokeAllAsync(long userId, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        await dbContext.RefreshTokens
-            .Where(token => token.UserId == userId && token.RevokedAt == null)
+        return dbContext.RefreshTokens
+            .Where(token => token.UserId == userId && token.RevokedAt == null && token.ExpiresAt > now)
             .ExecuteUpdateAsync(setters => setters.SetProperty(token => token.RevokedAt, now), cancellationToken);
     }
 
