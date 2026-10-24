@@ -8,6 +8,7 @@ public sealed class CorsTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     [Theory]
     [InlineData("https://sachphapluatvietnam.vercel.app")]
+    [InlineData("https://admin-sachphapluatvietnam.vercel.app")]
     [InlineData("http://localhost:3000")]
     [InlineData("http://localhost:3001")]
     public async Task Preflight_FromAllowedOrigin_AllowsWithCredentials(string origin)
