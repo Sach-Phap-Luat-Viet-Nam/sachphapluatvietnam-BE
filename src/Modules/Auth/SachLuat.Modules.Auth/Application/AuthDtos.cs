@@ -18,6 +18,54 @@ internal sealed record UpdateProfileRequest(
     DateOnly? BirthDate,
     Occupation? Occupation);
 
+/// <param name="IsDefault">true: đặt làm địa chỉ mặc định (địa chỉ đầu tiên luôn là mặc định).</param>
+internal sealed record UpsertAddressRequest(
+    string RecipientName,
+    string Phone,
+    string Province,
+    string Ward,
+    string StreetAddress,
+    bool IsDefault);
+
+/// <param name="RecipientName">Điền vào <c>customerName</c> khi đặt hàng.</param>
+/// <param name="Phone">Điền vào <c>phone</c> khi đặt hàng.</param>
+internal sealed record AddressResponse(
+    long Id,
+    string RecipientName,
+    string Phone,
+    string Province,
+    string Ward,
+    string StreetAddress,
+    bool IsDefault,
+    DateTime UpdatedAt);
+
+internal sealed record UpsertInvoiceInfoRequest(string CompanyName, string TaxCode, string Address, string Email);
+
+internal sealed record InvoiceInfoResponse(
+    string CompanyName,
+    string TaxCode,
+    string Address,
+    string Email,
+    DateTime UpdatedAt);
+
+/// <summary>
+/// Hồ sơ cho <c>GET/PATCH /me</c>: các field của <see cref="UserResponse"/> kèm dữ liệu để điền sẵn form đặt hàng.
+/// </summary>
+/// <param name="DefaultAddress">null khi sổ địa chỉ trống.</param>
+/// <param name="InvoiceInfo">null khi chưa lưu thông tin hóa đơn.</param>
+internal sealed record MeResponse(
+    long Id,
+    string Email,
+    string FullName,
+    string? PhoneNumber,
+    DateOnly? BirthDate,
+    Occupation? Occupation,
+    IReadOnlyList<string> Roles,
+    bool TwoFactorEnabled,
+    bool RequiresTwoFactorSetup,
+    AddressResponse? DefaultAddress,
+    InvoiceInfoResponse? InvoiceInfo);
+
 internal sealed record CreateStaffRequest(string Email, string FullName, string Password, IReadOnlyList<string> Roles);
 
 internal sealed record SetRolesRequest(IReadOnlyList<string> Roles);

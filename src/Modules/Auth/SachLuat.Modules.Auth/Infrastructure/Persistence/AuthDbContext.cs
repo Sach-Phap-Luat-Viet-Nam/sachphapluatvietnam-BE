@@ -14,6 +14,10 @@ internal sealed class AuthDbContext(DbContextOptions<AuthDbContext> options)
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    public DbSet<UserAddress> UserAddresses => Set<UserAddress>();
+
+    public DbSet<UserInvoiceInfo> UserInvoiceInfos => Set<UserInvoiceInfo>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -48,6 +52,31 @@ internal sealed class AuthDbContext(DbContextOptions<AuthDbContext> options)
             token.HasIndex(t => t.TokenHash).IsUnique();
             token.HasIndex(t => t.UserId);
             token.HasOne<AppUser>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<UserAddress>(address =>
+        {
+            address.ToTable("user_addresses");
+            address.Property(a => a.RecipientName).HasMaxLength(UserAddress.RecipientNameMaxLength);
+            address.Property(a => a.Phone).HasMaxLength(UserAddress.PhoneMaxLength);
+            address.Property(a => a.Province).HasMaxLength(UserAddress.ProvinceMaxLength);
+            address.Property(a => a.Ward).HasMaxLength(UserAddress.WardMaxLength);
+            address.Property(a => a.StreetAddress).HasMaxLength(UserAddress.StreetAddressMaxLength);
+            address.HasIndex(a => a.UserId);
+            address.HasOne<AppUser>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<UserInvoiceInfo>(info =>
+        {
+            info.ToTable("user_invoice_infos");
+            info.HasKey(i => i.UserId);
+            info.Property(i => i.UserId).ValueGeneratedNever();
+            info.Property(i => i.CompanyName).HasMaxLength(UserInvoiceInfo.CompanyNameMaxLength);
+            info.Property(i => i.TaxCode).HasMaxLength(UserInvoiceInfo.TaxCodeMaxLength);
+            info.Property(i => i.Address).HasMaxLength(UserInvoiceInfo.AddressMaxLength);
+            info.Property(i => i.Email).HasMaxLength(UserInvoiceInfo.EmailMaxLength);
+            info.HasOne<AppUser>().WithOne().HasForeignKey<UserInvoiceInfo>(i => i.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

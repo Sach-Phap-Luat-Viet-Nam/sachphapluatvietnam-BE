@@ -1,4 +1,5 @@
 using FluentValidation;
+using SachLuat.Modules.Auth.Domain;
 using SachLuat.SharedKernel.Security;
 
 namespace SachLuat.Modules.Auth.Application;
@@ -10,6 +11,9 @@ internal static class AuthRules
 
     // Số di động Việt Nam: 0xxxxxxxxx hoặc +84xxxxxxxxx.
     public const string PhonePattern = @"^(0|\+84)[0-9]{9}$";
+
+    // Mã số thuế: 10 số, chi nhánh thêm "-xxx" (cùng quy tắc với hóa đơn trên đơn hàng).
+    public const string TaxCodePattern = @"^[0-9]{10}(-[0-9]{3})?$";
 
     public static IRuleBuilderOptions<T, string> ValidPassword<T>(this IRuleBuilder<T, string> rule) =>
         rule.NotEmpty().Length(PasswordMinLength, PasswordMaxLength);
@@ -73,6 +77,31 @@ internal sealed class UpdateProfileRequestValidator : AbstractValidator<UpdatePr
         RuleFor(request => request.PhoneNumber).Matches(AuthRules.PhonePattern)
             .When(request => !string.IsNullOrEmpty(request.PhoneNumber));
         RuleFor(request => request.Occupation).IsInEnum();
+    }
+}
+
+internal sealed class UpsertAddressRequestValidator : AbstractValidator<UpsertAddressRequest>
+{
+    public UpsertAddressRequestValidator()
+    {
+        RuleFor(request => request.RecipientName).NotEmpty().MaximumLength(UserAddress.RecipientNameMaxLength);
+        RuleFor(request => request.Phone).NotEmpty().Matches(AuthRules.PhonePattern)
+            .WithMessage("Số điện thoại không hợp lệ");
+        RuleFor(request => request.Province).NotEmpty().MaximumLength(UserAddress.ProvinceMaxLength);
+        RuleFor(request => request.Ward).NotEmpty().MaximumLength(UserAddress.WardMaxLength);
+        RuleFor(request => request.StreetAddress).NotEmpty().MaximumLength(UserAddress.StreetAddressMaxLength);
+    }
+}
+
+internal sealed class UpsertInvoiceInfoRequestValidator : AbstractValidator<UpsertInvoiceInfoRequest>
+{
+    public UpsertInvoiceInfoRequestValidator()
+    {
+        RuleFor(request => request.CompanyName).NotEmpty().MaximumLength(UserInvoiceInfo.CompanyNameMaxLength);
+        RuleFor(request => request.TaxCode).NotEmpty().Matches(AuthRules.TaxCodePattern)
+            .WithMessage("Mã số thuế không hợp lệ");
+        RuleFor(request => request.Address).NotEmpty().MaximumLength(UserInvoiceInfo.AddressMaxLength);
+        RuleFor(request => request.Email).NotEmpty().EmailAddress().MaximumLength(UserInvoiceInfo.EmailMaxLength);
     }
 }
 

@@ -71,7 +71,14 @@ Tiền tố `/api/v1`.
 | POST | `/auth/password/change` | Bearer | `{currentPassword, newPassword}` → 204, thu hồi mọi phiên |
 | POST | `/auth/2fa/setup` | Bearer | → `{sharedKey, authenticatorUri}` |
 | POST | `/auth/2fa/enable` | Bearer | `{code}` → `AuthResponse` (amr=mfa) |
-| GET/PATCH | `/me` | Bearer | Hồ sơ: `fullName, phoneNumber, birthDate, occupation` (FR-05) |
+| GET/PATCH | `/me` | Bearer | Hồ sơ (FR-05) → `MeResponse`; PATCH nhận `{fullName, phoneNumber?, birthDate?, occupation?}` và ghi đè cả 4 field |
+| GET | `/me/addresses` | Bearer | Sổ địa chỉ (FR-06) → `AddressResponse[]`, mặc định đứng đầu |
+| POST | `/me/addresses` | Bearer | `UpsertAddressRequest` → 201 `AddressResponse[]` (cả sổ) |
+| PUT | `/me/addresses/{id}` | Bearer | `UpsertAddressRequest` → `AddressResponse[]` |
+| POST | `/me/addresses/{id}/default` | Bearer | Đặt làm mặc định → `AddressResponse[]` |
+| DELETE | `/me/addresses/{id}` | Bearer | → 204 |
+| PUT | `/me/invoice-info` | Bearer | Lưu thông tin hóa đơn (FR-07) `{companyName, taxCode, address, email}` → `InvoiceInfoResponse` |
+| DELETE | `/me/invoice-info` | Bearer | → 204 |
 | GET | `/admin/users` | users_admin | Danh sách nhân viên (phân trang) |
 | POST | `/admin/users` | users_admin | `{email, fullName, password, roles[]}` → 201 |
 | PUT | `/admin/users/{id}/roles` | users_admin | `{roles[]}` |
@@ -80,9 +87,63 @@ Tiền tố `/api/v1`.
 `AuthResponse`: `{accessToken, tokenType: "Bearer", expiresIn, loginVia: "portal" | "admin", impersonatorId?,
 user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, ...}}`.
 
+**Hồ sơ để điền sẵn form đặt hàng** (`MeResponse`): các field của `user` ở trên, thêm `defaultAddress` và
+`invoiceInfo` (`null` khi chưa có):
+
+```json
+{
+  "id": 42,
+  "email": "khach@example.com",
+  "fullName": "Nguyễn Văn A",
+  "phoneNumber": "0901234567",
+  "birthDate": null,
+  "occupation": "lawyer",
+  "roles": ["customer"],
+  "twoFactorEnabled": false,
+  "requiresTwoFactorSetup": false,
+  "defaultAddress": {
+    "id": 7,
+    "recipientName": "Nguyễn Văn A",
+    "phone": "0901234567",
+    "province": "Hà Nội",
+    "ward": "Phường Cửa Nam",
+    "streetAddress": "12 Hàng Bài",
+    "isDefault": true,
+    "updatedAt": "2026-10-24T05:30:00Z"
+  },
+  "invoiceInfo": {
+    "companyName": "Công ty TNHH Luật ABC",
+    "taxCode": "0101234567",
+    "address": "1 Tràng Tiền, Hà Nội",
+    "email": "ketoan@abc.vn",
+    "updatedAt": "2026-10-24T05:30:00Z"
+  }
+}
+```
+
+Điền vào `POST /orders`: `customerName` ← `defaultAddress.recipientName` (không có địa chỉ thì `fullName`),
+`phone` ← `defaultAddress.phone` (hoặc `phoneNumber`), `email` ← `email`,
+`shippingAddress` ← `{province, ward, streetAddress}`, `invoiceInfo` ← `invoiceInfo`.
+Checkbox "Lưu địa chỉ này" trên form đặt hàng: FE tự gọi `POST /me/addresses` / `PUT /me/invoice-info`;
+`POST /orders` không tự lưu vào hồ sơ.
+
+`UpsertAddressRequest`: `{recipientName, phone, province, ward, streetAddress, isDefault}`.
+
+**Quy tắc sổ địa chỉ** (`AddressBook`):
+
+- Tối đa 10 địa chỉ (`ADDRESS_LIMIT_REACHED`). Sổ không rỗng thì luôn đúng một địa chỉ mặc định.
+- Địa chỉ đầu tiên tự là mặc định. `isDefault: true` khi thêm/sửa thì chuyển mặc định sang địa chỉ đó;
+  `isDefault: false` không bỏ được cờ mặc định (muốn đổi thì đặt địa chỉ khác làm mặc định).
+- Xóa địa chỉ mặc định thì địa chỉ cập nhật gần nhất còn lại thành mặc định.
+- Mọi thao tác sửa sổ địa chỉ/hóa đơn khóa dòng `auth.users` (`FOR UPDATE`) để bấm nhiều lần không vượt giới hạn
+  hay sinh hai địa chỉ mặc định.
+- Validate giống form đặt hàng (`CreateOrderRequestValidator`): SĐT `0xxxxxxxxx`/`+84xxxxxxxxx`, tỉnh/phường ≤ 100,
+  số nhà ≤ 500, mã số thuế 10 số hoặc 10 số + `-xxx`, email ≤ 256.
+
 Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (409), `INVALID_REFRESH_TOKEN` (401),
 `TWO_FACTOR_TOKEN_INVALID` (401), `OTP_INVALID` (400), `TWO_FACTOR_ALREADY_ENABLED` (409),
-`CANNOT_REMOVE_OWN_ADMIN` (422), `CANNOT_IMPERSONATE` (422), `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429).
+`CANNOT_REMOVE_OWN_ADMIN` (422), `CANNOT_IMPERSONATE` (422), `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429),
+`ADDRESS_NOT_FOUND` (404, kể cả địa chỉ của người khác), `ADDRESS_LIMIT_REACHED` (422).
 
 ## Cấu hình cần thiết
 
@@ -100,10 +161,16 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 `CreateAuthSchema` (schema `auth`): bảng Identity đổi tên `users`, `roles`, `user_roles`, `user_claims`,
 `user_logins`, `user_tokens` (lưu khóa TOTP), `role_claims`; bảng `refresh_tokens`. Seed 8 vai trò của bảng 4.2.
 
+`AddUserAddressesAndInvoiceInfo`: bảng `user_addresses` (`recipient_name, phone, province, ward, street_address,
+is_default`, index `user_id`) và `user_invoice_infos` (khóa chính `user_id`), cả hai cascade khi xóa user.
+Chỉ thêm bảng, không đổi dữ liệu cũ.
+
 ## Hạn chế / việc còn lại
 
 - Chưa xác thực email/OTP SMS–Zalo, quên mật khẩu (FR-01, FR-04): chờ module Notification.
-- Chưa có đăng nhập mạng xã hội (FR-02), tài khoản tổ chức (FR-09), sổ địa chỉ (FR-06), xóa tài khoản (FR-08).
+- Chưa có đăng nhập mạng xã hội (FR-02), tài khoản tổ chức (FR-09), xóa tài khoản (FR-08).
+- Tỉnh/thành, phường/xã nhập dạng chữ tự do, chưa có danh mục hành chính để chọn (FR-06); đơn hàng cũng vậy.
+- Mỗi user chỉ lưu một bộ thông tin hóa đơn.
 - Chưa có mã khôi phục 2FA; mã TOTP vừa dùng chưa bị chặn dùng lại trong cùng 30 giây.
 - Hai tab cùng refresh một lúc có thể bị coi là dùng lại token và bị đăng xuất.
 - Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền và fast login (hiện chỉ ghi log).

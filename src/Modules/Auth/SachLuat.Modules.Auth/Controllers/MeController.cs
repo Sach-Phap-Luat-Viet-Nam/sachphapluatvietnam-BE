@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SachLuat.Modules.Auth.Application;
 using SachLuat.SharedKernel.Api;
@@ -9,12 +10,56 @@ namespace SachLuat.Modules.Auth.Controllers;
 [ApiController]
 [Authorize]
 [Route(ApiRoutes.V1 + "/me")]
-internal sealed class MeController(AuthService authService, ICurrentUser currentUser) : ControllerBase
+internal sealed class MeController(ProfileService profileService, ICurrentUser currentUser) : ControllerBase
 {
     [HttpGet]
-    public Task<UserResponse> Get() => authService.GetUserAsync(currentUser.RequireUserId());
+    public Task<MeResponse> Get(CancellationToken cancellationToken) =>
+        profileService.GetAsync(currentUser.RequireUserId(), cancellationToken);
 
     [HttpPatch]
-    public Task<UserResponse> Update(UpdateProfileRequest request) =>
-        authService.UpdateProfileAsync(currentUser.RequireUserId(), request);
+    public Task<MeResponse> Update(UpdateProfileRequest request, CancellationToken cancellationToken) =>
+        profileService.UpdateAsync(currentUser.RequireUserId(), request, cancellationToken);
+
+    [HttpGet("addresses")]
+    public Task<IReadOnlyList<AddressResponse>> ListAddresses(CancellationToken cancellationToken) =>
+        profileService.ListAddressesAsync(currentUser.RequireUserId(), cancellationToken);
+
+    [HttpPost("addresses")]
+    public async Task<ActionResult<IReadOnlyList<AddressResponse>>> AddAddress(
+        UpsertAddressRequest request,
+        CancellationToken cancellationToken) =>
+        StatusCode(
+            StatusCodes.Status201Created,
+            await profileService.AddAddressAsync(currentUser.RequireUserId(), request, cancellationToken));
+
+    [HttpPut("addresses/{id:long}")]
+    public Task<IReadOnlyList<AddressResponse>> UpdateAddress(
+        long id,
+        UpsertAddressRequest request,
+        CancellationToken cancellationToken) =>
+        profileService.UpdateAddressAsync(currentUser.RequireUserId(), id, request, cancellationToken);
+
+    [HttpPost("addresses/{id:long}/default")]
+    public Task<IReadOnlyList<AddressResponse>> SetDefaultAddress(long id, CancellationToken cancellationToken) =>
+        profileService.SetDefaultAddressAsync(currentUser.RequireUserId(), id, cancellationToken);
+
+    [HttpDelete("addresses/{id:long}")]
+    public async Task<IActionResult> DeleteAddress(long id, CancellationToken cancellationToken)
+    {
+        await profileService.DeleteAddressAsync(currentUser.RequireUserId(), id, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("invoice-info")]
+    public Task<InvoiceInfoResponse> SaveInvoiceInfo(
+        UpsertInvoiceInfoRequest request,
+        CancellationToken cancellationToken) =>
+        profileService.SaveInvoiceInfoAsync(currentUser.RequireUserId(), request, cancellationToken);
+
+    [HttpDelete("invoice-info")]
+    public async Task<IActionResult> DeleteInvoiceInfo(CancellationToken cancellationToken)
+    {
+        await profileService.DeleteInvoiceInfoAsync(currentUser.RequireUserId(), cancellationToken);
+        return NoContent();
+    }
 }
