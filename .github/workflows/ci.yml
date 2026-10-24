@@ -1,5 +1,5 @@
 # Kiểm tra "định nghĩa xong việc" (CLAUDE.md) cho mỗi push lên main và mỗi pull request:
-# format, build không warning, toàn bộ test (kể cả test cần PostgreSQL + Redis).
+# format, build không warning, toàn bộ test (kể cả test cần PostgreSQL + Redis), build Docker image.
 name: CI
 
 on:
@@ -66,3 +66,14 @@ jobs:
 
       - name: Test
         run: dotnet test --solution SachLuat.slnx --configuration Release --no-build
+
+  # Build image deploy (không push) để bắt sớm lỗi Dockerfile, ví dụ quên COPY csproj của module mới.
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build --tag sachluat-api:ci .
