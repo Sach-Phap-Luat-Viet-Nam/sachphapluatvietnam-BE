@@ -20,6 +20,13 @@ internal sealed class MeController(ProfileService profileService, ICurrentUser c
     public Task<MeResponse> Update(UpdateProfileRequest request, CancellationToken cancellationToken) =>
         profileService.UpdateAsync(currentUser.RequireUserId(), request, cancellationToken);
 
+    /// <summary>Lưu giao diện storefront (<c>dark</c>/<c>light</c>) của khách để ghi nhớ giữa các thiết bị.</summary>
+    [HttpPut("preferences")]
+    public Task<PreferencesResponse> UpdatePreferences(
+        UpdatePreferencesRequest request,
+        CancellationToken cancellationToken) =>
+        profileService.UpdatePreferencesAsync(currentUser.RequireUserId(), request, cancellationToken);
+
     [HttpGet("addresses")]
     public Task<IReadOnlyList<AddressResponse>> ListAddresses(CancellationToken cancellationToken) =>
         profileService.ListAddressesAsync(currentUser.RequireUserId(), cancellationToken);

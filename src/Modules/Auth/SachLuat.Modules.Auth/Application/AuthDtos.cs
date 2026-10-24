@@ -77,6 +77,7 @@ internal sealed record MeResponse(
     bool TwoFactorEnabled,
     bool RequiresTwoFactorSetup,
     bool IsActive,
+    ColorTheme? Theme,
     AddressResponse? DefaultAddress,
     InvoiceInfoResponse? InvoiceInfo);
 
@@ -111,7 +112,13 @@ internal sealed record UserResponse(
     IReadOnlyList<string> Roles,
     bool TwoFactorEnabled,
     bool RequiresTwoFactorSetup,
-    bool IsActive);
+    bool IsActive,
+    ColorTheme? Theme);
+
+/// <param name="Theme">Giao diện storefront khách chọn (<c>dark</c>/<c>light</c>), ghi nhớ theo tài khoản.</param>
+internal sealed record UpdatePreferencesRequest(ColorTheme? Theme);
+
+internal sealed record PreferencesResponse(ColorTheme? Theme);
 
 /// <param name="LoginVia"><c>portal</c> (tự đăng nhập) hoặc <c>admin</c> (Super Admin fast login).</param>
 /// <param name="ImpersonatorId">Id Super Admin đang fast login, null khi <paramref name="LoginVia"/> = <c>portal</c>.</param>

@@ -228,7 +228,8 @@ internal sealed class AuthService(
             roles,
             user.TwoFactorEnabled,
             RequiresTwoFactorSetup: isStaff && !user.TwoFactorEnabled,
-            user.IsActive);
+            user.IsActive,
+            user.Theme);
     }
 
     internal static void EnsureSucceeded(IdentityResult result)

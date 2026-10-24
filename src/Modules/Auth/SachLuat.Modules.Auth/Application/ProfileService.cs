@@ -20,6 +20,26 @@ internal sealed class ProfileService(
         CancellationToken cancellationToken) =>
         await ToMeResponseAsync(await authService.UpdateProfileAsync(userId, request), cancellationToken);
 
+    /// <summary>Lưu giao diện storefront khách chọn để lần đăng nhập sau (kể cả máy khác) vẫn giữ nguyên.</summary>
+    public async Task<PreferencesResponse> UpdatePreferencesAsync(
+        long userId,
+        UpdatePreferencesRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Chỉ cập nhật cột theme, không đi qua UserManager.UpdateAsync để không đụng các field khác (ví dụ khóa
+        // concurrency khi hai tab đổi giao diện cùng lúc).
+        var updated = await dbContext.Users
+            .Where(user => user.Id == userId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(user => user.Theme, request.Theme), cancellationToken);
+        if (updated == 0)
+        {
+            throw AuthErrors.UserNotFound();
+        }
+
+        logger.LogInformation("User {UserId} set theme to {Theme}", userId, request.Theme);
+        return new PreferencesResponse(request.Theme);
+    }
+
     public async Task<IReadOnlyList<AddressResponse>> ListAddressesAsync(
         long userId,
         CancellationToken cancellationToken) =>
@@ -143,6 +163,7 @@ internal sealed class ProfileService(
             user.TwoFactorEnabled,
             user.RequiresTwoFactorSetup,
             user.IsActive,
+            user.Theme,
             defaultAddress is null ? null : ToResponse(defaultAddress),
             invoiceInfo is null ? null : ToResponse(invoiceInfo));
     }

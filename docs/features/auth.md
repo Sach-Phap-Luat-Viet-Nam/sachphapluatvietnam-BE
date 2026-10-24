@@ -96,6 +96,7 @@ Tiền tố `/api/v1`.
 | POST | `/auth/2fa/setup` | Bearer | → `{sharedKey, authenticatorUri}` |
 | POST | `/auth/2fa/enable` | Bearer | `{code}` → `AuthResponse` (amr=mfa) |
 | GET/PATCH | `/me` | Bearer | Hồ sơ (FR-05) → `MeResponse`; PATCH nhận `{fullName, phoneNumber?, birthDate?, occupation?}` và ghi đè cả 4 field |
+| PUT | `/me/preferences` | Bearer | `{theme: "dark" \| "light"}` → `{theme}`: lưu giao diện storefront khách chọn |
 | GET | `/me/addresses` | Bearer | Sổ địa chỉ (FR-06) → `AddressResponse[]`, mặc định đứng đầu |
 | POST | `/me/addresses` | Bearer | `UpsertAddressRequest` → 201 `AddressResponse[]` (cả sổ) |
 | PUT | `/me/addresses/{id}` | Bearer | `UpsertAddressRequest` → `AddressResponse[]` |
@@ -115,7 +116,12 @@ Tiền tố `/api/v1`.
 | POST | `/admin/users/{id}/impersonate` | users_admin | → `AuthResponse` của tài khoản đích (`loginVia: "admin"`), không cookie |
 
 `AuthResponse`: `{accessToken, tokenType: "Bearer", expiresIn, loginVia: "portal" | "admin", impersonatorId?,
-user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, isActive, ...}}`.
+user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, isActive, theme, ...}}`.
+
+**Giao diện storefront** (`theme`): `"dark"`, `"light"` hoặc `null` (chưa chọn, FE dùng mặc định tối). Có trong `UserResponse`
+(login, refresh, 2FA, register, fast login) và `MeResponse`, nên FE biết ngay khi vào phiên. Lưu bằng
+`PUT /me/preferences` (thiếu hoặc giá trị lạ → `VALIDATION_ERROR` 400), chỉ cập nhật cột `theme`. `null` khác `"dark"`:
+FE dựa vào đó để đẩy lựa chọn đã có ở trình duyệt lên tài khoản lần đầu (xem `docs/features/storefront-theme.md` ở repo FE).
 
 `AdminCustomerResponse`: `{account: UserResponse, addresses: AddressResponse[], invoiceInfo: InvoiceInfoResponse |
 null}`.
@@ -195,6 +201,9 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 
 `CreateAuthSchema` (schema `auth`): bảng Identity đổi tên `users`, `roles`, `user_roles`, `user_claims`,
 `user_logins`, `user_tokens` (lưu khóa TOTP), `role_claims`; bảng `refresh_tokens`. Seed 8 vai trò của bảng 4.2.
+
+`AddUserTheme`: thêm cột `auth.users.theme` (varchar(30), cho phép null, lưu `dark`/`light`). Chỉ thêm cột, dữ liệu cũ
+giữ nguyên (null). **Phải chạy migration lên CSDL production trước khi deploy bản này**, backend không tự migrate.
 
 `AddUserAddressesAndInvoiceInfo`: bảng `user_addresses` (`recipient_name, phone, province, ward, street_address,
 is_default`, index `user_id`) và `user_invoice_infos` (khóa chính `user_id`), cả hai cascade khi xóa user.

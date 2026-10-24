@@ -80,8 +80,13 @@ internal sealed class AuthDbContext(DbContextOptions<AuthDbContext> options)
         });
     }
 
-    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
         configurationBuilder.Properties<Occupation>()
             .HaveConversion<SnakeCaseEnumConverter<Occupation>>()
             .HaveMaxLength(SnakeCaseEnumConverter<Occupation>.MaxLength);
+        configurationBuilder.Properties<ColorTheme>()
+            .HaveConversion<SnakeCaseEnumConverter<ColorTheme>>()
+            .HaveMaxLength(SnakeCaseEnumConverter<ColorTheme>.MaxLength);
+    }
 }

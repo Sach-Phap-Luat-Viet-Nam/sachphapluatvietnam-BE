@@ -59,6 +59,47 @@ public sealed class ProfileTests(EndToEndFactory factory)
             .GetProperty("code").GetString().Should().Be("ADDRESS_NOT_FOUND");
     }
 
+    [Fact]
+    public async Task Theme_IsRememberedPerAccount()
+    {
+        factory.SkipIfNotConfigured();
+        using var client = new ApiClient(factory);
+        var session = await client.PostAsync("/api/v1/auth/register", new
+        {
+            email = "theme@e2e.test",
+            password = "theme-password",
+            fullName = "Giao diện",
+        }, HttpStatusCode.Created);
+        client.AccessToken = session.GetProperty("accessToken").GetString();
+
+        // Chưa chọn: null để FE dùng mặc định tối.
+        session.GetProperty("user").GetProperty("theme").ValueKind.Should().Be(JsonValueKind.Null);
+        (await client.GetAsync("/api/v1/me")).GetProperty("theme").ValueKind.Should().Be(JsonValueKind.Null);
+
+        (await client.PutAsync("/api/v1/me/preferences", new { theme = "light" }))
+            .GetProperty("theme").GetString().Should().Be("light");
+        (await client.GetAsync("/api/v1/me")).GetProperty("theme").GetString().Should().Be("light");
+
+        // Đăng nhập lại (thiết bị khác) vẫn thấy giao diện đã chọn, ở cả login và refresh.
+        using var otherDevice = new ApiClient(factory);
+        (await otherDevice.LoginAsync("theme@e2e.test", "theme-password", portal: "storefront"))
+            .GetProperty("user").GetProperty("theme").GetString().Should().Be("light");
+        (await otherDevice.PostAsync("/api/v1/auth/refresh"))
+            .GetProperty("user").GetProperty("theme").GetString().Should().Be("light");
+
+        await client.PutAsync("/api/v1/me/preferences", new { theme = "dark" });
+        (await client.GetAsync("/api/v1/me")).GetProperty("theme").GetString().Should().Be("dark");
+
+        // Giá trị lạ hoặc thiếu thì từ chối, không đổi gì.
+        await client.PutAsync("/api/v1/me/preferences", new { theme = "neon" }, HttpStatusCode.BadRequest);
+        await client.PutAsync("/api/v1/me/preferences", new { }, HttpStatusCode.BadRequest);
+        (await client.GetAsync("/api/v1/me")).GetProperty("theme").GetString().Should().Be("dark");
+
+        // Chưa đăng nhập thì không lưu được.
+        using var anonymous = new ApiClient(factory);
+        await anonymous.PutAsync("/api/v1/me/preferences", new { theme = "light" }, HttpStatusCode.Unauthorized);
+    }
+
     private static object Address(string recipientName, bool isDefault) => new
     {
         recipientName,
