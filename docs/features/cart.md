@@ -48,5 +48,6 @@ Không có (dữ liệu nằm trong Redis).
 
 ## Hạn chế / việc còn lại
 
-- Chưa áp mã giảm giá (`/cart/apply-coupon`, FR-32): chờ module Promotion.
+- Giỏ **không** lưu mã giảm giá: FE giữ mã và gửi kèm `POST /checkout/preview` và khi tạo đơn, nên không có
+  `/cart/apply-coupon` như phác thảo mục 11 (xem `docs/features/ordering.md` và `docs/features/promotion.md`).
 - Thêm cùng lúc từ nhiều tab có thể ghi đè số lượng của nhau (đọc–ghi không nguyên tử), chấp nhận cho giỏ hàng.

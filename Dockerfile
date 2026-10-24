@@ -16,6 +16,10 @@ COPY src/Modules/Inventory/SachLuat.Modules.Inventory.Contracts/SachLuat.Modules
 COPY src/Modules/Inventory/SachLuat.Modules.Inventory/SachLuat.Modules.Inventory.csproj src/Modules/Inventory/SachLuat.Modules.Inventory/
 COPY src/Modules/Ordering/SachLuat.Modules.Ordering/SachLuat.Modules.Ordering.csproj src/Modules/Ordering/SachLuat.Modules.Ordering/
 COPY src/Modules/Content/SachLuat.Modules.Content/SachLuat.Modules.Content.csproj src/Modules/Content/SachLuat.Modules.Content/
+COPY src/Modules/Shipping/SachLuat.Modules.Shipping.Contracts/SachLuat.Modules.Shipping.Contracts.csproj src/Modules/Shipping/SachLuat.Modules.Shipping.Contracts/
+COPY src/Modules/Shipping/SachLuat.Modules.Shipping/SachLuat.Modules.Shipping.csproj src/Modules/Shipping/SachLuat.Modules.Shipping/
+COPY src/Modules/Promotion/SachLuat.Modules.Promotion.Contracts/SachLuat.Modules.Promotion.Contracts.csproj src/Modules/Promotion/SachLuat.Modules.Promotion.Contracts/
+COPY src/Modules/Promotion/SachLuat.Modules.Promotion/SachLuat.Modules.Promotion.csproj src/Modules/Promotion/SachLuat.Modules.Promotion/
 COPY src/SachLuat.Api/SachLuat.Api.csproj src/SachLuat.Api/
 RUN dotnet restore src/SachLuat.Api/SachLuat.Api.csproj
 

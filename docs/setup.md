@@ -83,6 +83,8 @@ src/
     Cart/                      # Giỏ hàng trên Redis + Cart.Contracts
     Ordering/                  # Đơn hàng (schema ordering)
     Content/                   # Nội dung: popup quảng cáo (schema content)
+    Shipping/                  # Vùng giao hàng, biểu phí, ngưỡng miễn ship (schema shipping) + Shipping.Contracts
+    Promotion/                 # Chương trình khuyến mãi, mã giảm giá (schema promotion) + Promotion.Contracts
 tests/
   SachLuat.UnitTests/
   SachLuat.IntegrationTests/   # WebApplicationFactory<Program>, test CSDL thật, end-to-end
@@ -142,7 +144,7 @@ SachLuat.Modules.<Ten>/
 
 ## Migration
 
-Mỗi module tạo migration cho `DbContext` của chính nó (`<Ten>` = Auth, Catalog, Inventory, Ordering, Content):
+Mỗi module tạo migration cho `DbContext` của chính nó (`<Ten>` = Auth, Catalog, Inventory, Ordering, Content, Shipping, Promotion):
 
 ```bash
 dotnet ef migrations add <TenMigration> \
@@ -223,7 +225,7 @@ của module mới.
 ## Hạn chế / việc còn lại
 
 - Chưa có hàng đợi/worker riêng (Hangfire hoặc tương đương), Meilisearch, module Notification (email/ZNS),
-  Promotion, Payment, Shipping, Content, Report.
+  Payment, Report.
 - Chưa có nhật ký thao tác hệ thống (FR-98).
 - Container PostgreSQL local hiện không có database `postgres` mặc định (image chuẩn luôn có). Test end-to-end
   đã tránh phụ thuộc (dùng `template1`); các công cụ khác cần tạo database mới có thể báo

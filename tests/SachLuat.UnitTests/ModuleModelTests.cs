@@ -12,6 +12,10 @@ using SachLuat.Modules.Inventory;
 using SachLuat.Modules.Inventory.Infrastructure.Persistence;
 using SachLuat.Modules.Ordering;
 using SachLuat.Modules.Ordering.Infrastructure.Persistence;
+using SachLuat.Modules.Promotion;
+using SachLuat.Modules.Promotion.Infrastructure.Persistence;
+using SachLuat.Modules.Shipping;
+using SachLuat.Modules.Shipping.Infrastructure.Persistence;
 using SachLuat.SharedKernel.Modules;
 using Xunit;
 
@@ -20,7 +24,7 @@ namespace SachLuat.UnitTests;
 public sealed class ModuleModelTests
 {
     public static TheoryData<string> Modules => [nameof(CatalogModule), nameof(AuthModule), nameof(InventoryModule),
-        nameof(OrderingModule), nameof(ContentModule)];
+        nameof(OrderingModule), nameof(ContentModule), nameof(ShippingModule), nameof(PromotionModule)];
 
     [Theory]
     [MemberData(nameof(Modules))]
@@ -39,6 +43,8 @@ public sealed class ModuleModelTests
             nameof(AuthModule) => (new AuthModule(), typeof(AuthDbContext)),
             nameof(InventoryModule) => (new InventoryModule(), typeof(InventoryDbContext)),
             nameof(ContentModule) => (new ContentModule(), typeof(ContentDbContext)),
+            nameof(ShippingModule) => (new ShippingModule(), typeof(ShippingDbContext)),
+            nameof(PromotionModule) => (new PromotionModule(), typeof(PromotionDbContext)),
             _ => (new OrderingModule(), typeof(OrderingDbContext)),
         };
         var services = new ServiceCollection();
