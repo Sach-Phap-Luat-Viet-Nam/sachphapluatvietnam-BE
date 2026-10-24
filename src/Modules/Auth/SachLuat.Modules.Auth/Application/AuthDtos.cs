@@ -63,12 +63,15 @@ internal sealed record MeResponse(
     IReadOnlyList<string> Roles,
     bool TwoFactorEnabled,
     bool RequiresTwoFactorSetup,
+    bool IsActive,
     AddressResponse? DefaultAddress,
     InvoiceInfoResponse? InvoiceInfo);
 
 internal sealed record CreateStaffRequest(string Email, string FullName, string Password, IReadOnlyList<string> Roles);
 
 internal sealed record SetRolesRequest(IReadOnlyList<string> Roles);
+
+internal sealed record ResetPasswordRequest(string NewPassword);
 
 /// <param name="RevokedSessions">Số phiên (refresh token còn hiệu lực) vừa bị thu hồi; 0 khi user không đăng nhập.</param>
 internal sealed record LogoutUserResponse(int RevokedSessions);
@@ -82,7 +85,8 @@ internal sealed record UserResponse(
     Occupation? Occupation,
     IReadOnlyList<string> Roles,
     bool TwoFactorEnabled,
-    bool RequiresTwoFactorSetup);
+    bool RequiresTwoFactorSetup,
+    bool IsActive);
 
 /// <param name="LoginVia"><c>portal</c> (tự đăng nhập) hoặc <c>admin</c> (Super Admin fast login).</param>
 /// <param name="ImpersonatorId">Id Super Admin đang fast login, null khi <paramref name="LoginVia"/> = <c>portal</c>.</param>

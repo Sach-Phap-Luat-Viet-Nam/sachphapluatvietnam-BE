@@ -69,6 +69,11 @@ internal sealed class ChangePasswordRequestValidator : AbstractValidator<ChangeP
     }
 }
 
+internal sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequest>
+{
+    public ResetPasswordRequestValidator() => RuleFor(request => request.NewPassword).ValidPassword();
+}
+
 internal sealed class UpdateProfileRequestValidator : AbstractValidator<UpdateProfileRequest>
 {
     public UpdateProfileRequestValidator()

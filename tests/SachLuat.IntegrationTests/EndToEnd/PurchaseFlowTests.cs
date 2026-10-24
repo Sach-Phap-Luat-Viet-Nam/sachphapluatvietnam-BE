@@ -73,6 +73,58 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         (await admin.PostAsync("/api/v1/admin/users/999999/logout", expected: HttpStatusCode.NotFound))
             .GetProperty("code").GetString().Should().Be("USER_NOT_FOUND");
 
+        // 2d. Super Admin đặt mật khẩu mới: mở khóa tài khoản bị khóa do sai mật khẩu, thu hồi phiên cũ.
+        var forgetfulId = (await admin.PostAsync("/api/v1/admin/users", new
+        {
+            email = "quenmk@e2e.test",
+            fullName = "Nhân viên quên mật khẩu",
+            password = "old-password-123",
+            roles = new[] { "customer_service" },
+        }, HttpStatusCode.Created)).GetProperty("id").GetInt64();
+        using var forgetful = new ApiClient(factory);
+        await forgetful.LoginAsync("quenmk@e2e.test", "old-password-123");
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            await forgetful.PostAsync("/api/v1/auth/login",
+                new { email = "quenmk@e2e.test", password = "sai-mat-khau" },
+                attempt < 5 ? HttpStatusCode.Unauthorized : HttpStatusCode.Locked);
+        }
+
+        (await admin.PutAsync($"/api/v1/admin/users/{forgetfulId}/password", new { newPassword = "ngan" },
+            HttpStatusCode.BadRequest)).GetProperty("code").GetString().Should().Be("VALIDATION_ERROR");
+        await admin.PutAsync($"/api/v1/admin/users/{forgetfulId}/password", new { newPassword = "new-password-123" },
+            HttpStatusCode.NoContent);
+        (await forgetful.PostAsync("/api/v1/auth/refresh", expected: HttpStatusCode.Unauthorized))
+            .GetProperty("code").GetString().Should().Be("INVALID_REFRESH_TOKEN");
+        await forgetful.PostAsync("/api/v1/auth/login",
+            new { email = "quenmk@e2e.test", password = "old-password-123" }, HttpStatusCode.Unauthorized);
+        await forgetful.LoginAsync("quenmk@e2e.test", "new-password-123");
+        (await admin.PutAsync($"/api/v1/admin/users/{adminId}/password", new { newPassword = "new-password-123" },
+            HttpStatusCode.UnprocessableEntity)).GetProperty("code").GetString().Should().Be("CANNOT_MANAGE_USER");
+        (await admin.PutAsync("/api/v1/admin/users/999999/password", new { newPassword = "new-password-123" },
+            HttpStatusCode.NotFound)).GetProperty("code").GetString().Should().Be("USER_NOT_FOUND");
+
+        // 2e. Vô hiệu hóa: thu hồi phiên, chặn đăng nhập (sai mật khẩu vẫn chỉ báo sai) và fast login; kích hoạt lại.
+        (await admin.PostAsync($"/api/v1/admin/users/{forgetfulId}/deactivate"))
+            .GetProperty("isActive").GetBoolean().Should().BeFalse();
+        (await forgetful.PostAsync("/api/v1/auth/refresh", expected: HttpStatusCode.Unauthorized))
+            .GetProperty("code").GetString().Should().Be("INVALID_REFRESH_TOKEN");
+        (await forgetful.PostAsync("/api/v1/auth/login",
+                new { email = "quenmk@e2e.test", password = "new-password-123" }, HttpStatusCode.Forbidden))
+            .GetProperty("code").GetString().Should().Be("ACCOUNT_DISABLED");
+        (await forgetful.PostAsync("/api/v1/auth/login",
+                new { email = "quenmk@e2e.test", password = "sai-mat-khau" }, HttpStatusCode.Unauthorized))
+            .GetProperty("code").GetString().Should().Be("INVALID_CREDENTIALS");
+        (await admin.PostAsync($"/api/v1/admin/users/{forgetfulId}/impersonate", expected: HttpStatusCode.Forbidden))
+            .GetProperty("code").GetString().Should().Be("ACCOUNT_DISABLED");
+        (await admin.PostAsync(
+                $"/api/v1/admin/users/{adminId}/deactivate", expected: HttpStatusCode.UnprocessableEntity))
+            .GetProperty("code").GetString().Should().Be("CANNOT_MANAGE_USER");
+        (await admin.PostAsync($"/api/v1/admin/users/{forgetfulId}/activate"))
+            .GetProperty("isActive").GetBoolean().Should().BeTrue();
+        (await forgetful.LoginAsync("quenmk@e2e.test", "new-password-123"))
+            .GetProperty("user").GetProperty("isActive").GetBoolean().Should().BeTrue();
+
         // 3. Catalog: danh mục, tác giả, văn bản, đầu sách, ấn bản đang bán, SKU.
         var categoryId = (await admin.PostAsync("/api/v1/admin/categories",
             new { name = "Dân sự", slug = "dan-su", sortOrder = 1 }, HttpStatusCode.Created)).GetProperty("id").GetInt64();

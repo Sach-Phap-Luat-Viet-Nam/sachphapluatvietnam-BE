@@ -135,6 +135,7 @@ internal sealed class ProfileService(
             user.Roles,
             user.TwoFactorEnabled,
             user.RequiresTwoFactorSetup,
+            user.IsActive,
             defaultAddress is null ? null : ToResponse(defaultAddress),
             invoiceInfo is null ? null : ToResponse(invoiceInfo));
     }

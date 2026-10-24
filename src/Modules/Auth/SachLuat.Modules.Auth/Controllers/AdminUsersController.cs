@@ -28,6 +28,24 @@ internal sealed class AdminUsersController(UserAdminService userAdminService, IC
     public Task<LogoutUserResponse> Logout(long id, CancellationToken cancellationToken) =>
         userAdminService.LogoutUserAsync(currentUser.RequireUserId(), id, cancellationToken);
 
+    [HttpPut("{id:long}/password")]
+    public async Task<IActionResult> ResetPassword(
+        long id,
+        ResetPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        await userAdminService.ResetPasswordAsync(currentUser.RequireUserId(), id, request, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost("{id:long}/deactivate")]
+    public Task<UserResponse> Deactivate(long id, CancellationToken cancellationToken) =>
+        userAdminService.SetActiveAsync(currentUser.RequireUserId(), id, isActive: false, cancellationToken);
+
+    [HttpPost("{id:long}/activate")]
+    public Task<UserResponse> Activate(long id, CancellationToken cancellationToken) =>
+        userAdminService.SetActiveAsync(currentUser.RequireUserId(), id, isActive: true, cancellationToken);
+
     [HttpPost("{id:long}/impersonate")]
     public Task<AuthResponse> Impersonate(long id) =>
         userAdminService.ImpersonateAsync(currentUser.RequireUserId(), id);

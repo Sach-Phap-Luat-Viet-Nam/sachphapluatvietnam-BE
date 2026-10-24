@@ -12,6 +12,9 @@ internal sealed class AppUser : IdentityUser<long>, IAuditable
     /// <summary>Nghề nghiệp để gợi ý sách (FR-05).</summary>
     public Occupation? Occupation { get; set; }
 
+    /// <summary>false: Super Admin đã vô hiệu hóa, không đăng nhập hay làm mới phiên được nữa.</summary>
+    public bool IsActive { get; set; } = true;
+
     public DateTime CreatedAt { get; private set; }
 
     public DateTime UpdatedAt { get; private set; }

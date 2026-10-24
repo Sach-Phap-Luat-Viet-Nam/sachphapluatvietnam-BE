@@ -65,6 +65,8 @@ internal sealed class AuthService(
         }
 
         await userManager.ResetAccessFailedCountAsync(user);
+        // Kiểm tra sau mật khẩu để người không biết mật khẩu không dò được tài khoản nào bị vô hiệu hóa.
+        EnsureActive(user);
 
         if (user.TwoFactorEnabled)
         {
@@ -84,6 +86,7 @@ internal sealed class AuthService(
 
         await EnsureNotLockedOutAsync(user);
         await VerifyAuthenticatorCodeAsync(user, request.Code);
+        EnsureActive(user);
 
         return await IssueSessionAsync(user, ticket.RememberMe, isMultiFactor: true, cancellationToken);
     }
@@ -109,7 +112,7 @@ internal sealed class AuthService(
         }
 
         var user = await FindUserAsync(stored.UserId);
-        if (!stored.IsActive(now) || user is null || await userManager.IsLockedOutAsync(user))
+        if (!stored.IsActive(now) || user is null || !user.IsActive || await userManager.IsLockedOutAsync(user))
         {
             throw AuthErrors.InvalidRefreshToken();
         }
@@ -214,7 +217,8 @@ internal sealed class AuthService(
             user.Occupation,
             roles,
             user.TwoFactorEnabled,
-            RequiresTwoFactorSetup: isStaff && !user.TwoFactorEnabled);
+            RequiresTwoFactorSetup: isStaff && !user.TwoFactorEnabled,
+            user.IsActive);
     }
 
     internal static void EnsureSucceeded(IdentityResult result)
@@ -265,6 +269,14 @@ internal sealed class AuthService(
         }
 
         await userManager.ResetAccessFailedCountAsync(user);
+    }
+
+    internal static void EnsureActive(AppUser user)
+    {
+        if (!user.IsActive)
+        {
+            throw AuthErrors.AccountDisabled();
+        }
     }
 
     private async Task EnsureNotLockedOutAsync(AppUser user)

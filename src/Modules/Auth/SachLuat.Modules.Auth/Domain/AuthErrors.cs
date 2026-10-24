@@ -16,6 +16,8 @@ internal static class AuthErrors
     public const string RoleInvalidCode = "ROLE_INVALID";
     public const string CannotRemoveOwnAdminCode = "CANNOT_REMOVE_OWN_ADMIN";
     public const string CannotImpersonateCode = "CANNOT_IMPERSONATE";
+    public const string AccountDisabledCode = "ACCOUNT_DISABLED";
+    public const string CannotManageUserCode = "CANNOT_MANAGE_USER";
     public const string IdentityErrorCode = "IDENTITY_ERROR";
     public const string AddressNotFoundCode = "ADDRESS_NOT_FOUND";
     public const string AddressLimitReachedCode = "ADDRESS_LIMIT_REACHED";
@@ -54,6 +56,13 @@ internal static class AuthErrors
 
     public static BusinessException CannotImpersonate() => new(
         CannotImpersonateCode, "Không thể đăng nhập nhanh vào chính mình hoặc tài khoản Super Admin khác");
+
+    public static BusinessException AccountDisabled() => new(
+        AccountDisabledCode, "Tài khoản đã bị vô hiệu hóa, vui lòng liên hệ quản trị viên",
+        StatusCodes.Status403Forbidden);
+
+    public static BusinessException CannotManageUser() => new(
+        CannotManageUserCode, "Không thể đổi mật khẩu hoặc trạng thái của chính mình hay tài khoản Super Admin khác");
 
     public static BusinessException AddressNotFound() =>
         new(AddressNotFoundCode, "Không tìm thấy địa chỉ", StatusCodes.Status404NotFound);
