@@ -70,7 +70,7 @@ Directory.Build.props          # net10.0, Nullable, analyzer cho mọi project
 Directory.Packages.props       # version package tập trung (Central Package Management)
 global.json                    # ghim SDK 10, bật Microsoft.Testing.Platform cho dotnet test
 docker-compose.yml             # PostgreSQL 16 + Redis 7 cho local
-.github/workflows/ci.yml       # CI: format, build, test (kèm PostgreSQL + Redis)
+.github/workflows/ci.yml       # CI: format, build, test (kèm PostgreSQL + Redis), build Docker image
 src/
   SachLuat.Api/                # Host: Program.cs, xử lý lỗi, bảo mật, đăng ký module
   SachLuat.SharedKernel/       # IModule, BusinessException, ErrorCodes, ApiRoutes, Roles/Policies,
@@ -208,6 +208,8 @@ nhập Catalog, phiếu nhập được duyệt, khách đặt hàng, đóng gó
 
 `.github/workflows/ci.yml` chạy trên mỗi push lên `main` và mỗi pull request: restore → kiểm tra format →
 build Release với `-warnaserror` → toàn bộ test, có PostgreSQL 16 và Redis 7 dạng service container.
+Job `docker-build` chạy song song, build image từ `Dockerfile` (không push) để bắt lỗi như quên `COPY` csproj
+của module mới.
 
 ## Đổi mật khẩu PostgreSQL local
 
@@ -220,7 +222,6 @@ build Release với `-warnaserror` → toàn bộ test, có PostgreSQL 16 và Re
 
 ## Hạn chế / việc còn lại
 
-- CI mới kiểm tra, chưa build Docker image (`Dockerfile` ở gốc repo) nên lỗi thiếu `COPY` csproj chỉ lộ ra lúc deploy.
 - Chưa có hàng đợi/worker riêng (Hangfire hoặc tương đương), Meilisearch, module Notification (email/ZNS),
   Promotion, Payment, Shipping, Content, Report.
 - Chưa có nhật ký thao tác hệ thống (FR-98).
