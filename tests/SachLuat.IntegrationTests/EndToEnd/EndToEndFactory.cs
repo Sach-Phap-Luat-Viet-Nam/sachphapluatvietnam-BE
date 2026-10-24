@@ -71,6 +71,8 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
         builder.UseSetting("Cart:KeyPrefix", $"e2e:{Guid.NewGuid():N}:cart:");
         builder.UseSetting("Auth:BootstrapAdmin:Email", AdminEmail);
         builder.UseSetting("Auth:BootstrapAdmin:Password", AdminPassword);
+        // Luôn coi như chưa cấu hình Cloudinary (kể cả khi user-secrets của máy dev có), để test lưu được link ảnh bất kỳ.
+        builder.UseSetting("Cloudinary:ApiSecret", string.Empty);
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Clock);
