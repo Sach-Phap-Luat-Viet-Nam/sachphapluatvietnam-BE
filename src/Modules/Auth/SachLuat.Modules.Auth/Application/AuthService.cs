@@ -65,6 +65,8 @@ internal sealed class AuthService(
         }
 
         await userManager.ResetAccessFailedCountAsync(user);
+        // Kiểm tra sau mật khẩu để người không biết mật khẩu không dò được tài khoản nào bị vô hiệu hóa.
+        EnsureActive(user);
 
         // Kiểm tra sau mật khẩu để không lộ email nào là Super Admin; chưa cấp phiên, cookie hay token 2FA nào.
         if (request.Portal != LoginPortal.Admin && await userManager.IsInRoleAsync(user, Roles.SuperAdmin))
@@ -91,6 +93,7 @@ internal sealed class AuthService(
 
         await EnsureNotLockedOutAsync(user);
         await VerifyAuthenticatorCodeAsync(user, request.Code);
+        EnsureActive(user);
 
         return await IssueSessionAsync(user, ticket.RememberMe, isMultiFactor: true, cancellationToken);
     }
@@ -116,7 +119,7 @@ internal sealed class AuthService(
         }
 
         var user = await FindUserAsync(stored.UserId);
-        if (!stored.IsActive(now) || user is null || await userManager.IsLockedOutAsync(user))
+        if (!stored.IsActive(now) || user is null || !user.IsActive || await userManager.IsLockedOutAsync(user))
         {
             throw AuthErrors.InvalidRefreshToken();
         }
@@ -208,9 +211,12 @@ internal sealed class AuthService(
         return await ToResponseAsync(user);
     }
 
-    internal async Task<UserResponse> ToResponseAsync(AppUser user)
+    internal async Task<UserResponse> ToResponseAsync(AppUser user) =>
+        ToResponse(user, await userManager.GetRolesAsync(user));
+
+    internal static UserResponse ToResponse(AppUser user, IEnumerable<string> userRoles)
     {
-        var roles = (await userManager.GetRolesAsync(user)).Order(StringComparer.Ordinal).ToList();
+        var roles = userRoles.Order(StringComparer.Ordinal).ToList();
         var isStaff = roles.Any(Roles.Staff.Contains);
         return new UserResponse(
             user.Id,
@@ -221,7 +227,8 @@ internal sealed class AuthService(
             user.Occupation,
             roles,
             user.TwoFactorEnabled,
-            RequiresTwoFactorSetup: isStaff && !user.TwoFactorEnabled);
+            RequiresTwoFactorSetup: isStaff && !user.TwoFactorEnabled,
+            user.IsActive);
     }
 
     internal static void EnsureSucceeded(IdentityResult result)
@@ -274,13 +281,16 @@ internal sealed class AuthService(
         await userManager.ResetAccessFailedCountAsync(user);
     }
 
-    private async Task EnsureNotLockedOutAsync(AppUser user)
+    internal static void EnsureActive(AppUser user)
     {
-        if (user.IsDisabled)
+        if (!user.IsActive)
         {
             throw AuthErrors.AccountDisabled();
         }
+    }
 
+    private async Task EnsureNotLockedOutAsync(AppUser user)
+    {
         if (await userManager.IsLockedOutAsync(user))
         {
             throw AuthErrors.AccountLocked();

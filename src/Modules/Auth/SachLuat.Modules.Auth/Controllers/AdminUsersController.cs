@@ -13,32 +13,24 @@ namespace SachLuat.Modules.Auth.Controllers;
 internal sealed class AdminUsersController(UserAdminService userAdminService, ICurrentUser currentUser) : ControllerBase
 {
     [HttpGet]
-    public Task<PagedResponse<AdminUserResponse>> List(
+    public Task<PagedResponse<UserResponse>> List(
         [FromQuery] AdminUsersQuery query,
         CancellationToken cancellationToken) =>
         userAdminService.ListStaffAsync(query, cancellationToken);
 
     [HttpPost]
-    public async Task<ActionResult<AdminUserResponse>> Create(CreateStaffRequest request) =>
+    public async Task<ActionResult<UserResponse>> Create(CreateStaffRequest request) =>
         StatusCode(StatusCodes.Status201Created, await userAdminService.CreateStaffAsync(request));
 
     [HttpPut("{id:long}/roles")]
-    public Task<AdminUserResponse> SetRoles(long id, SetRolesRequest request) =>
+    public Task<UserResponse> SetRoles(long id, SetRolesRequest request) =>
         userAdminService.SetRolesAsync(currentUser.RequireUserId(), id, request);
 
     [HttpPost("{id:long}/logout")]
     public Task<LogoutUserResponse> Logout(long id, CancellationToken cancellationToken) =>
         userAdminService.LogoutUserAsync(currentUser.RequireUserId(), id, cancellationToken);
 
-    [HttpPost("{id:long}/lock")]
-    public Task<AdminUserResponse> Lock(long id, CancellationToken cancellationToken) =>
-        userAdminService.LockAsync(currentUser.RequireUserId(), id, cancellationToken);
-
-    [HttpPost("{id:long}/unlock")]
-    public Task<AdminUserResponse> Unlock(long id) =>
-        userAdminService.UnlockAsync(currentUser.RequireUserId(), id);
-
-    [HttpPost("{id:long}/password/reset")]
+    [HttpPut("{id:long}/password")]
     public async Task<IActionResult> ResetPassword(
         long id,
         ResetPasswordRequest request,
@@ -47,6 +39,14 @@ internal sealed class AdminUsersController(UserAdminService userAdminService, IC
         await userAdminService.ResetPasswordAsync(currentUser.RequireUserId(), id, request, cancellationToken);
         return NoContent();
     }
+
+    [HttpPost("{id:long}/deactivate")]
+    public Task<UserResponse> Deactivate(long id, CancellationToken cancellationToken) =>
+        userAdminService.SetActiveAsync(currentUser.RequireUserId(), id, isActive: false, cancellationToken);
+
+    [HttpPost("{id:long}/activate")]
+    public Task<UserResponse> Activate(long id, CancellationToken cancellationToken) =>
+        userAdminService.SetActiveAsync(currentUser.RequireUserId(), id, isActive: true, cancellationToken);
 
     [HttpPost("{id:long}/impersonate")]
     public Task<AuthResponse> Impersonate(long id) =>

@@ -7,7 +7,6 @@ internal static class AuthErrors
 {
     public const string InvalidCredentialsCode = "INVALID_CREDENTIALS";
     public const string AccountLockedCode = "ACCOUNT_LOCKED";
-    public const string AccountDisabledCode = "ACCOUNT_DISABLED";
     public const string EmailTakenCode = "EMAIL_TAKEN";
     public const string InvalidRefreshTokenCode = "INVALID_REFRESH_TOKEN";
     public const string TwoFactorTokenInvalidCode = "TWO_FACTOR_TOKEN_INVALID";
@@ -17,6 +16,7 @@ internal static class AuthErrors
     public const string RoleInvalidCode = "ROLE_INVALID";
     public const string CannotRemoveOwnAdminCode = "CANNOT_REMOVE_OWN_ADMIN";
     public const string CannotImpersonateCode = "CANNOT_IMPERSONATE";
+    public const string AccountDisabledCode = "ACCOUNT_DISABLED";
     public const string CannotManageUserCode = "CANNOT_MANAGE_USER";
     public const string SuperAdminPortalForbiddenCode = "SUPER_ADMIN_PORTAL_FORBIDDEN";
     public const string IdentityErrorCode = "IDENTITY_ERROR";
@@ -29,9 +29,6 @@ internal static class AuthErrors
     public static BusinessException AccountLocked() => new(
         AccountLockedCode, "Tài khoản tạm khóa do đăng nhập sai nhiều lần, vui lòng thử lại sau 15 phút",
         StatusCodes.Status423Locked);
-
-    public static BusinessException AccountDisabled() => new(
-        AccountDisabledCode, "Tài khoản đã bị khóa, vui lòng liên hệ quản trị viên", StatusCodes.Status403Forbidden);
 
     public static BusinessException EmailTaken() =>
         new(EmailTakenCode, "Email đã được đăng ký", StatusCodes.Status409Conflict);
@@ -61,8 +58,12 @@ internal static class AuthErrors
     public static BusinessException CannotImpersonate() => new(
         CannotImpersonateCode, "Không thể đăng nhập nhanh vào chính mình hoặc tài khoản Super Admin khác");
 
+    public static BusinessException AccountDisabled() => new(
+        AccountDisabledCode, "Tài khoản đã bị vô hiệu hóa, vui lòng liên hệ quản trị viên",
+        StatusCodes.Status403Forbidden);
+
     public static BusinessException CannotManageUser() => new(
-        CannotManageUserCode, "Không thể khóa hay đặt lại mật khẩu cho chính mình hoặc tài khoản Super Admin khác");
+        CannotManageUserCode, "Không thể đổi mật khẩu hoặc trạng thái của chính mình hay tài khoản Super Admin khác");
 
     public static BusinessException SuperAdminPortalForbidden() => new(
         SuperAdminPortalForbiddenCode, "Tài khoản Super Admin chỉ đăng nhập ở trang quản trị",

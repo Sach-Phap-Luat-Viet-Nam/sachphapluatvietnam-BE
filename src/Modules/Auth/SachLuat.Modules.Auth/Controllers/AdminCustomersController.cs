@@ -12,7 +12,7 @@ namespace SachLuat.Modules.Auth.Controllers;
 internal sealed class AdminCustomersController(UserAdminService userAdminService) : ControllerBase
 {
     [HttpGet]
-    public Task<PagedResponse<AdminUserResponse>> List(
+    public Task<PagedResponse<UserResponse>> List(
         [FromQuery] AdminUsersQuery query,
         CancellationToken cancellationToken) =>
         userAdminService.ListCustomersAsync(query, cancellationToken);

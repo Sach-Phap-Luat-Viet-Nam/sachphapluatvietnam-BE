@@ -71,6 +71,11 @@ internal sealed class ChangePasswordRequestValidator : AbstractValidator<ChangeP
     }
 }
 
+internal sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequest>
+{
+    public ResetPasswordRequestValidator() => RuleFor(request => request.NewPassword).ValidPassword();
+}
+
 internal sealed class UpdateProfileRequestValidator : AbstractValidator<UpdateProfileRequest>
 {
     public UpdateProfileRequestValidator()
@@ -123,11 +128,6 @@ internal sealed class SetRolesRequestValidator : AbstractValidator<SetRolesReque
 {
     public SetRolesRequestValidator() =>
         RuleForEach(request => request.Roles).Must(Roles.All.Contains).WithMessage("Vai trò không hợp lệ");
-}
-
-internal sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequest>
-{
-    public ResetPasswordRequestValidator() => RuleFor(request => request.NewPassword).ValidPassword();
 }
 
 internal sealed class AdminUsersQueryValidator : PagedQueryValidator<AdminUsersQuery>

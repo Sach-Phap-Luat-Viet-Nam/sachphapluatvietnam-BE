@@ -50,17 +50,21 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
   - Token mang `amr=mfa` (admin đã qua 2FA) và vai trò của tài khoản đích. Không chặn thao tác nào
     trong phiên vào hộ.
   - Mỗi lần fast login ghi log `Warning` kèm `ActorUserId`, `TargetUserId`.
-- **Quản lý tài khoản (Super Admin)**:
-  - Danh sách nhân viên (`/admin/users`) và khách hàng (`/admin/customers`, user có vai trò `customer`): tìm `q` trong
-    email, họ tên, SĐT (ILIKE, escape `%`/`_`); nhân viên xếp theo id, khách mới đăng ký đứng đầu.
-  - Chi tiết khách: hồ sơ, sổ địa chỉ, thông tin hóa đơn. Id không phải khách hàng → `USER_NOT_FOUND`.
-  - **Khóa** (`/lock`): khóa không thời hạn (`LockoutEnd` = max) và thu hồi mọi phiên. Đăng nhập trả `ACCOUNT_DISABLED`
-    (403), khác `ACCOUNT_LOCKED` (423, tạm khóa 15 phút do sai mật khẩu). **Mở khóa** (`/unlock`) gỡ cả hai loại khóa
-    và đếm lại số lần sai.
-  - **Đặt lại mật khẩu** (`/password/reset`): đặt mật khẩu tạm (cùng quy tắc ≥ 8 ký tự), thu hồi mọi phiên.
-  - Khóa, mở khóa, đặt lại mật khẩu chỉ cho tài khoản **dưới cấp** (cùng quy tắc với fast login), ngược lại
-    `CANNOT_MANAGE_USER` (422). Đăng xuất hộ áp dụng cho mọi tài khoản.
-  - Mỗi thao tác ghi log `Warning` kèm `ActorUserId`, `UserId`.
+- **Danh sách nhân viên và khách hàng** (Super Admin): `/admin/users` (nhân viên) và `/admin/customers` (user có vai trò
+  `customer`) tìm `q` trong email, họ tên, SĐT (ILIKE, escape `%`/`_`); nhân viên xếp theo id, khách mới đăng ký đứng
+  đầu. Chi tiết khách `/admin/customers/{id}`: tài khoản, sổ địa chỉ, thông tin hóa đơn; id không phải khách hàng →
+  `USER_NOT_FOUND`.
+- **Super Admin quản lý tài khoản dưới cấp** (policy `users_admin`; đích không phải chính mình, không có vai trò
+  `super_admin`, ngược lại → `CANNOT_MANAGE_USER` 422):
+  - **Đặt mật khẩu mới** `PUT /admin/users/{id}/password`: dùng khi nhân viên/khách quên mật khẩu. Đổi hash và
+    security stamp trong một lần ghi, mở khóa nếu đang bị khóa do sai mật khẩu (`access_failed_count = 0`,
+    `lockout_end = null`), thu hồi mọi phiên. Không gửi email, admin tự báo mật khẩu cho người dùng.
+  - **Vô hiệu hóa / kích hoạt lại** `POST /admin/users/{id}/deactivate`, `/activate`: cờ `is_active` riêng, khác với
+    khóa 15 phút do sai mật khẩu. Vô hiệu hóa thì thu hồi mọi phiên; sau đó `/auth/login` và `/auth/login/2fa`
+    trả `ACCOUNT_DISABLED` (403), `/auth/refresh` trả `INVALID_REFRESH_TOKEN`, fast login vào tài khoản này trả
+    `ACCOUNT_DISABLED`. Login kiểm tra cờ **sau** mật khẩu: sai mật khẩu vẫn chỉ báo `INVALID_CREDENTIALS`, nên người
+    không biết mật khẩu không dò được tài khoản nào bị vô hiệu hóa.
+  - Ghi log `Warning` kèm `ActorUserId`, `UserId` (không log mật khẩu).
 - **Cờ đường đăng nhập**: mọi access token có claim `login_via`:
   - `portal`: người dùng tự đăng nhập (login, 2FA, register, refresh). Token cũ không có claim này coi là `portal`.
   - `admin`: Super Admin fast login; kèm claim `impersonator_id` = id của admin.
@@ -94,24 +98,22 @@ Tiền tố `/api/v1`.
 | DELETE | `/me/addresses/{id}` | Bearer | → 204 |
 | PUT | `/me/invoice-info` | Bearer | Lưu thông tin hóa đơn (FR-07) `{companyName, taxCode, address, email}` → `InvoiceInfoResponse` |
 | DELETE | `/me/invoice-info` | Bearer | → 204 |
-| GET | `/admin/users` | users_admin | `?q=&page=&limit=` → `PagedResponse<AdminUserResponse>` (nhân viên) |
-| POST | `/admin/users` | users_admin | `{email, fullName, password, roles[]}` → 201 `AdminUserResponse` |
-| PUT | `/admin/users/{id}/roles` | users_admin | `{roles[]}` → `AdminUserResponse` |
-| POST | `/admin/users/{id}/lock` | users_admin | Khóa không thời hạn, thu hồi mọi phiên → `AdminUserResponse` |
-| POST | `/admin/users/{id}/unlock` | users_admin | Mở khóa → `AdminUserResponse` |
-| POST | `/admin/users/{id}/password/reset` | users_admin | `{newPassword}` → 204, thu hồi mọi phiên |
-| GET | `/admin/customers` | users_admin | `?q=&page=&limit=` → `PagedResponse<AdminUserResponse>` (khách hàng) |
+| GET | `/admin/users` | users_admin | `?q=&page=&limit=` → `PagedResponse<UserResponse>` (nhân viên) |
+| POST | `/admin/users` | users_admin | `{email, fullName, password, roles[]}` → 201 `UserResponse` |
+| PUT | `/admin/users/{id}/roles` | users_admin | `{roles[]}` → `UserResponse` |
+| GET | `/admin/customers` | users_admin | `?q=&page=&limit=` → `PagedResponse<UserResponse>` (khách hàng) |
 | GET | `/admin/customers/{id}` | users_admin | → `AdminCustomerResponse` |
 | POST | `/admin/users/{id}/logout` | users_admin | Đăng xuất hộ: thu hồi mọi phiên của user trên mọi thiết bị → `{revokedSessions}` |
+| PUT | `/admin/users/{id}/password` | users_admin | `{newPassword}` (8–128 ký tự) → 204; mở khóa, thu hồi mọi phiên |
+| POST | `/admin/users/{id}/deactivate` | users_admin | Vô hiệu hóa, thu hồi mọi phiên → `UserResponse` (`isActive: false`) |
+| POST | `/admin/users/{id}/activate` | users_admin | Kích hoạt lại → `UserResponse` (`isActive: true`) |
 | POST | `/admin/users/{id}/impersonate` | users_admin | → `AuthResponse` của tài khoản đích (`loginVia: "admin"`), không cookie |
 
 `AuthResponse`: `{accessToken, tokenType: "Bearer", expiresIn, loginVia: "portal" | "admin", impersonatorId?,
-user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, ...}}`.
+user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, isActive, ...}}`.
 
-`AdminUserResponse`: `{id, email, fullName, phoneNumber?, roles[], twoFactorEnabled, requiresTwoFactorSetup, isLocked,
-lockedUntil?, createdAt}`. `isLocked = true` và `lockedUntil = null` là bị Super Admin khóa; có `lockedUntil` là tạm khóa
-do sai mật khẩu. `AdminCustomerResponse`: `{account: AdminUserResponse, birthDate?, occupation?, addresses:
-AddressResponse[], invoiceInfo: InvoiceInfoResponse | null}`.
+`AdminCustomerResponse`: `{account: UserResponse, addresses: AddressResponse[], invoiceInfo: InvoiceInfoResponse |
+null}`.
 
 **Hồ sơ để điền sẵn form đặt hàng** (`MeResponse`): các field của `user` ở trên, thêm `defaultAddress` và
 `invoiceInfo` (`null` khi chưa có):
@@ -168,9 +170,10 @@ Checkbox "Lưu địa chỉ này" trên form đặt hàng: FE tự gọi `POST /
 
 Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (409), `INVALID_REFRESH_TOKEN` (401),
 `TWO_FACTOR_TOKEN_INVALID` (401), `OTP_INVALID` (400), `TWO_FACTOR_ALREADY_ENABLED` (409),
-`CANNOT_REMOVE_OWN_ADMIN` (422), `CANNOT_IMPERSONATE` (422), `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429),
+`CANNOT_REMOVE_OWN_ADMIN` (422), `CANNOT_IMPERSONATE` (422), `CANNOT_MANAGE_USER` (422), `ACCOUNT_DISABLED` (403),
+`USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429),
 `ADDRESS_NOT_FOUND` (404, kể cả địa chỉ của người khác), `ADDRESS_LIMIT_REACHED` (422),
-`ACCOUNT_DISABLED` (403), `CANNOT_MANAGE_USER` (422), `SUPER_ADMIN_PORTAL_FORBIDDEN` (403).
+`SUPER_ADMIN_PORTAL_FORBIDDEN` (403).
 
 ## Cấu hình cần thiết
 
@@ -192,6 +195,8 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 is_default`, index `user_id`) và `user_invoice_infos` (khóa chính `user_id`), cả hai cascade khi xóa user.
 Chỉ thêm bảng, không đổi dữ liệu cũ.
 
+`AddUserIsActive`: cột `users.is_active` (boolean, not null, mặc định `true` cho tài khoản có sẵn).
+
 ## Hạn chế / việc còn lại
 
 - Chưa xác thực email/OTP SMS–Zalo, quên mật khẩu (FR-01, FR-04): chờ module Notification.
@@ -200,12 +205,12 @@ Chỉ thêm bảng, không đổi dữ liệu cũ.
 - Mỗi user chỉ lưu một bộ thông tin hóa đơn.
 - Chưa có mã khôi phục 2FA; mã TOTP vừa dùng chưa bị chặn dùng lại trong cùng 30 giây.
 - Hai tab cùng refresh một lúc có thể bị coi là dùng lại token và bị đăng xuất.
-- Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền, fast login và đăng xuất hộ (hiện chỉ ghi log).
-- Đăng xuất hộ chỉ thu hồi refresh token: access token user đang cầm vẫn dùng được tới khi hết hạn (tối đa 15
-  phút). Muốn chặn ngay thì cần kiểm tra security stamp hoặc danh sách token bị chặn ở mỗi request (chưa làm).
+- Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền, fast login, đăng xuất hộ, đặt mật khẩu mới và vô hiệu hóa
+  tài khoản (hiện chỉ ghi log).
+- Đăng xuất hộ, đặt mật khẩu mới và vô hiệu hóa chỉ thu hồi refresh token: access token user đang cầm vẫn dùng được
+  tới khi hết hạn (tối đa 15 phút). Muốn chặn ngay thì cần kiểm tra security stamp hoặc danh sách token bị chặn ở mỗi request (chưa làm).
 - Fast login không chặn thao tác nào (đổi mật khẩu, bật 2FA... thay người dùng); access token vào hộ không thu hồi
   được trước hạn 15 phút.
-- Khóa tài khoản không chặn ngay access token đang dùng (tối đa 15 phút), giống đăng xuất hộ.
 - Tìm khách bằng ILIKE, chưa tìm không dấu; chưa có index cho email/họ tên/SĐT (đủ dùng khi số khách còn nhỏ).
 - Chi tiết khách chưa có lịch sử đơn hàng (cần API ở module Ordering).
 - `portal` do FE tự khai báo nên chỉ chặn đăng nhập nhầm chỗ, không phải ranh giới bảo mật: gọi thẳng API với

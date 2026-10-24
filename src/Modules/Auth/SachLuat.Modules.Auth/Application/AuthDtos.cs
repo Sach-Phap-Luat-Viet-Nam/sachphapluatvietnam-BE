@@ -76,6 +76,7 @@ internal sealed record MeResponse(
     IReadOnlyList<string> Roles,
     bool TwoFactorEnabled,
     bool RequiresTwoFactorSetup,
+    bool IsActive,
     AddressResponse? DefaultAddress,
     InvoiceInfoResponse? InvoiceInfo);
 
@@ -91,24 +92,9 @@ internal sealed class AdminUsersQuery : PagedQuery
     public string? Q { get; set; }
 }
 
-/// <param name="IsLocked">Đang bị khóa: do Super Admin khóa, hoặc tạm khóa 15 phút vì đăng nhập sai nhiều lần.</param>
-/// <param name="LockedUntil">Hết hạn tạm khóa; null khi không khóa hoặc bị Super Admin khóa (không thời hạn).</param>
-internal sealed record AdminUserResponse(
-    long Id,
-    string Email,
-    string FullName,
-    string? PhoneNumber,
-    IReadOnlyList<string> Roles,
-    bool TwoFactorEnabled,
-    bool RequiresTwoFactorSetup,
-    bool IsLocked,
-    DateTime? LockedUntil,
-    DateTime CreatedAt);
-
+/// <summary>Chi tiết khách hàng cho Super Admin: tài khoản, sổ địa chỉ, thông tin hóa đơn (null khi chưa lưu).</summary>
 internal sealed record AdminCustomerResponse(
-    AdminUserResponse Account,
-    DateOnly? BirthDate,
-    Occupation? Occupation,
+    UserResponse Account,
     IReadOnlyList<AddressResponse> Addresses,
     InvoiceInfoResponse? InvoiceInfo);
 
@@ -124,7 +110,8 @@ internal sealed record UserResponse(
     Occupation? Occupation,
     IReadOnlyList<string> Roles,
     bool TwoFactorEnabled,
-    bool RequiresTwoFactorSetup);
+    bool RequiresTwoFactorSetup,
+    bool IsActive);
 
 /// <param name="LoginVia"><c>portal</c> (tự đăng nhập) hoặc <c>admin</c> (Super Admin fast login).</param>
 /// <param name="ImpersonatorId">Id Super Admin đang fast login, null khi <paramref name="LoginVia"/> = <c>portal</c>.</param>

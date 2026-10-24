@@ -17,20 +17,19 @@ internal sealed class UserAdminService(
     AuthService authService,
     ProfileService profileService,
     TokenService tokenService,
-    TimeProvider timeProvider,
     ILogger<UserAdminService> logger)
 {
-    public Task<PagedResponse<AdminUserResponse>> ListStaffAsync(
+    public Task<PagedResponse<UserResponse>> ListStaffAsync(
         AdminUsersQuery query,
         CancellationToken cancellationToken) =>
         ListAsync(UsersInRoles(Roles.Staff), query, newestFirst: false, cancellationToken);
 
-    public Task<PagedResponse<AdminUserResponse>> ListCustomersAsync(
+    public Task<PagedResponse<UserResponse>> ListCustomersAsync(
         AdminUsersQuery query,
         CancellationToken cancellationToken) =>
         ListAsync(UsersInRoles([Roles.Customer]), query, newestFirst: true, cancellationToken);
 
-    /// <summary>Chi tiết khách hàng: hồ sơ, sổ địa chỉ, thông tin hóa đơn. Không phải khách hàng thì 404.</summary>
+    /// <summary>Chi tiết khách hàng: tài khoản, sổ địa chỉ, thông tin hóa đơn. Không phải khách hàng thì 404.</summary>
     public async Task<AdminCustomerResponse> GetCustomerAsync(long userId, CancellationToken cancellationToken)
     {
         var user = await UsersInRoles([Roles.Customer]).AsNoTracking()
@@ -39,15 +38,13 @@ internal sealed class UserAdminService(
 
         var roles = await RolesByUserAsync([user.Id], cancellationToken);
         return new AdminCustomerResponse(
-            ToAdminResponse(user, roles),
-            user.BirthDate,
-            user.Occupation,
+            AuthService.ToResponse(user, roles[user.Id]),
             await profileService.ListAddressesAsync(user.Id, cancellationToken),
             await profileService.GetInvoiceInfoAsync(user.Id, cancellationToken));
     }
 
     /// <summary>Tạo nhân viên với mật khẩu tạm; nhân viên phải bật 2FA trước khi dùng được API Admin.</summary>
-    public async Task<AdminUserResponse> CreateStaffAsync(CreateStaffRequest request)
+    public async Task<UserResponse> CreateStaffAsync(CreateStaffRequest request)
     {
         if (await userManager.FindByEmailAsync(request.Email) is not null)
         {
@@ -58,12 +55,13 @@ internal sealed class UserAdminService(
         AuthService.EnsureSucceeded(await userManager.CreateAsync(user, request.Password));
         AuthService.EnsureSucceeded(await userManager.AddToRolesAsync(user, request.Roles.Distinct()));
         logger.LogInformation("Created staff user {UserId} with roles {Roles}", user.Id, request.Roles);
-        return await ToAdminResponseAsync(user);
+        return await authService.ToResponseAsync(user);
     }
 
-    public async Task<AdminUserResponse> SetRolesAsync(long actorUserId, long userId, SetRolesRequest request)
+    public async Task<UserResponse> SetRolesAsync(long actorUserId, long userId, SetRolesRequest request)
     {
-        var user = await FindUserAsync(userId);
+        var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
+            ?? throw AuthErrors.UserNotFound();
         var desired = request.Roles.Distinct(StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
         var current = (await userManager.GetRolesAsync(user)).ToHashSet(StringComparer.Ordinal);
 
@@ -76,7 +74,7 @@ internal sealed class UserAdminService(
         AuthService.EnsureSucceeded(await userManager.AddToRolesAsync(user, desired.Except(current)));
         logger.LogInformation(
             "User {ActorUserId} set roles of user {UserId} to {Roles}", actorUserId, userId, desired);
-        return await ToAdminResponseAsync(user);
+        return await authService.ToResponseAsync(user);
     }
 
     /// <summary>
@@ -88,37 +86,18 @@ internal sealed class UserAdminService(
         long userId,
         CancellationToken cancellationToken)
     {
-        var user = await FindUserAsync(userId);
+        var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
+            ?? throw AuthErrors.UserNotFound();
+
         var revoked = await authService.RevokeAllAsync(user.Id, cancellationToken);
         logger.LogWarning(
             "User {ActorUserId} logged out user {UserId} ({RevokedSessions} sessions)", actorUserId, user.Id, revoked);
         return new LogoutUserResponse(revoked);
     }
 
-    /// <summary>Khóa không thời hạn (nhân viên nghỉ việc, tài khoản bị lộ) và thu hồi mọi phiên.</summary>
-    public async Task<AdminUserResponse> LockAsync(long actorUserId, long userId, CancellationToken cancellationToken)
-    {
-        var user = await FindManageableUserAsync(actorUserId, userId);
-        AuthService.EnsureSucceeded(await userManager.SetLockoutEnabledAsync(user, true));
-        AuthService.EnsureSucceeded(await userManager.SetLockoutEndDateAsync(user, AppUser.DisabledLockoutEnd));
-        var revoked = await authService.RevokeAllAsync(user.Id, cancellationToken);
-        logger.LogWarning(
-            "User {ActorUserId} locked user {UserId} ({RevokedSessions} sessions)", actorUserId, user.Id, revoked);
-        return await ToAdminResponseAsync(user);
-    }
-
-    /// <summary>Mở khóa, kể cả tạm khóa 15 phút do đăng nhập sai; đếm lại số lần sai từ 0.</summary>
-    public async Task<AdminUserResponse> UnlockAsync(long actorUserId, long userId)
-    {
-        var user = await FindManageableUserAsync(actorUserId, userId);
-        AuthService.EnsureSucceeded(await userManager.SetLockoutEndDateAsync(user, null));
-        AuthService.EnsureSucceeded(await userManager.ResetAccessFailedCountAsync(user));
-        logger.LogWarning("User {ActorUserId} unlocked user {UserId}", actorUserId, user.Id);
-        return await ToAdminResponseAsync(user);
-    }
-
     /// <summary>
-    /// Đặt mật khẩu tạm cho user quên mật khẩu (chưa có luồng quên mật khẩu qua email), thu hồi mọi phiên.
+    /// Super Admin đặt mật khẩu mới cho tài khoản dưới cấp (quên mật khẩu, bàn giao máy). Mở khóa nếu đang bị khóa do
+    /// sai mật khẩu và thu hồi mọi phiên để mật khẩu cũ không còn giữ được phiên nào.
     /// </summary>
     public async Task ResetPasswordAsync(
         long actorUserId,
@@ -127,25 +106,48 @@ internal sealed class UserAdminService(
         CancellationToken cancellationToken)
     {
         var user = await FindManageableUserAsync(actorUserId, userId);
-        var errors = new List<IdentityError>();
         foreach (var validator in userManager.PasswordValidators)
         {
-            var result = await validator.ValidateAsync(userManager, user, request.NewPassword);
-            errors.AddRange(result.Errors);
+            AuthService.EnsureSucceeded(await validator.ValidateAsync(userManager, user, request.NewPassword));
         }
 
-        if (errors.Count > 0)
-        {
-            AuthService.EnsureSucceeded(IdentityResult.Failed([.. errors]));
-        }
-
-        // Ghi hash mới trong một lần UPDATE: Remove + AddPassword có thể để user mất mật khẩu nếu lỗi giữa chừng.
+        // Không dùng RemovePasswordAsync + AddPasswordAsync: hai lần ghi riêng, lỗi ở giữa thì tài khoản mất mật khẩu.
         user.PasswordHash = userManager.PasswordHasher.HashPassword(user, request.NewPassword);
+        user.AccessFailedCount = 0;
+        user.LockoutEnd = null;
         AuthService.EnsureSucceeded(await userManager.UpdateSecurityStampAsync(user));
+
         var revoked = await authService.RevokeAllAsync(user.Id, cancellationToken);
         logger.LogWarning(
-            "User {ActorUserId} reset password of user {UserId} ({RevokedSessions} sessions)",
+            "User {ActorUserId} reset the password of user {UserId} ({RevokedSessions} sessions revoked)",
             actorUserId, user.Id, revoked);
+    }
+
+    /// <summary>
+    /// Vô hiệu hóa (<paramref name="isActive"/> = false) hoặc kích hoạt lại tài khoản dưới cấp. Vô hiệu hóa thì thu hồi
+    /// mọi phiên; access token đã cấp vẫn dùng được tới khi hết hạn như <see cref="LogoutUserAsync"/>.
+    /// </summary>
+    public async Task<UserResponse> SetActiveAsync(
+        long actorUserId,
+        long userId,
+        bool isActive,
+        CancellationToken cancellationToken)
+    {
+        var user = await FindManageableUserAsync(actorUserId, userId);
+        if (user.IsActive != isActive)
+        {
+            user.IsActive = isActive;
+            AuthService.EnsureSucceeded(await userManager.UpdateAsync(user));
+            logger.LogWarning(
+                "User {ActorUserId} set user {UserId} active = {IsActive}", actorUserId, user.Id, isActive);
+        }
+
+        if (!isActive)
+        {
+            await authService.RevokeAllAsync(user.Id, cancellationToken);
+        }
+
+        return await authService.ToResponseAsync(user);
     }
 
     /// <summary>
@@ -154,12 +156,15 @@ internal sealed class UserAdminService(
     /// </summary>
     public async Task<AuthResponse> ImpersonateAsync(long actorUserId, long userId)
     {
-        var user = await FindUserAsync(userId);
+        var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
+            ?? throw AuthErrors.UserNotFound();
         var roles = await userManager.GetRolesAsync(user);
         if (user.Id == actorUserId || roles.Contains(Roles.SuperAdmin))
         {
             throw AuthErrors.CannotImpersonate();
         }
+
+        AuthService.EnsureActive(user);
 
         // Policy users_admin đã bắt admin qua 2FA nên phiên vào hộ cũng mang amr=mfa.
         var accessToken = tokenService.CreateAccessToken(user, roles, isMultiFactor: true, impersonatorId: actorUserId);
@@ -183,7 +188,7 @@ internal sealed class UserAdminService(
             .Any(userRole => userRole.UserId == user.Id && roleIds.Contains(userRole.RoleId)));
     }
 
-    private async Task<PagedResponse<AdminUserResponse>> ListAsync(
+    private async Task<PagedResponse<UserResponse>> ListAsync(
         IQueryable<AppUser> users,
         AdminUsersQuery query,
         bool newestFirst,
@@ -205,8 +210,8 @@ internal sealed class UserAdminService(
         var page = await ordered.AsNoTracking().Skip(query.Skip).Take(query.Limit).ToListAsync(cancellationToken);
 
         var roles = await RolesByUserAsync([.. page.Select(user => user.Id)], cancellationToken);
-        return PagedResponse<AdminUserResponse>.Create(
-            [.. page.Select(user => ToAdminResponse(user, roles))], query, total);
+        return PagedResponse<UserResponse>.Create(
+            [.. page.Select(user => AuthService.ToResponse(user, roles[user.Id]))], query, total);
     }
 
     /// <summary>Vai trò của nhiều user trong một truy vấn (tránh N+1 khi liệt kê).</summary>
@@ -222,35 +227,11 @@ internal sealed class UserAdminService(
         return pairs.ToLookup(pair => pair.UserId, pair => pair.Name ?? string.Empty);
     }
 
-    private async Task<AdminUserResponse> ToAdminResponseAsync(AppUser user) =>
-        ToAdminResponse(user, (await userManager.GetRolesAsync(user)).ToLookup(_ => user.Id));
-
-    private AdminUserResponse ToAdminResponse(AppUser user, ILookup<long, string> rolesByUser)
-    {
-        var roles = rolesByUser[user.Id].Order(StringComparer.Ordinal).ToList();
-        var now = timeProvider.GetUtcNow();
-        var isLocked = user.LockoutEnd is { } lockoutEnd && lockoutEnd > now;
-        return new AdminUserResponse(
-            user.Id,
-            user.Email ?? string.Empty,
-            user.FullName,
-            user.PhoneNumber,
-            roles,
-            user.TwoFactorEnabled,
-            RequiresTwoFactorSetup: roles.Any(Roles.Staff.Contains) && !user.TwoFactorEnabled,
-            isLocked,
-            isLocked && !user.IsDisabled ? user.LockoutEnd?.UtcDateTime : null,
-            user.CreatedAt);
-    }
-
-    private async Task<AppUser> FindUserAsync(long userId) =>
-        await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
-        ?? throw AuthErrors.UserNotFound();
-
-    /// <summary>Khóa/đặt lại mật khẩu chỉ cho tài khoản dưới cấp, cùng quy tắc với fast login.</summary>
+    /// <summary>Chỉ quản lý được tài khoản dưới cấp: không phải chính mình, không có vai trò Super Admin.</summary>
     private async Task<AppUser> FindManageableUserAsync(long actorUserId, long userId)
     {
-        var user = await FindUserAsync(userId);
+        var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
+            ?? throw AuthErrors.UserNotFound();
         if (user.Id == actorUserId || await userManager.IsInRoleAsync(user, Roles.SuperAdmin))
         {
             throw AuthErrors.CannotManageUser();
