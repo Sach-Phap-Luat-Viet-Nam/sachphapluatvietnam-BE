@@ -3,37 +3,44 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SachLuat.Modules.Auth.Domain;
+using SachLuat.Modules.Auth.Infrastructure.Persistence;
 using SachLuat.SharedKernel.Api;
+using SachLuat.SharedKernel.Persistence;
 using SachLuat.SharedKernel.Security;
 
 namespace SachLuat.Modules.Auth.Application;
 
-/// <summary>Quản lý tài khoản nhân viên và vai trò (FR-97), chỉ Super Admin.</summary>
+/// <summary>Quản lý tài khoản nhân viên, khách hàng và vai trò (FR-97), chỉ Super Admin.</summary>
 internal sealed class UserAdminService(
     UserManager<AppUser> userManager,
+    AuthDbContext dbContext,
     AuthService authService,
+    ProfileService profileService,
     TokenService tokenService,
     ILogger<UserAdminService> logger)
 {
-    public async Task<PagedResponse<UserResponse>> ListStaffAsync(PagedQuery query, CancellationToken cancellationToken)
+    public Task<PagedResponse<UserResponse>> ListStaffAsync(
+        AdminUsersQuery query,
+        CancellationToken cancellationToken) =>
+        ListAsync(UsersInRoles(Roles.Staff), query, newestFirst: false, cancellationToken);
+
+    public Task<PagedResponse<UserResponse>> ListCustomersAsync(
+        AdminUsersQuery query,
+        CancellationToken cancellationToken) =>
+        ListAsync(UsersInRoles([Roles.Customer]), query, newestFirst: true, cancellationToken);
+
+    /// <summary>Chi tiết khách hàng: tài khoản, sổ địa chỉ, thông tin hóa đơn. Không phải khách hàng thì 404.</summary>
+    public async Task<AdminCustomerResponse> GetCustomerAsync(long userId, CancellationToken cancellationToken)
     {
-        var staffUserIds = new HashSet<long>();
-        foreach (var role in Roles.Staff)
-        {
-            staffUserIds.UnionWith((await userManager.GetUsersInRoleAsync(role)).Select(user => user.Id));
-        }
+        var user = await UsersInRoles([Roles.Customer]).AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.Id == userId, cancellationToken)
+            ?? throw AuthErrors.UserNotFound();
 
-        var users = userManager.Users.Where(user => staffUserIds.Contains(user.Id));
-        var total = await users.CountAsync(cancellationToken);
-        var page = await users.OrderBy(user => user.Id).Skip(query.Skip).Take(query.Limit).ToListAsync(cancellationToken);
-
-        var items = new List<UserResponse>(page.Count);
-        foreach (var user in page)
-        {
-            items.Add(await authService.ToResponseAsync(user));
-        }
-
-        return PagedResponse<UserResponse>.Create(items, query, total);
+        var roles = await RolesByUserAsync([user.Id], cancellationToken);
+        return new AdminCustomerResponse(
+            AuthService.ToResponse(user, roles[user.Id]),
+            await profileService.ListAddressesAsync(user.Id, cancellationToken),
+            await profileService.GetInvoiceInfoAsync(user.Id, cancellationToken));
     }
 
     /// <summary>Tạo nhân viên với mật khẩu tạm; nhân viên phải bật 2FA trước khi dùng được API Admin.</summary>
@@ -51,17 +58,15 @@ internal sealed class UserAdminService(
         return await authService.ToResponseAsync(user);
     }
 
+    /// <summary>
+    /// Đổi vai trò tài khoản dưới cấp. Không đổi vai trò của chính mình hay Super Admin khác (chỉ có 1–2 tài khoản,
+    /// quản lý ngoài giao diện), tránh tự gỡ quyền hoặc tự cấp thêm quyền.
+    /// </summary>
     public async Task<UserResponse> SetRolesAsync(long actorUserId, long userId, SetRolesRequest request)
     {
-        var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
-            ?? throw AuthErrors.UserNotFound();
+        var user = await FindManageableUserAsync(actorUserId, userId);
         var desired = request.Roles.Distinct(StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
         var current = (await userManager.GetRolesAsync(user)).ToHashSet(StringComparer.Ordinal);
-
-        if (actorUserId == userId && current.Contains(Roles.SuperAdmin) && !desired.Contains(Roles.SuperAdmin))
-        {
-            throw AuthErrors.CannotRemoveOwnAdmin();
-        }
 
         AuthService.EnsureSucceeded(await userManager.RemoveFromRolesAsync(user, current.Except(desired)));
         AuthService.EnsureSucceeded(await userManager.AddToRolesAsync(user, desired.Except(current)));
@@ -170,6 +175,54 @@ internal sealed class UserAdminService(
             await authService.ToResponseAsync(user),
             AuthClaimTypes.LoginViaAdmin,
             actorUserId);
+    }
+
+    private IQueryable<AppUser> UsersInRoles(IReadOnlyCollection<string> roleNames)
+    {
+        var roleIds = dbContext.Roles
+            .Where(role => roleNames.Contains(role.Name ?? string.Empty))
+            .Select(role => role.Id);
+        return dbContext.Users.Where(user => dbContext.UserRoles
+            .Any(userRole => userRole.UserId == user.Id && roleIds.Contains(userRole.RoleId)));
+    }
+
+    private async Task<PagedResponse<UserResponse>> ListAsync(
+        IQueryable<AppUser> users,
+        AdminUsersQuery query,
+        bool newestFirst,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(query.Q))
+        {
+            var pattern = LikePatterns.Contains(query.Q.Trim());
+            const string Escape = LikePatterns.EscapeCharacter;
+            users = users.Where(user => EF.Functions.ILike(user.Email ?? string.Empty, pattern, Escape)
+                || EF.Functions.ILike(user.FullName, pattern, Escape)
+                || EF.Functions.ILike(user.PhoneNumber ?? string.Empty, pattern, Escape));
+        }
+
+        var total = await users.CountAsync(cancellationToken);
+        var ordered = newestFirst
+            ? users.OrderByDescending(user => user.CreatedAt).ThenByDescending(user => user.Id)
+            : users.OrderBy(user => user.Id);
+        var page = await ordered.AsNoTracking().Skip(query.Skip).Take(query.Limit).ToListAsync(cancellationToken);
+
+        var roles = await RolesByUserAsync([.. page.Select(user => user.Id)], cancellationToken);
+        return PagedResponse<UserResponse>.Create(
+            [.. page.Select(user => AuthService.ToResponse(user, roles[user.Id]))], query, total);
+    }
+
+    /// <summary>Vai trò của nhiều user trong một truy vấn (tránh N+1 khi liệt kê).</summary>
+    private async Task<ILookup<long, string>> RolesByUserAsync(
+        IReadOnlyCollection<long> userIds,
+        CancellationToken cancellationToken)
+    {
+        var pairs = await dbContext.UserRoles
+            .Where(userRole => userIds.Contains(userRole.UserId))
+            .Join(dbContext.Roles, userRole => userRole.RoleId, role => role.Id,
+                (userRole, role) => new { userRole.UserId, role.Name })
+            .ToListAsync(cancellationToken);
+        return pairs.ToLookup(pair => pair.UserId, pair => pair.Name ?? string.Empty);
     }
 
     /// <summary>Chỉ quản lý được tài khoản dưới cấp: không phải chính mình, không có vai trò Super Admin.</summary>

@@ -14,10 +14,10 @@ internal static class AuthErrors
     public const string TwoFactorAlreadyEnabledCode = "TWO_FACTOR_ALREADY_ENABLED";
     public const string UserNotFoundCode = "USER_NOT_FOUND";
     public const string RoleInvalidCode = "ROLE_INVALID";
-    public const string CannotRemoveOwnAdminCode = "CANNOT_REMOVE_OWN_ADMIN";
     public const string CannotImpersonateCode = "CANNOT_IMPERSONATE";
     public const string AccountDisabledCode = "ACCOUNT_DISABLED";
     public const string CannotManageUserCode = "CANNOT_MANAGE_USER";
+    public const string SuperAdminPortalForbiddenCode = "SUPER_ADMIN_PORTAL_FORBIDDEN";
     public const string IdentityErrorCode = "IDENTITY_ERROR";
     public const string AddressNotFoundCode = "ADDRESS_NOT_FOUND";
     public const string AddressLimitReachedCode = "ADDRESS_LIMIT_REACHED";
@@ -51,9 +51,6 @@ internal static class AuthErrors
 
     public static BusinessException RoleInvalid(string role) => new(RoleInvalidCode, $"Vai trò không hợp lệ: {role}");
 
-    public static BusinessException CannotRemoveOwnAdmin() => new(
-        CannotRemoveOwnAdminCode, "Không thể tự gỡ quyền Super Admin của chính mình");
-
     public static BusinessException CannotImpersonate() => new(
         CannotImpersonateCode, "Không thể đăng nhập nhanh vào chính mình hoặc tài khoản Super Admin khác");
 
@@ -62,7 +59,11 @@ internal static class AuthErrors
         StatusCodes.Status403Forbidden);
 
     public static BusinessException CannotManageUser() => new(
-        CannotManageUserCode, "Không thể đổi mật khẩu hoặc trạng thái của chính mình hay tài khoản Super Admin khác");
+        CannotManageUserCode, "Không thể đổi vai trò, mật khẩu hoặc trạng thái của chính mình hay tài khoản Super Admin khác");
+
+    public static BusinessException SuperAdminPortalForbidden() => new(
+        SuperAdminPortalForbiddenCode, "Tài khoản Super Admin chỉ đăng nhập ở trang quản trị",
+        StatusCodes.Status403Forbidden);
 
     public static BusinessException AddressNotFound() =>
         new(AddressNotFoundCode, "Không tìm thấy địa chỉ", StatusCodes.Status404NotFound);

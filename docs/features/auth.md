@@ -8,6 +8,10 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
 ## Luồng xử lý
 
 - **Mật khẩu**: ASP.NET Core Identity, băm bằng **bcrypt** work factor 12 (NFR-11), tối thiểu 8 ký tự.
+- **Đăng nhập theo app**: `POST /auth/login` nhận `portal` = `storefront` (mặc định) hoặc `admin`. Tài khoản có vai
+  trò `super_admin` chỉ đăng nhập được với `portal = admin` (app Admin); ở Storefront trả `SUPER_ADMIN_PORTAL_FORBIDDEN`
+  (403) sau khi kiểm tra đúng mật khẩu (không lộ email nào là Super Admin), không cấp cookie hay token 2FA. Các vai trò
+  khác đăng nhập được ở cả hai app (Admin app tự từ chối tài khoản chỉ có `customer`).
 - **Khóa tài khoản** (FR-03): sai mật khẩu hoặc mã 2FA 5 lần liên tiếp → khóa 15 phút (`ACCOUNT_LOCKED`, 423).
 - **Phiên đăng nhập** (mục 11):
   - Access token JWT 15 phút, gửi trong header `Authorization: Bearer ...`.
@@ -32,7 +36,7 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
 | `inventory_approve` | super_admin | Duyệt/từ chối phiếu nhập |
 | `orders_read` | super_admin, order_manager, customer_service, accountant | Xem đơn Admin |
 | `orders_manage` | super_admin, order_manager | Đổi trạng thái đơn |
-| `users_admin` | super_admin | `/admin/users` |
+| `users_admin` | super_admin | `/admin/users`, `/admin/customers` |
 | `content_admin` | super_admin, marketing | `/admin/popups`, `/admin/uploads/popup-signature` |
 
 - **Super Admin đầu tiên**: tạo lúc khởi động từ cấu hình `Auth:BootstrapAdmin` nếu email chưa tồn tại.
@@ -46,8 +50,14 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
   - Token mang `amr=mfa` (admin đã qua 2FA) và vai trò của tài khoản đích. Không chặn thao tác nào
     trong phiên vào hộ.
   - Mỗi lần fast login ghi log `Warning` kèm `ActorUserId`, `TargetUserId`.
+- **Danh sách nhân viên và khách hàng** (Super Admin): `/admin/users` (nhân viên) và `/admin/customers` (user có vai trò
+  `customer`) tìm `q` trong email, họ tên, SĐT (ILIKE, escape `%`/`_`); nhân viên xếp theo id, khách mới đăng ký đứng
+  đầu. Chi tiết khách `/admin/customers/{id}`: tài khoản, sổ địa chỉ, thông tin hóa đơn; id không phải khách hàng →
+  `USER_NOT_FOUND`.
 - **Super Admin quản lý tài khoản dưới cấp** (policy `users_admin`; đích không phải chính mình, không có vai trò
   `super_admin`, ngược lại → `CANNOT_MANAGE_USER` 422):
+  - **Đổi vai trò** `PUT /admin/users/{id}/roles`: không đổi được vai trò của chính mình hay Super Admin khác (chỉ có
+    1–2 tài khoản Super Admin), tránh tự gỡ hoặc tự cấp quyền.
   - **Đặt mật khẩu mới** `PUT /admin/users/{id}/password`: dùng khi nhân viên/khách quên mật khẩu. Đổi hash và
     security stamp trong một lần ghi, mở khóa nếu đang bị khóa do sai mật khẩu (`access_failed_count = 0`,
     `lockout_end = null`), thu hồi mọi phiên. Không gửi email, admin tự báo mật khẩu cho người dùng.
@@ -75,7 +85,7 @@ Tiền tố `/api/v1`.
 | Method | Route | Xác thực | Request → Response |
 | --- | --- | --- | --- |
 | POST | `/auth/register` | Không | `{email, password, fullName, phoneNumber?}` → 201 `AuthResponse` + cookie |
-| POST | `/auth/login` | Không | `{email, password, rememberMe}` → `{requiresTwoFactor, twoFactorToken?, session?}` |
+| POST | `/auth/login` | Không | `{email, password, rememberMe, portal?}` → `{requiresTwoFactor, twoFactorToken?, session?}` |
 | POST | `/auth/login/2fa` | Không | `{twoFactorToken, code}` → `AuthResponse` + cookie |
 | POST | `/auth/refresh` | Cookie | → `AuthResponse` + cookie mới |
 | POST | `/auth/logout` | Cookie | → 204, xóa cookie |
@@ -90,9 +100,11 @@ Tiền tố `/api/v1`.
 | DELETE | `/me/addresses/{id}` | Bearer | → 204 |
 | PUT | `/me/invoice-info` | Bearer | Lưu thông tin hóa đơn (FR-07) `{companyName, taxCode, address, email}` → `InvoiceInfoResponse` |
 | DELETE | `/me/invoice-info` | Bearer | → 204 |
-| GET | `/admin/users` | users_admin | Danh sách nhân viên (phân trang) |
-| POST | `/admin/users` | users_admin | `{email, fullName, password, roles[]}` → 201 |
-| PUT | `/admin/users/{id}/roles` | users_admin | `{roles[]}` |
+| GET | `/admin/users` | users_admin | `?q=&page=&limit=` → `PagedResponse<UserResponse>` (nhân viên) |
+| POST | `/admin/users` | users_admin | `{email, fullName, password, roles[]}` → 201 `UserResponse` |
+| PUT | `/admin/users/{id}/roles` | users_admin | `{roles[]}` → `UserResponse` |
+| GET | `/admin/customers` | users_admin | `?q=&page=&limit=` → `PagedResponse<UserResponse>` (khách hàng) |
+| GET | `/admin/customers/{id}` | users_admin | → `AdminCustomerResponse` |
 | POST | `/admin/users/{id}/logout` | users_admin | Đăng xuất hộ: thu hồi mọi phiên của user trên mọi thiết bị → `{revokedSessions}` |
 | PUT | `/admin/users/{id}/password` | users_admin | `{newPassword}` (8–128 ký tự) → 204; mở khóa, thu hồi mọi phiên |
 | POST | `/admin/users/{id}/deactivate` | users_admin | Vô hiệu hóa, thu hồi mọi phiên → `UserResponse` (`isActive: false`) |
@@ -101,6 +113,9 @@ Tiền tố `/api/v1`.
 
 `AuthResponse`: `{accessToken, tokenType: "Bearer", expiresIn, loginVia: "portal" | "admin", impersonatorId?,
 user: {id, email, fullName, roles[], twoFactorEnabled, requiresTwoFactorSetup, isActive, ...}}`.
+
+`AdminCustomerResponse`: `{account: UserResponse, addresses: AddressResponse[], invoiceInfo: InvoiceInfoResponse |
+null}`.
 
 **Hồ sơ để điền sẵn form đặt hàng** (`MeResponse`): các field của `user` ở trên, thêm `defaultAddress` và
 `invoiceInfo` (`null` khi chưa có):
@@ -157,9 +172,10 @@ Checkbox "Lưu địa chỉ này" trên form đặt hàng: FE tự gọi `POST /
 
 Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (409), `INVALID_REFRESH_TOKEN` (401),
 `TWO_FACTOR_TOKEN_INVALID` (401), `OTP_INVALID` (400), `TWO_FACTOR_ALREADY_ENABLED` (409),
-`CANNOT_REMOVE_OWN_ADMIN` (422), `CANNOT_IMPERSONATE` (422), `CANNOT_MANAGE_USER` (422), `ACCOUNT_DISABLED` (403),
+`CANNOT_IMPERSONATE` (422), `CANNOT_MANAGE_USER` (422), `ACCOUNT_DISABLED` (403),
 `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429),
-`ADDRESS_NOT_FOUND` (404, kể cả địa chỉ của người khác), `ADDRESS_LIMIT_REACHED` (422).
+`ADDRESS_NOT_FOUND` (404, kể cả địa chỉ của người khác), `ADDRESS_LIMIT_REACHED` (422),
+`SUPER_ADMIN_PORTAL_FORBIDDEN` (403).
 
 ## Cấu hình cần thiết
 
@@ -197,5 +213,8 @@ Chỉ thêm bảng, không đổi dữ liệu cũ.
   tới khi hết hạn (tối đa 15 phút). Muốn chặn ngay thì cần kiểm tra security stamp hoặc danh sách token bị chặn ở mỗi request (chưa làm).
 - Fast login không chặn thao tác nào (đổi mật khẩu, bật 2FA... thay người dùng); access token vào hộ không thu hồi
   được trước hạn 15 phút.
-- `GET /admin/users` mới chỉ liệt kê nhân viên; muốn fast login khách hàng thì Admin cần biết id khách.
+- Tìm khách bằng ILIKE, chưa tìm không dấu; chưa có index cho email/họ tên/SĐT (đủ dùng khi số khách còn nhỏ).
+- Chi tiết khách chưa có lịch sử đơn hàng (cần API ở module Ordering).
+- `portal` do FE tự khai báo nên chỉ chặn đăng nhập nhầm chỗ, không phải ranh giới bảo mật: gọi thẳng API với
+  `portal = admin` vẫn được (Super Admin vẫn phải qua 2FA). Chỉ kiểm tra ở `/auth/login`, không ở `/auth/refresh`.
 - Request gọi thẳng vào Render (không qua FE) bị tính theo IP proxy của Render, dùng chung một quota.

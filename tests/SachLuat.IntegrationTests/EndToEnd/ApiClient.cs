@@ -68,10 +68,17 @@ internal sealed class ApiClient : IDisposable
         return string.IsNullOrEmpty(text) ? default : JsonDocument.Parse(text).RootElement.Clone();
     }
 
-    /// <summary>Đăng nhập; nếu tài khoản đã bật 2FA thì nhập mã TOTP từ <paramref name="totpKey"/>.</summary>
-    public async Task<JsonElement> LoginAsync(string email, string password, string? totpKey = null)
+    /// <summary>
+    /// Đăng nhập ở <paramref name="portal"/> (<c>storefront</c>/<c>admin</c>); nếu tài khoản đã bật 2FA thì nhập mã
+    /// TOTP từ <paramref name="totpKey"/>.
+    /// </summary>
+    public async Task<JsonElement> LoginAsync(
+        string email,
+        string password,
+        string? totpKey = null,
+        string portal = "storefront")
     {
-        var login = await PostAsync("/api/v1/auth/login", new { email, password });
+        var login = await PostAsync("/api/v1/auth/login", new { email, password, portal });
         var session = login.GetProperty("requiresTwoFactor").GetBoolean()
             ? await PostAsync("/api/v1/auth/login/2fa", new
             {

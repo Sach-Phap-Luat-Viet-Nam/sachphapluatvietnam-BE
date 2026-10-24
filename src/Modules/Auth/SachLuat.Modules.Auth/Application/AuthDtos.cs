@@ -1,10 +1,23 @@
 using SachLuat.Modules.Auth.Domain;
+using SachLuat.SharedKernel.Api;
 
 namespace SachLuat.Modules.Auth.Application;
 
 internal sealed record RegisterRequest(string Email, string Password, string FullName, string? PhoneNumber);
 
-internal sealed record LoginRequest(string Email, string Password, bool RememberMe = false);
+/// <param name="Portal">App gọi đăng nhập; Super Admin chỉ đăng nhập được ở <see cref="LoginPortal.Admin"/>.</param>
+internal sealed record LoginRequest(
+    string Email,
+    string Password,
+    bool RememberMe = false,
+    LoginPortal Portal = LoginPortal.Storefront);
+
+/// <summary>App phía FE gửi request đăng nhập (JSON: <c>storefront</c>, <c>admin</c>).</summary>
+internal enum LoginPortal
+{
+    Storefront,
+    Admin,
+}
 
 internal sealed record TwoFactorLoginRequest(string TwoFactorToken, string Code);
 
@@ -72,6 +85,18 @@ internal sealed record CreateStaffRequest(string Email, string FullName, string 
 internal sealed record SetRolesRequest(IReadOnlyList<string> Roles);
 
 internal sealed record ResetPasswordRequest(string NewPassword);
+
+/// <summary>Lọc danh sách nhân viên/khách hàng: <see cref="Q"/> tìm trong email, họ tên, số điện thoại.</summary>
+internal sealed class AdminUsersQuery : PagedQuery
+{
+    public string? Q { get; set; }
+}
+
+/// <summary>Chi tiết khách hàng cho Super Admin: tài khoản, sổ địa chỉ, thông tin hóa đơn (null khi chưa lưu).</summary>
+internal sealed record AdminCustomerResponse(
+    UserResponse Account,
+    IReadOnlyList<AddressResponse> Addresses,
+    InvoiceInfoResponse? InvoiceInfo);
 
 /// <param name="RevokedSessions">Số phiên (refresh token còn hiệu lực) vừa bị thu hồi; 0 khi user không đăng nhập.</param>
 internal sealed record LogoutUserResponse(int RevokedSessions);

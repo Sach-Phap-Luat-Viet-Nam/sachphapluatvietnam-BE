@@ -6,6 +6,7 @@ using SachLuat.Modules.Catalog.Domain.Categories;
 using SachLuat.Modules.Catalog.Domain.LegalDocuments;
 using SachLuat.Modules.Catalog.Infrastructure.Persistence;
 using SachLuat.SharedKernel.Api;
+using SachLuat.SharedKernel.Persistence;
 
 namespace SachLuat.Modules.Catalog.Application.Admin;
 

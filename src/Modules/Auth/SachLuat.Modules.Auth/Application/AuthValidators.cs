@@ -1,5 +1,6 @@
 using FluentValidation;
 using SachLuat.Modules.Auth.Domain;
+using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.Security;
 
 namespace SachLuat.Modules.Auth.Application;
@@ -43,6 +44,7 @@ internal sealed class LoginRequestValidator : AbstractValidator<LoginRequest>
     {
         RuleFor(request => request.Email).NotEmpty().MaximumLength(256);
         RuleFor(request => request.Password).NotEmpty().MaximumLength(AuthRules.PasswordMaxLength);
+        RuleFor(request => request.Portal).IsInEnum();
     }
 }
 
@@ -126,4 +128,9 @@ internal sealed class SetRolesRequestValidator : AbstractValidator<SetRolesReque
 {
     public SetRolesRequestValidator() =>
         RuleForEach(request => request.Roles).Must(Roles.All.Contains).WithMessage("Vai trò không hợp lệ");
+}
+
+internal sealed class AdminUsersQueryValidator : PagedQueryValidator<AdminUsersQuery>
+{
+    public AdminUsersQueryValidator() => RuleFor(query => query.Q).MaximumLength(200);
 }

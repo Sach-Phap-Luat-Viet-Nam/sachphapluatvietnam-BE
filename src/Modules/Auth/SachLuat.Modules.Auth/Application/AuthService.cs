@@ -68,6 +68,13 @@ internal sealed class AuthService(
         // Kiểm tra sau mật khẩu để người không biết mật khẩu không dò được tài khoản nào bị vô hiệu hóa.
         EnsureActive(user);
 
+        // Kiểm tra sau mật khẩu để không lộ email nào là Super Admin; chưa cấp phiên, cookie hay token 2FA nào.
+        if (request.Portal != LoginPortal.Admin && await userManager.IsInRoleAsync(user, Roles.SuperAdmin))
+        {
+            logger.LogWarning("Super admin {UserId} attempted to log in via {Portal}", user.Id, request.Portal);
+            throw AuthErrors.SuperAdminPortalForbidden();
+        }
+
         if (user.TwoFactorEnabled)
         {
             var ticket = tokenService.CreateTwoFactorTicket(user.Id, request.RememberMe);
@@ -204,9 +211,12 @@ internal sealed class AuthService(
         return await ToResponseAsync(user);
     }
 
-    internal async Task<UserResponse> ToResponseAsync(AppUser user)
+    internal async Task<UserResponse> ToResponseAsync(AppUser user) =>
+        ToResponse(user, await userManager.GetRolesAsync(user));
+
+    internal static UserResponse ToResponse(AppUser user, IEnumerable<string> userRoles)
     {
-        var roles = (await userManager.GetRolesAsync(user)).Order(StringComparer.Ordinal).ToList();
+        var roles = userRoles.Order(StringComparer.Ordinal).ToList();
         var isStaff = roles.Any(Roles.Staff.Contains);
         return new UserResponse(
             user.Id,
