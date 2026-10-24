@@ -5,7 +5,19 @@ namespace SachLuat.Modules.Auth.Application;
 
 internal sealed record RegisterRequest(string Email, string Password, string FullName, string? PhoneNumber);
 
-internal sealed record LoginRequest(string Email, string Password, bool RememberMe = false);
+/// <param name="Portal">App gọi đăng nhập; Super Admin chỉ đăng nhập được ở <see cref="LoginPortal.Admin"/>.</param>
+internal sealed record LoginRequest(
+    string Email,
+    string Password,
+    bool RememberMe = false,
+    LoginPortal Portal = LoginPortal.Storefront);
+
+/// <summary>App phía FE gửi request đăng nhập (JSON: <c>storefront</c>, <c>admin</c>).</summary>
+internal enum LoginPortal
+{
+    Storefront,
+    Admin,
+}
 
 internal sealed record TwoFactorLoginRequest(string TwoFactorToken, string Code);
 

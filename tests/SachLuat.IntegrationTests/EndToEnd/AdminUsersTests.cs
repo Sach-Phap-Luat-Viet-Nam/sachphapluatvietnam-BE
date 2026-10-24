@@ -25,7 +25,13 @@ public sealed class AdminUsersTests(EndToEndFactory factory)
         // Super Admin riêng cho test này: bootstrap admin được PurchaseFlowTests dùng để kiểm tra bước bật 2FA.
         await SeedSuperAdminAsync();
         using var admin = new ApiClient(factory);
-        var adminSession = await admin.LoginAsync(RootEmail, RootPassword);
+        // Super Admin không đăng nhập được ở Storefront (mặc định khi không gửi portal), kể cả đúng mật khẩu.
+        (await admin.PostAsync("/api/v1/auth/login",
+                new { email = RootEmail, password = RootPassword }, HttpStatusCode.Forbidden))
+            .GetProperty("code").GetString().Should().Be("SUPER_ADMIN_PORTAL_FORBIDDEN");
+        (await admin.PostAsync("/api/v1/auth/refresh", expected: HttpStatusCode.Unauthorized))
+            .GetProperty("code").GetString().Should().Be("INVALID_REFRESH_TOKEN");
+        var adminSession = await admin.LoginAsync(RootEmail, RootPassword, portal: "admin");
         var adminId = adminSession.GetProperty("user").GetProperty("id").GetInt64();
         await admin.EnableTwoFactorAsync();
 

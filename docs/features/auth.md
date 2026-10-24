@@ -8,6 +8,10 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
 ## Luồng xử lý
 
 - **Mật khẩu**: ASP.NET Core Identity, băm bằng **bcrypt** work factor 12 (NFR-11), tối thiểu 8 ký tự.
+- **Đăng nhập theo app**: `POST /auth/login` nhận `portal` = `storefront` (mặc định) hoặc `admin`. Tài khoản có vai
+  trò `super_admin` chỉ đăng nhập được với `portal = admin` (app Admin); ở Storefront trả `SUPER_ADMIN_PORTAL_FORBIDDEN`
+  (403) sau khi kiểm tra đúng mật khẩu (không lộ email nào là Super Admin), không cấp cookie hay token 2FA. Các vai trò
+  khác đăng nhập được ở cả hai app (Admin app tự từ chối tài khoản chỉ có `customer`).
 - **Khóa tài khoản** (FR-03): sai mật khẩu hoặc mã 2FA 5 lần liên tiếp → khóa 15 phút (`ACCOUNT_LOCKED`, 423).
 - **Phiên đăng nhập** (mục 11):
   - Access token JWT 15 phút, gửi trong header `Authorization: Bearer ...`.
@@ -75,7 +79,7 @@ Tiền tố `/api/v1`.
 | Method | Route | Xác thực | Request → Response |
 | --- | --- | --- | --- |
 | POST | `/auth/register` | Không | `{email, password, fullName, phoneNumber?}` → 201 `AuthResponse` + cookie |
-| POST | `/auth/login` | Không | `{email, password, rememberMe}` → `{requiresTwoFactor, twoFactorToken?, session?}` |
+| POST | `/auth/login` | Không | `{email, password, rememberMe, portal?}` → `{requiresTwoFactor, twoFactorToken?, session?}` |
 | POST | `/auth/login/2fa` | Không | `{twoFactorToken, code}` → `AuthResponse` + cookie |
 | POST | `/auth/refresh` | Cookie | → `AuthResponse` + cookie mới |
 | POST | `/auth/logout` | Cookie | → 204, xóa cookie |
@@ -166,7 +170,7 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 `TWO_FACTOR_TOKEN_INVALID` (401), `OTP_INVALID` (400), `TWO_FACTOR_ALREADY_ENABLED` (409),
 `CANNOT_REMOVE_OWN_ADMIN` (422), `CANNOT_IMPERSONATE` (422), `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429),
 `ADDRESS_NOT_FOUND` (404, kể cả địa chỉ của người khác), `ADDRESS_LIMIT_REACHED` (422),
-`ACCOUNT_DISABLED` (403), `CANNOT_MANAGE_USER` (422).
+`ACCOUNT_DISABLED` (403), `CANNOT_MANAGE_USER` (422), `SUPER_ADMIN_PORTAL_FORBIDDEN` (403).
 
 ## Cấu hình cần thiết
 
@@ -204,4 +208,6 @@ Chỉ thêm bảng, không đổi dữ liệu cũ.
 - Khóa tài khoản không chặn ngay access token đang dùng (tối đa 15 phút), giống đăng xuất hộ.
 - Tìm khách bằng ILIKE, chưa tìm không dấu; chưa có index cho email/họ tên/SĐT (đủ dùng khi số khách còn nhỏ).
 - Chi tiết khách chưa có lịch sử đơn hàng (cần API ở module Ordering).
+- `portal` do FE tự khai báo nên chỉ chặn đăng nhập nhầm chỗ, không phải ranh giới bảo mật: gọi thẳng API với
+  `portal = admin` vẫn được (Super Admin vẫn phải qua 2FA). Chỉ kiểm tra ở `/auth/login`, không ở `/auth/refresh`.
 - Request gọi thẳng vào Render (không qua FE) bị tính theo IP proxy của Render, dùng chung một quota.

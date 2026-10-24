@@ -44,6 +44,7 @@ internal sealed class LoginRequestValidator : AbstractValidator<LoginRequest>
     {
         RuleFor(request => request.Email).NotEmpty().MaximumLength(256);
         RuleFor(request => request.Password).NotEmpty().MaximumLength(AuthRules.PasswordMaxLength);
+        RuleFor(request => request.Portal).IsInEnum();
     }
 }
 

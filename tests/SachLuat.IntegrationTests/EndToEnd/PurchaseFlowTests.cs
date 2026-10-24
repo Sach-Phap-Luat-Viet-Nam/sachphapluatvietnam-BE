@@ -24,7 +24,8 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
 
         // 1. Super Admin đầu tiên (tạo từ cấu hình) phải bật 2FA mới dùng được API Admin.
         using var admin = new ApiClient(factory);
-        var adminSession = await admin.LoginAsync(EndToEndFactory.AdminEmail, EndToEndFactory.AdminPassword);
+        var adminSession = await admin.LoginAsync(
+            EndToEndFactory.AdminEmail, EndToEndFactory.AdminPassword, portal: "admin");
         adminSession.GetProperty("user").GetProperty("requiresTwoFactorSetup").GetBoolean().Should().BeTrue();
         await admin.GetAsync("/api/v1/admin/books", HttpStatusCode.Forbidden);
         await admin.EnableTwoFactorAsync();
@@ -38,7 +39,7 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
             roles = new[] { "warehouse_keeper" },
         }, HttpStatusCode.Created)).GetProperty("id").GetInt64();
         using var keeper = new ApiClient(factory);
-        var keeperSession = await keeper.LoginAsync("kho@e2e.test", "kho-password-123");
+        var keeperSession = await keeper.LoginAsync("kho@e2e.test", "kho-password-123", portal: "admin");
         keeperSession.GetProperty("loginVia").GetString().Should().Be("portal");
         await keeper.EnableTwoFactorAsync();
 
@@ -65,7 +66,7 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
             roles = new[] { "customer_service" },
         }, HttpStatusCode.Created)).GetProperty("id").GetInt64();
         using var leaver = new ApiClient(factory);
-        await leaver.LoginAsync("nghiviec@e2e.test", "leaver-password-123");
+        await leaver.LoginAsync("nghiviec@e2e.test", "leaver-password-123", portal: "admin");
         (await admin.PostAsync($"/api/v1/admin/users/{leaverId}/logout"))
             .GetProperty("revokedSessions").GetInt32().Should().Be(1);
         (await leaver.PostAsync("/api/v1/auth/refresh", expected: HttpStatusCode.Unauthorized))

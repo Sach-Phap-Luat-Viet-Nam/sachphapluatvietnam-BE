@@ -66,6 +66,13 @@ internal sealed class AuthService(
 
         await userManager.ResetAccessFailedCountAsync(user);
 
+        // Kiểm tra sau mật khẩu để không lộ email nào là Super Admin; chưa cấp phiên, cookie hay token 2FA nào.
+        if (request.Portal != LoginPortal.Admin && await userManager.IsInRoleAsync(user, Roles.SuperAdmin))
+        {
+            logger.LogWarning("Super admin {UserId} attempted to log in via {Portal}", user.Id, request.Portal);
+            throw AuthErrors.SuperAdminPortalForbidden();
+        }
+
         if (user.TwoFactorEnabled)
         {
             var ticket = tokenService.CreateTwoFactorTicket(user.Id, request.RememberMe);
