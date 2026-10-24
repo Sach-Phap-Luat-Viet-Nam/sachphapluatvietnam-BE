@@ -180,9 +180,9 @@ public sealed class OrderTests
             new OrderItem(1, "SLVN-A-BM", "Bộ luật Dân sự", null, "9780306406157", "paperback", 150_000m, 2),
             new OrderItem(2, "SLVN-B-BM", "Luật Đất đai", null, "9786041234567", "paperback", 150_000m, 1),
         };
-        for (var index = 0; index < (itemDiscounts?.Length ?? 0); index++)
+        foreach (var (item, discount) in items.Zip(itemDiscounts ?? []))
         {
-            items[index].ApplyDiscount(itemDiscounts![index]);
+            item.ApplyDiscount(discount);
         }
 
         return Order.Create(

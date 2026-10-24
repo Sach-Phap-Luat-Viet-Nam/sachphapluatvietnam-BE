@@ -38,16 +38,21 @@ internal sealed class PromotionAdminService(
             .Skip(query.Skip)
             .Take(query.Limit)
             .Include(promotion => promotion.Targets)
-            .Select(promotion => new
-            {
-                Promotion = promotion,
-                CouponCount = dbContext.Coupons.Count(coupon => coupon.PromotionId == promotion.Id),
-            })
             .ToListAsync(cancellationToken);
+
+        // Truy vấn riêng cho số mã: Include không đi cùng phép chiếu ẩn danh trong EF Core.
+        var pageIds = page.Select(promotion => promotion.Id).ToList();
+        var couponCounts = await dbContext.Coupons.AsNoTracking()
+            .Where(coupon => pageIds.Contains(coupon.PromotionId))
+            .GroupBy(coupon => coupon.PromotionId)
+            .Select(group => new { PromotionId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.PromotionId, item => item.Count, cancellationToken);
 
         var now = Now();
         return PagedResponse<AdminPromotionResponse>.Create(
-            [.. page.Select(item => ToResponse(item.Promotion, item.CouponCount, now))], query, total);
+            [.. page.Select(promotion => ToResponse(promotion, couponCounts.GetValueOrDefault(promotion.Id), now))],
+            query,
+            total);
     }
 
     public async Task<AdminPromotionResponse> GetAsync(long id, CancellationToken cancellationToken)

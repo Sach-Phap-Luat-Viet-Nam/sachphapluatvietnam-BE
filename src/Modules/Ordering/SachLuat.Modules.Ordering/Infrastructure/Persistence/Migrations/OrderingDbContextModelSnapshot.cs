@@ -100,6 +100,16 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("phone");
 
+                    b.Property<decimal>("ShippingBaseFee")
+                        .HasPrecision(12)
+                        .HasColumnType("numeric(12,0)")
+                        .HasColumnName("shipping_base_fee");
+
+                    b.Property<decimal>("ShippingDiscount")
+                        .HasPrecision(12)
+                        .HasColumnType("numeric(12,0)")
+                        .HasColumnName("shipping_discount");
+
                     b.Property<decimal>("ShippingFee")
                         .HasPrecision(12)
                         .HasColumnType("numeric(12,0)")
@@ -152,7 +162,7 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
 
                     b.ToTable("orders", "ordering", t =>
                         {
-                            t.HasCheckConstraint("ck_orders_amounts", "subtotal >= 0 AND discount >= 0 AND shipping_fee >= 0 AND total >= 0");
+                            t.HasCheckConstraint("ck_orders_amounts", "subtotal >= 0 AND discount >= 0 AND discount <= subtotal AND shipping_fee >= 0 AND shipping_base_fee >= shipping_fee AND shipping_discount >= 0 AND shipping_discount <= shipping_fee AND total >= 0");
                         });
                 });
 
@@ -197,6 +207,11 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("cover_type");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasPrecision(12)
+                        .HasColumnType("numeric(12,0)")
+                        .HasColumnName("discount_amount");
 
                     b.Property<string>("EditionName")
                         .HasMaxLength(100)
@@ -246,6 +261,8 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
 
                     b.ToTable("order_items", "ordering", t =>
                         {
+                            t.HasCheckConstraint("ck_order_items_discount", "discount_amount >= 0 AND discount_amount <= line_total");
+
                             t.HasCheckConstraint("ck_order_items_quantity", "quantity > 0");
                         });
                 });
@@ -298,6 +315,39 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("SachLuat.Modules.Ordering.Domain.Order", b =>
                 {
+                    b.OwnsMany("SachLuat.Modules.Ordering.Domain.AppliedPromotionSnapshot", "AppliedPromotions", b1 =>
+                        {
+                            b1.Property<long>("OrderId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<decimal>("Amount");
+
+                            b1.Property<string>("CouponCode");
+
+                            b1.Property<string>("Kind")
+                                .IsRequired();
+
+                            b1.Property<string>("Name")
+                                .IsRequired();
+
+                            b1.Property<long>("PromotionId");
+
+                            b1.HasKey("OrderId", "__synthesizedOrdinal")
+                                .HasName("pk_orders");
+
+                            b1.ToTable("orders", "ordering");
+
+                            b1
+                                .ToJson("applied_promotions")
+                                .HasColumnType("jsonb");
+
+                            b1.WithOwner()
+                                .HasForeignKey("OrderId")
+                                .HasConstraintName("fk_orders_orders_order_id");
+                        });
+
                     b.OwnsOne("SachLuat.Modules.Ordering.Domain.InvoiceInfo", "InvoiceInfo", b1 =>
                         {
                             b1.Property<long>("OrderId");
@@ -352,6 +402,8 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                                 .HasForeignKey("OrderId")
                                 .HasConstraintName("fk_orders_orders_id");
                         });
+
+                    b.Navigation("AppliedPromotions");
 
                     b.Navigation("InvoiceInfo");
 
