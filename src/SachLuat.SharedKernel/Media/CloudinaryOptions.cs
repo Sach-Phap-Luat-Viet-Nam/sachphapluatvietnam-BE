@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace SachLuat.SharedKernel.Media;
 
 /// <summary>Tài khoản Cloudinary dùng chung cho mọi module lưu ảnh (section <c>Cloudinary</c>).</summary>
@@ -18,6 +20,9 @@ public sealed class CloudinaryOptions
     /// <summary>Thư mục ảnh popup quảng cáo (Content).</summary>
     public string PopupFolder { get; set; } = "sachluat/popups";
 
+    /// <summary>Thư mục avatar người dùng (Auth).</summary>
+    public string AvatarFolder { get; set; } = "sachluat/avatars";
+
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(CloudName)
         && !string.IsNullOrWhiteSpace(ApiKey)
@@ -34,4 +39,15 @@ public sealed class CloudinaryOptions
         !IsConfigured
         || string.IsNullOrWhiteSpace(url)
         || url.StartsWith(ImageUrlPrefix, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Link (<c>secure_url</c>) là đúng ảnh <paramref name="publicId"/> trên Cloudinary của hệ thống, có hoặc không có
+    /// đoạn version <c>v123/</c>, đuôi là một định dạng được phép upload.
+    /// </summary>
+    public bool IsImageUrlOf(string url, string publicId)
+    {
+        var formats = CloudinaryUploadSigner.AllowedFormats.Replace(',', '|');
+        var pattern = $"^{Regex.Escape(ImageUrlPrefix)}(v[0-9]+/)?{Regex.Escape(publicId)}\\.({formats})$";
+        return Regex.IsMatch(url, pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    }
 }

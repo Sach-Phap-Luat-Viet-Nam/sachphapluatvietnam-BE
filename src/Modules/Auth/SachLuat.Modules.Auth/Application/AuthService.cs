@@ -233,7 +233,8 @@ internal sealed class AuthService(
             user.TwoFactorEnabled,
             RequiresTwoFactorSetup: isStaff && !user.TwoFactorEnabled,
             user.IsActive,
-            user.Theme);
+            user.Theme,
+            user.AvatarUrl);
     }
 
     internal static void EnsureSucceeded(IdentityResult result)

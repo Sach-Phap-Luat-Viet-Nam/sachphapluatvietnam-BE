@@ -17,9 +17,11 @@ internal static class OrderRules
         rule.NotEmpty().Matches(PhonePattern).WithMessage("Số điện thoại không hợp lệ");
 }
 
-internal sealed class CreateOrderRequestValidator : AbstractValidator<CreateOrderRequest>
+// abstract để AddValidatorsFromAssembly không đăng ký lớp này; chỉ các lớp con cụ thể được dùng.
+internal abstract class CheckoutDetailsValidator<T> : AbstractValidator<T>
+    where T : ICheckoutDetails
 {
-    public CreateOrderRequestValidator()
+    protected CheckoutDetailsValidator()
     {
         RuleFor(request => request.CustomerName).NotEmpty().MaximumLength(255);
         RuleFor(request => request.Phone).ValidPhone();
@@ -42,6 +44,19 @@ internal sealed class CreateOrderRequestValidator : AbstractValidator<CreateOrde
             RuleFor(request => request.InvoiceInfo!.Address).NotEmpty().MaximumLength(500);
             RuleFor(request => request.InvoiceInfo!.Email).NotEmpty().EmailAddress().MaximumLength(256);
         });
+    }
+}
+
+internal sealed class CreateOrderRequestValidator : CheckoutDetailsValidator<CreateOrderRequest>;
+
+internal sealed class BuyNowOrderRequestValidator : CheckoutDetailsValidator<BuyNowOrderRequest>
+{
+    public BuyNowOrderRequestValidator()
+    {
+        RuleFor(request => request.SkuId).GreaterThan(0);
+
+        // Trần số lượng mỗi SKU nằm ở cấu hình nên service kiểm tra và trả MAX_QTY_EXCEEDED như đặt từ giỏ.
+        RuleFor(request => request.Quantity).GreaterThan(0);
     }
 }
 

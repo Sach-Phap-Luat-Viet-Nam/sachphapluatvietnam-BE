@@ -54,6 +54,8 @@ public sealed class AdminUsersTests(EndToEndFactory factory)
             streetAddress = "12 Hàng Bài",
             isDefault = true,
         }, HttpStatusCode.Created);
+        const string avatarUrl = "https://example.com/khach-quan-tri.png";
+        await customer.PutAsync("/api/v1/me/avatar", new { avatarUrl });
 
         // Danh sách khách tìm theo số điện thoại; danh sách nhân viên không chứa khách.
         var customers = await admin.GetAsync("/api/v1/admin/customers?q=0912345678");
@@ -61,6 +63,7 @@ public sealed class AdminUsersTests(EndToEndFactory factory)
         var row = customers.GetProperty("items")[0];
         row.GetProperty("email").GetString().Should().Be(CustomerEmail);
         row.GetProperty("isActive").GetBoolean().Should().BeTrue();
+        row.GetProperty("avatarUrl").GetString().Should().Be(avatarUrl);
         Emails(await admin.GetAsync("/api/v1/admin/users?limit=100")).Should().NotContain(CustomerEmail);
         Emails(await admin.GetAsync($"/api/v1/admin/users?q={Uri.EscapeDataString(RootEmail)}"))
             .Should().Equal(RootEmail);
@@ -71,6 +74,7 @@ public sealed class AdminUsersTests(EndToEndFactory factory)
         var detail = await admin.GetAsync($"/api/v1/admin/customers/{customerId}");
         detail.GetProperty("account").GetProperty("roles").EnumerateArray().Select(role => role.GetString())
             .Should().Equal("customer");
+        detail.GetProperty("account").GetProperty("avatarUrl").GetString().Should().Be(avatarUrl);
         detail.GetProperty("addresses").GetArrayLength().Should().Be(1);
         detail.GetProperty("invoiceInfo").ValueKind.Should().Be(JsonValueKind.Null);
         (await admin.GetAsync($"/api/v1/admin/customers/{adminId}", HttpStatusCode.NotFound))

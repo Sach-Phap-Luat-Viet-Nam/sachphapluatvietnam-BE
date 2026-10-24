@@ -40,100 +40,50 @@ internal sealed class OrderService(
         string? idempotencyKey,
         CancellationToken cancellationToken)
     {
-        if (idempotencyKey is { Length: > IdempotencyKeyMaxLength })
+        if (await PrepareAsync(request, idempotencyKey, cancellationToken) is { } existing)
         {
-            throw new BusinessException(
-                ErrorCodes.ValidationError,
-                $"Idempotency-Key tối đa {IdempotencyKeyMaxLength} ký tự",
-                StatusCodes.Status400BadRequest);
+            return existing;
         }
 
-        if (!string.IsNullOrEmpty(idempotencyKey) && await FindByIdempotencyKeyAsync(idempotencyKey, cancellationToken)
-            is { } existing)
-        {
-            // Khách bấm đặt hàng nhiều lần: trả lại đơn đã tạo thay vì tạo đơn trùng (mục 11.1).
-            return existing.UserId == currentUser.UserId && existing.Phone == request.Phone
-                ? existing.ToResponse()
-                : throw OrderErrors.IdempotencyKeyReused();
-        }
-
-        if (!SupportedPaymentMethods.Contains(request.PaymentMethod))
-        {
-            throw OrderErrors.PaymentMethodNotSupported();
-        }
-
-        var lines = await currentCart.GetLinesAsync(cancellationToken);
-        if (lines.Count == 0)
+        var cartLines = await currentCart.GetLinesAsync(cancellationToken);
+        if (cartLines.Count == 0)
         {
             throw OrderErrors.CartEmpty();
         }
 
-        if (lines.Any(line => line.Quantity > _options.MaxQuantityPerSku))
-        {
-            throw OrderErrors.MaxQuantityExceeded(_options.MaxQuantityPerSku);
-        }
-
-        var skus = await skuReader.GetSkusAsync(lines.Select(line => line.SkuId).ToList(), cancellationToken);
-        if (lines.Any(line => !skus.TryGetValue(line.SkuId, out var sku) || !sku.IsSellable))
-        {
-            throw OrderErrors.SkuNotAvailable();
-        }
-
-        var items = lines.Select(line =>
-        {
-            var sku = skus[line.SkuId];
-            return new OrderItem(
-                sku.SkuId, sku.SkuCode, sku.BookTitle, sku.EditionName, sku.Isbn, sku.CoverType, sku.SalePrice,
-                line.Quantity);
-        }).ToList();
-
-        var orderCode = await codeGenerator.NextAsync(cancellationToken);
-        var subtotal = items.Sum(item => item.LineTotal);
-        var order = Order.Create(
-            orderCode,
-            currentUser.UserId,
-            request.CustomerName.Trim(),
-            request.Phone,
-            string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim(),
-            new ShippingAddress(
-                request.ShippingAddress.Province.Trim(),
-                request.ShippingAddress.Ward.Trim(),
-                request.ShippingAddress.StreetAddress.Trim()),
-            request.PaymentMethod,
-            request.InvoiceInfo is { } invoice
-                ? new InvoiceInfo(invoice.CompanyName.Trim(), invoice.TaxCode, invoice.Address.Trim(), invoice.Email)
-                : null,
-            string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim(),
-            string.IsNullOrEmpty(idempotencyKey) ? null : idempotencyKey,
-            items,
-            shippingFeeCalculator.Calculate(subtotal),
-            timeProvider.GetUtcNow().UtcDateTime,
-            TimeSpan.FromMinutes(_options.PaymentTimeoutMinutes));
-
-        // BR-11: tạm giữ tồn trước; thiếu hàng thì dừng ở đây (OUT_OF_STOCK), chưa có đơn nào được tạo.
-        await inventoryService.ReserveAsync(
-            orderCode, lines.Select(line => new StockLine(line.SkuId, line.Quantity)).ToList(), cancellationToken);
-        try
-        {
-            dbContext.Orders.Add(order);
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException exception)
-        {
-            // Lưu đơn thất bại: trả lại tồn đã giữ (không dùng token của request để việc hoàn tồn luôn chạy xong).
-            await inventoryService.ReleaseAsync(orderCode, CancellationToken.None);
-            if (exception.IsUniqueViolation("ix_orders_idempotency_key"))
-            {
-                throw OrderErrors.IdempotencyKeyReused();
-            }
-
-            throw;
-        }
-
+        var order = await PlaceAsync(
+            request,
+            cartLines.Select(line => new StockLine(line.SkuId, line.Quantity)).ToList(),
+            idempotencyKey,
+            OrderErrors.SkuNotAvailable,
+            cancellationToken);
         await currentCart.ClearAsync(cancellationToken);
         logger.LogInformation(
-            "Created order {OrderCode} with {ItemCount} items, payment {PaymentMethod}",
+            "Created order {OrderCode} from cart with {ItemCount} items, payment {PaymentMethod}",
             order.OrderCode, order.Items.Count, order.PaymentMethod);
+        return order.ToResponse();
+    }
+
+    /// <summary>"Mua ngay": đặt thẳng một SKU; giỏ hàng của khách giữ nguyên.</summary>
+    public async Task<OrderResponse> BuyNowAsync(
+        BuyNowOrderRequest request,
+        string? idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        if (await PrepareAsync(request, idempotencyKey, cancellationToken) is { } existing)
+        {
+            return existing;
+        }
+
+        var order = await PlaceAsync(
+            request,
+            [new StockLine(request.SkuId, request.Quantity)],
+            idempotencyKey,
+            OrderErrors.BuyNowSkuNotAvailable,
+            cancellationToken);
+        logger.LogInformation(
+            "Created buy-now order {OrderCode} for SKU {SkuId} x{Quantity}, payment {PaymentMethod}",
+            order.OrderCode, request.SkuId, request.Quantity, order.PaymentMethod);
         return order.ToResponse();
     }
 
@@ -211,6 +161,111 @@ internal sealed class OrderService(
 
     public ShippingQuoteResponse QuoteShipping(ShippingQuoteRequest request) => new(
         shippingFeeCalculator.Calculate(request.Subtotal), shippingFeeCalculator.FreeShippingThreshold);
+
+    /// <summary>
+    /// Kiểm tra chung trước khi đặt hàng; trả đơn đã tạo nếu <paramref name="idempotencyKey"/> đã được dùng.
+    /// </summary>
+    private async Task<OrderResponse?> PrepareAsync(
+        ICheckoutDetails details,
+        string? idempotencyKey,
+        CancellationToken cancellationToken)
+    {
+        if (idempotencyKey is { Length: > IdempotencyKeyMaxLength })
+        {
+            throw new BusinessException(
+                ErrorCodes.ValidationError,
+                $"Idempotency-Key tối đa {IdempotencyKeyMaxLength} ký tự",
+                StatusCodes.Status400BadRequest);
+        }
+
+        if (!string.IsNullOrEmpty(idempotencyKey) && await FindByIdempotencyKeyAsync(idempotencyKey, cancellationToken)
+            is { } existing)
+        {
+            // Khách bấm đặt hàng nhiều lần: trả lại đơn đã tạo thay vì tạo đơn trùng (mục 11.1).
+            return existing.UserId == currentUser.UserId && existing.Phone == details.Phone
+                ? existing.ToResponse()
+                : throw OrderErrors.IdempotencyKeyReused();
+        }
+
+        if (!SupportedPaymentMethods.Contains(details.PaymentMethod))
+        {
+            throw OrderErrors.PaymentMethodNotSupported();
+        }
+
+        return null;
+    }
+
+    /// <summary>Kiểm tra SKU, chụp snapshot, tạm giữ tồn và lưu đơn (mục 10.3, BR-11).</summary>
+    private async Task<Order> PlaceAsync(
+        ICheckoutDetails details,
+        IReadOnlyList<StockLine> lines,
+        string? idempotencyKey,
+        Func<BusinessException> skuNotAvailable,
+        CancellationToken cancellationToken)
+    {
+        if (lines.Any(line => line.Quantity > _options.MaxQuantityPerSku))
+        {
+            throw OrderErrors.MaxQuantityExceeded(_options.MaxQuantityPerSku);
+        }
+
+        var skus = await skuReader.GetSkusAsync(lines.Select(line => line.SkuId).ToList(), cancellationToken);
+        if (lines.Any(line => !skus.TryGetValue(line.SkuId, out var sku) || !sku.IsSellable))
+        {
+            throw skuNotAvailable();
+        }
+
+        var items = lines.Select(line =>
+        {
+            var sku = skus[line.SkuId];
+            return new OrderItem(
+                sku.SkuId, sku.SkuCode, sku.BookTitle, sku.EditionName, sku.Isbn, sku.CoverType, sku.SalePrice,
+                line.Quantity);
+        }).ToList();
+
+        var orderCode = await codeGenerator.NextAsync(cancellationToken);
+        var subtotal = items.Sum(item => item.LineTotal);
+        var order = Order.Create(
+            orderCode,
+            currentUser.UserId,
+            details.CustomerName.Trim(),
+            details.Phone,
+            string.IsNullOrWhiteSpace(details.Email) ? null : details.Email.Trim(),
+            new ShippingAddress(
+                details.ShippingAddress.Province.Trim(),
+                details.ShippingAddress.Ward.Trim(),
+                details.ShippingAddress.StreetAddress.Trim()),
+            details.PaymentMethod,
+            details.InvoiceInfo is { } invoice
+                ? new InvoiceInfo(invoice.CompanyName.Trim(), invoice.TaxCode, invoice.Address.Trim(), invoice.Email)
+                : null,
+            string.IsNullOrWhiteSpace(details.Note) ? null : details.Note.Trim(),
+            string.IsNullOrEmpty(idempotencyKey) ? null : idempotencyKey,
+            items,
+            shippingFeeCalculator.Calculate(subtotal),
+            timeProvider.GetUtcNow().UtcDateTime,
+            TimeSpan.FromMinutes(_options.PaymentTimeoutMinutes));
+
+        // BR-11: tạm giữ tồn trước; thiếu hàng thì dừng ở đây (OUT_OF_STOCK), chưa có đơn nào được tạo.
+        await inventoryService.ReserveAsync(orderCode, lines, cancellationToken);
+        try
+        {
+            dbContext.Orders.Add(order);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            // Lưu đơn thất bại: trả lại tồn đã giữ (không dùng token của request để việc hoàn tồn luôn chạy xong).
+            await inventoryService.ReleaseAsync(orderCode, CancellationToken.None);
+            if (exception.IsUniqueViolation("ix_orders_idempotency_key"))
+            {
+                throw OrderErrors.IdempotencyKeyReused();
+            }
+
+            throw;
+        }
+
+        return order;
+    }
 
     private Task<Order?> FindByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken) =>
         LoadAsync(dbContext.Orders.Where(order => order.IdempotencyKey == idempotencyKey), cancellationToken);

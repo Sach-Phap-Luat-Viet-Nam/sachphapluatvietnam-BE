@@ -20,6 +20,19 @@ public sealed record UploadSignatureResponse(
     string Signature);
 
 /// <summary>
+/// Các field FE gửi kèm file (multipart) lên <see cref="UploadUrl"/> để ghi đè đúng ảnh <see cref="PublicId"/>.
+/// <see cref="Overwrite"/> gửi dạng chuỗi <c>true</c>.
+/// </summary>
+public sealed record ReplaceUploadSignatureResponse(
+    string UploadUrl,
+    string ApiKey,
+    long Timestamp,
+    string PublicId,
+    bool Overwrite,
+    string AllowedFormats,
+    string Signature);
+
+/// <summary>
 /// Ký tham số upload để Admin FE gửi ảnh thẳng lên Cloudinary, không đi qua API.
 /// Cloudinary chỉ nhận chữ ký có <c>timestamp</c> trong vòng 1 giờ.
 /// </summary>
@@ -31,12 +44,7 @@ public sealed class CloudinaryUploadSigner(IOptions<CloudinaryOptions> options, 
     /// <exception cref="BusinessException"><c>UPLOAD_NOT_CONFIGURED</c> (503) khi chưa cấu hình Cloudinary.</exception>
     public UploadSignatureResponse CreateSignature(string folder)
     {
-        var settings = options.Value;
-        if (!settings.IsConfigured)
-        {
-            throw MediaErrors.UploadNotConfigured();
-        }
-
+        var settings = RequireConfigured();
         var timestamp = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var parameters = new Dictionary<string, string>
         {
@@ -46,10 +54,37 @@ public sealed class CloudinaryUploadSigner(IOptions<CloudinaryOptions> options, 
         };
 
         return new UploadSignatureResponse(
-            $"https://api.cloudinary.com/v1_1/{settings.CloudName}/image/upload",
+            UploadUrl(settings),
             settings.ApiKey,
             timestamp,
             folder,
+            AllowedFormats,
+            Sign(parameters, settings.ApiSecret));
+    }
+
+    /// <summary>
+    /// Chữ ký chỉ upload được vào đúng ảnh <paramref name="publicId"/> (gồm cả thư mục, ví dụ
+    /// <c>sachluat/avatars/42-ab12</c>) và ghi đè ảnh cũ, nên mỗi chủ ảnh chỉ chiếm một chỗ trên Cloudinary.
+    /// </summary>
+    /// <exception cref="BusinessException"><c>UPLOAD_NOT_CONFIGURED</c> (503) khi chưa cấu hình Cloudinary.</exception>
+    public ReplaceUploadSignatureResponse CreateReplaceSignature(string publicId)
+    {
+        var settings = RequireConfigured();
+        var timestamp = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        var parameters = new Dictionary<string, string>
+        {
+            ["allowed_formats"] = AllowedFormats,
+            ["overwrite"] = "true",
+            ["public_id"] = publicId,
+            ["timestamp"] = timestamp.ToString(CultureInfo.InvariantCulture),
+        };
+
+        return new ReplaceUploadSignatureResponse(
+            UploadUrl(settings),
+            settings.ApiKey,
+            timestamp,
+            publicId,
+            Overwrite: true,
             AllowedFormats,
             Sign(parameters, settings.ApiSecret));
     }
@@ -67,6 +102,15 @@ public sealed class CloudinaryUploadSigner(IOptions<CloudinaryOptions> options, 
 
         return Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(payload + apiSecret)));
     }
+
+    private CloudinaryOptions RequireConfigured()
+    {
+        var settings = options.Value;
+        return settings.IsConfigured ? settings : throw MediaErrors.UploadNotConfigured();
+    }
+
+    private static string UploadUrl(CloudinaryOptions settings) =>
+        $"https://api.cloudinary.com/v1_1/{settings.CloudName}/image/upload";
 }
 
 public static class MediaErrors

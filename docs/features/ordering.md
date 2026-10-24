@@ -15,6 +15,10 @@
 5. Trạng thái đầu: COD → `pending_confirm`; chuyển khoản → `pending_payment`, hạn thanh toán 30 phút.
 6. Xóa giỏ, trả đơn. Header `Idempotency-Key` gửi lại → trả đúng đơn đã tạo (chống bấm nhiều lần).
 
+**Mua ngay** (`POST /orders/buy-now`, nút "Mua ngay" ở trang chi tiết sách): request gửi kèm `skuId`, `quantity` và
+các thông tin checkout như trên, đơn chỉ gồm SKU đó. Các bước 1–5 và `Idempotency-Key` giống hệt đặt từ giỏ, khác
+ở chỗ **không đọc và không xóa giỏ hàng**, nên những gì khách đã bỏ vào giỏ vẫn còn nguyên.
+
 **Đổi trạng thái** chỉ theo bảng 16.1 (`OrderStatusMachine`); dòng đơn bị khóa (`FOR UPDATE`) trong lúc đổi.
 Tác động kèm theo:
 
@@ -39,6 +43,7 @@ Tiền tố `/api/v1`.
 | Method | Route | Xác thực | Mô tả |
 | --- | --- | --- | --- |
 | POST | `/orders` | Tùy chọn | `{customerName, phone, email?, shippingAddress: {province, ward, streetAddress}, paymentMethod: cod\|bank_transfer, invoiceInfo?: {companyName, taxCode, address, email}, note?}` + header `Idempotency-Key` → 201 `OrderResponse` |
+| POST | `/orders/buy-now` | Tùy chọn | `{skuId, quantity, ...}` + các field như `POST /orders`, header `Idempotency-Key` → 201 `OrderResponse`; giỏ giữ nguyên |
 | GET | `/orders` | Bearer | Đơn của tôi (phân trang) |
 | GET | `/orders/{code}` | Bearer | Chi tiết đơn của tôi kèm lịch sử trạng thái |
 | POST | `/orders/lookup` | Không | `{orderCode, phone}` (giới hạn tần suất) |
@@ -51,7 +56,7 @@ Tiền tố `/api/v1`.
 `OrderResponse`: mã đơn, trạng thái, phương thức/tình trạng thanh toán, thông tin khách, địa chỉ, `items[]`,
 `subtotal, discount, shippingFee, total`, hóa đơn, `paymentExpiresAt`, `canCancel`, `history[]`.
 
-Mã lỗi: `CART_EMPTY` (422), `SKU_NOT_AVAILABLE` (422), `MAX_QTY_EXCEEDED` (422), `OUT_OF_STOCK` (409),
+Mã lỗi: `CART_EMPTY` (422, chỉ đặt từ giỏ), `SKU_NOT_AVAILABLE` (422), `MAX_QTY_EXCEEDED` (422), `OUT_OF_STOCK` (409),
 `PAYMENT_METHOD_NOT_SUPPORTED` (422), `IDEMPOTENCY_KEY_REUSED` (409), `ORDER_NOT_CANCELLABLE` (422),
 `ORDER_INVALID_TRANSITION` (409), `ORDER_NOT_PAID` (422), `NOT_FOUND` (404).
 
@@ -73,6 +78,8 @@ Không đặt khóa ngoại sang `auth.users` hay `catalog.skus`.
 
 ## Hạn chế / việc còn lại
 
+- Mua ngay chỉ đặt một SKU mỗi lần. Chưa có API xem trước (tạm tính, phí ship) cho trang checkout: FE tự tính từ
+  giá trên trang chi tiết sách và gọi `POST /shipping/quote`.
 - Chỉ hỗ trợ COD và chuyển khoản đối soát tay; VNPAY/MoMo/ZaloPay/VietQR và webhook (FR-35, mục 11.4) chưa làm.
 - Phí ship cố định, chưa gọi API đơn vị vận chuyển (FR-34); chưa tạo vận đơn (FR-71).
 - Chưa có mã giảm giá, pre-order (FR-38), đổi trả (FR-42), hóa đơn điện tử, email/ZNS xác nhận đơn (FR-37).

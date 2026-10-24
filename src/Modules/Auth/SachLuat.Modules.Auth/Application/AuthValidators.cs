@@ -88,6 +88,14 @@ internal sealed class UpdatePreferencesRequestValidator : AbstractValidator<Upda
     public UpdatePreferencesRequestValidator() => RuleFor(request => request.Theme).NotNull().IsInEnum();
 }
 
+internal sealed class SetAvatarRequestValidator : AbstractValidator<SetAvatarRequest>
+{
+    public SetAvatarRequestValidator() =>
+        RuleFor(request => request.AvatarUrl).NotEmpty().MaximumLength(AppUser.AvatarUrlMaxLength)
+            .Must(url => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+            .WithMessage("Link ảnh đại diện phải là link https");
+}
+
 internal sealed class UpdateProfileRequestValidator : AbstractValidator<UpdateProfileRequest>
 {
     public UpdateProfileRequestValidator()

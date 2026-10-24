@@ -21,6 +21,15 @@ internal sealed class OrdersController(OrderService orderService) : ControllerBa
             StatusCodes.Status201Created,
             await orderService.CreateAsync(request, idempotencyKey, cancellationToken));
 
+    /// <summary>"Mua ngay": đặt thẳng một SKU, giỏ hàng giữ nguyên; <c>Idempotency-Key</c> như tạo đơn từ giỏ.</summary>
+    [HttpPost("buy-now")]
+    public async Task<ActionResult<OrderResponse>> BuyNow(
+        BuyNowOrderRequest request,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
+        CancellationToken cancellationToken) => StatusCode(
+            StatusCodes.Status201Created,
+            await orderService.BuyNowAsync(request, idempotencyKey, cancellationToken));
+
     [Authorize]
     [HttpGet]
     public Task<PagedResponse<OrderSummaryResponse>> ListMine(

@@ -16,6 +16,7 @@ using SachLuat.Modules.Auth.Infrastructure.Persistence;
 using SachLuat.Modules.Auth.Infrastructure.Realtime;
 using SachLuat.SharedKernel.Configuration;
 using SachLuat.SharedKernel.HealthChecks;
+using SachLuat.SharedKernel.Media;
 using SachLuat.SharedKernel.Modules;
 using SachLuat.SharedKernel.Persistence;
 using SachLuat.SharedKernel.Security;
@@ -69,6 +70,7 @@ public sealed class AuthModule : IModule
         AddJwtAuthentication(services);
         AddAuthorizationPolicies(services);
 
+        services.AddCloudinaryUploads(configuration);
         services.AddScoped<TokenService>();
         services.AddScoped<AuthService>();
         services.AddScoped<ProfileService>();

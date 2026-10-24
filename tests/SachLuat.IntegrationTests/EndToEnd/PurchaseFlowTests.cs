@@ -10,7 +10,7 @@ namespace SachLuat.IntegrationTests.EndToEnd;
 
 /// <summary>
 /// Luồng nghiệp vụ chính chạy trên CSDL + Redis thật: Admin bật 2FA → nhập Catalog → phiếu nhập kho được duyệt
-/// → khách mua hàng → đóng gói trừ kho FIFO → hủy đơn hoàn kho → tự hủy đơn quá hạn thanh toán.
+/// → khách mua hàng → đóng gói trừ kho FIFO → hủy đơn hoàn kho → tự hủy đơn quá hạn thanh toán → mua ngay.
 /// </summary>
 [Collection(EndToEndCollection.Name)]
 public sealed class PurchaseFlowTests(EndToEndFactory factory)
@@ -265,6 +265,32 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         (await guest.PostAsync("/api/v1/orders/lookup",
                 new { orderCode = expiring.GetProperty("orderCode").GetString(), phone = CustomerPhone }))
             .GetProperty("status").GetString().Should().Be("cancelled");
+
+        // 11. Mua ngay: đặt thẳng một SKU, giỏ đang có giữ nguyên; tồn vẫn được tạm giữ như đặt từ giỏ.
+        await member.PostAsync("/api/v1/cart/items", new { skuId, quantity = 1 });
+        var buyNowKey = Guid.NewGuid().ToString();
+        var buyNow = await member.PostAsync(
+            "/api/v1/orders/buy-now", BuyNow(skuId, quantity: 2), HttpStatusCode.Created, buyNowKey);
+        buyNow.GetProperty("status").GetString().Should().Be("pending_confirm");
+        buyNow.GetProperty("items").GetArrayLength().Should().Be(1);
+        buyNow.GetProperty("items")[0].GetProperty("quantity").GetInt32().Should().Be(2);
+        buyNow.GetProperty("total").GetDecimal().Should().Be(300_000m);
+        (await member.PostAsync(
+                "/api/v1/orders/buy-now", BuyNow(skuId, quantity: 2), HttpStatusCode.Created, buyNowKey))
+            .GetProperty("orderCode").GetString().Should().Be(buyNow.GetProperty("orderCode").GetString());
+        (await member.GetAsync("/api/v1/cart")).GetProperty("totalQuantity").GetInt32()
+            .Should().Be(1, "mua ngay không đụng tới giỏ hàng");
+        (await StockAsync(keeper, skuId)).GetProperty("available").GetInt32().Should().Be(6);
+
+        (await guest.PostAsync("/api/v1/orders/buy-now", BuyNow(skuId, quantity: 21), (HttpStatusCode)422))
+            .GetProperty("code").GetString().Should().Be("MAX_QTY_EXCEEDED");
+        (await guest.PostAsync("/api/v1/orders/buy-now", BuyNow(skuId, quantity: 7), HttpStatusCode.Conflict))
+            .GetProperty("code").GetString().Should().Be("OUT_OF_STOCK");
+        (await guest.PostAsync("/api/v1/orders/buy-now", BuyNow(999_999, quantity: 1), (HttpStatusCode)422))
+            .GetProperty("code").GetString().Should().Be("SKU_NOT_AVAILABLE");
+        (await guest.PostAsync("/api/v1/orders/buy-now", BuyNow(skuId, quantity: 0), HttpStatusCode.BadRequest))
+            .GetProperty("code").GetString().Should().Be("VALIDATION_ERROR");
+        (await StockAsync(keeper, skuId)).GetProperty("available").GetInt32().Should().Be(6);
     }
 
     private static Task<JsonElement> StockAsync(ApiClient client, long skuId) =>
@@ -276,5 +302,15 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         phone = CustomerPhone,
         shippingAddress = new { province = "Hà Nội", ward = "Phường Cầu Giấy", streetAddress = "1 Xuân Thủy" },
         paymentMethod,
+    };
+
+    private static object BuyNow(long skuId, int quantity) => new
+    {
+        skuId,
+        quantity,
+        customerName = "Nguyễn Văn A",
+        phone = CustomerPhone,
+        shippingAddress = new { province = "Hà Nội", ward = "Phường Cầu Giấy", streetAddress = "1 Xuân Thủy" },
+        paymentMethod = "cod",
     };
 }

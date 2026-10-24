@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SachLuat.Modules.Auth.Domain;
 using SachLuat.Modules.Auth.Infrastructure.Persistence;
+using SachLuat.SharedKernel.Media;
 
 namespace SachLuat.Modules.Auth.Application;
 
@@ -9,6 +11,8 @@ namespace SachLuat.Modules.Auth.Application;
 internal sealed class ProfileService(
     AuthService authService,
     AuthDbContext dbContext,
+    CloudinaryUploadSigner uploadSigner,
+    IOptions<CloudinaryOptions> cloudinaryOptions,
     ILogger<ProfileService> logger)
 {
     public async Task<MeResponse> GetAsync(long userId, CancellationToken cancellationToken) =>
@@ -38,6 +42,45 @@ internal sealed class ProfileService(
 
         logger.LogInformation("User {UserId} set theme to {Theme}", userId, request.Theme);
         return new PreferencesResponse(request.Theme);
+    }
+
+    /// <summary>Chữ ký để FE upload avatar thẳng lên Cloudinary, chỉ ghi được vào ảnh của chính user.</summary>
+    public ReplaceUploadSignatureResponse CreateAvatarSignature(long userId) =>
+        uploadSigner.CreateReplaceSignature(AvatarImage.PublicId(cloudinaryOptions.Value, userId));
+
+    public async Task<AvatarResponse> SetAvatarAsync(
+        long userId,
+        SetAvatarRequest request,
+        CancellationToken cancellationToken)
+    {
+        var avatarUrl = request.AvatarUrl.Trim();
+        if (!AvatarImage.AcceptsUrl(cloudinaryOptions.Value, userId, avatarUrl))
+        {
+            throw AuthErrors.AvatarUrlInvalid();
+        }
+
+        await SaveAvatarUrlAsync(userId, avatarUrl, cancellationToken);
+        logger.LogInformation("User {UserId} changed avatar", userId);
+        return new AvatarResponse(avatarUrl);
+    }
+
+    /// <summary>Chỉ bỏ link; ảnh trên Cloudinary giữ nguyên và bị ghi đè ở lần upload sau.</summary>
+    public async Task RemoveAvatarAsync(long userId, CancellationToken cancellationToken)
+    {
+        await SaveAvatarUrlAsync(userId, null, cancellationToken);
+        logger.LogInformation("User {UserId} removed avatar", userId);
+    }
+
+    // Chỉ cập nhật cột avatar_url, cùng lý do với UpdatePreferencesAsync.
+    private async Task SaveAvatarUrlAsync(long userId, string? avatarUrl, CancellationToken cancellationToken)
+    {
+        var updated = await dbContext.Users
+            .Where(user => user.Id == userId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(user => user.AvatarUrl, avatarUrl), cancellationToken);
+        if (updated == 0)
+        {
+            throw AuthErrors.UserNotFound();
+        }
     }
 
     public async Task<IReadOnlyList<AddressResponse>> ListAddressesAsync(
@@ -164,6 +207,7 @@ internal sealed class ProfileService(
             user.RequiresTwoFactorSetup,
             user.IsActive,
             user.Theme,
+            user.AvatarUrl,
             defaultAddress is null ? null : ToResponse(defaultAddress),
             invoiceInfo is null ? null : ToResponse(invoiceInfo));
     }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SachLuat.Modules.Auth.Application;
 using SachLuat.SharedKernel.Api;
+using SachLuat.SharedKernel.Media;
 using SachLuat.SharedKernel.Security;
 
 namespace SachLuat.Modules.Auth.Controllers;
@@ -26,6 +27,23 @@ internal sealed class MeController(ProfileService profileService, ICurrentUser c
         UpdatePreferencesRequest request,
         CancellationToken cancellationToken) =>
         profileService.UpdatePreferencesAsync(currentUser.RequireUserId(), request, cancellationToken);
+
+    /// <summary>Bước 1 đổi avatar: lấy chữ ký rồi FE gửi file thẳng lên Cloudinary.</summary>
+    [HttpPost("avatar/upload-signature")]
+    public ReplaceUploadSignatureResponse CreateAvatarSignature() =>
+        profileService.CreateAvatarSignature(currentUser.RequireUserId());
+
+    /// <summary>Bước 2 đổi avatar: lưu <c>secure_url</c> Cloudinary trả về.</summary>
+    [HttpPut("avatar")]
+    public Task<AvatarResponse> SetAvatar(SetAvatarRequest request, CancellationToken cancellationToken) =>
+        profileService.SetAvatarAsync(currentUser.RequireUserId(), request, cancellationToken);
+
+    [HttpDelete("avatar")]
+    public async Task<IActionResult> RemoveAvatar(CancellationToken cancellationToken)
+    {
+        await profileService.RemoveAvatarAsync(currentUser.RequireUserId(), cancellationToken);
+        return NoContent();
+    }
 
     [HttpGet("addresses")]
     public Task<IReadOnlyList<AddressResponse>> ListAddresses(CancellationToken cancellationToken) =>

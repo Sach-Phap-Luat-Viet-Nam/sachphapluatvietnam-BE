@@ -28,6 +28,8 @@ internal static class OrderErrors
     public static BusinessException SkuNotAvailable() => new(
         SkuNotAvailableCode, "Giỏ hàng có sách hiện không bán, vui lòng xóa khỏi giỏ trước khi đặt hàng");
 
+    public static BusinessException BuyNowSkuNotAvailable() => new(SkuNotAvailableCode, "Sách này hiện không bán");
+
     public static BusinessException MaxQuantityExceeded(int max) => new(
         MaxQuantityExceededCode, $"Tối đa {max} cuốn mỗi loại, vui lòng gửi yêu cầu báo giá sỉ");
 

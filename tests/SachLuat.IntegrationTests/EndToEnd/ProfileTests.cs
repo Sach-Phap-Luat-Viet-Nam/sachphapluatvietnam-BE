@@ -101,6 +101,42 @@ public sealed class ProfileTests(EndToEndFactory factory)
         await anonymous.PutAsync("/api/v1/me/preferences", new { theme = "light" }, HttpStatusCode.Unauthorized);
     }
 
+    [Fact]
+    public async Task Avatar_SetShownAndRemoved()
+    {
+        factory.SkipIfNotConfigured();
+        using var client = new ApiClient(factory);
+        var session = await client.PostAsync("/api/v1/auth/register", new
+        {
+            email = "avatar@e2e.test",
+            password = "avatar-password",
+            fullName = "Có avatar",
+        }, HttpStatusCode.Created);
+        client.AccessToken = session.GetProperty("accessToken").GetString();
+
+        // Tài khoản mới chưa có avatar: null để FE hiện ảnh mặc định.
+        session.GetProperty("user").GetProperty("avatarUrl").ValueKind.Should().Be(JsonValueKind.Null);
+        (await client.GetAsync("/api/v1/me")).GetProperty("avatarUrl").ValueKind.Should().Be(JsonValueKind.Null);
+
+        // Môi trường test không cấu hình Cloudinary: không ký được, nhưng vẫn lưu được link để nhập liệu.
+        (await client.PostAsync("/api/v1/me/avatar/upload-signature", expected: HttpStatusCode.ServiceUnavailable))
+            .GetProperty("code").GetString().Should().Be("UPLOAD_NOT_CONFIGURED");
+        const string avatarUrl = "https://example.com/avatar.png";
+        (await client.PutAsync("/api/v1/me/avatar", new { avatarUrl }))
+            .GetProperty("avatarUrl").GetString().Should().Be(avatarUrl);
+        (await client.GetAsync("/api/v1/me")).GetProperty("avatarUrl").GetString().Should().Be(avatarUrl);
+
+        // Link không phải https thì từ chối, giữ nguyên avatar cũ.
+        await client.PutAsync("/api/v1/me/avatar", new { avatarUrl = "javascript:alert(1)" }, HttpStatusCode.BadRequest);
+        (await client.GetAsync("/api/v1/me")).GetProperty("avatarUrl").GetString().Should().Be(avatarUrl);
+
+        await client.SendAsync(HttpMethod.Delete, "/api/v1/me/avatar", null, HttpStatusCode.NoContent);
+        (await client.GetAsync("/api/v1/me")).GetProperty("avatarUrl").ValueKind.Should().Be(JsonValueKind.Null);
+
+        using var anonymous = new ApiClient(factory);
+        await anonymous.PutAsync("/api/v1/me/avatar", new { avatarUrl }, HttpStatusCode.Unauthorized);
+    }
+
     private static object Address(string recipientName, bool isDefault) => new
     {
         recipientName,

@@ -78,6 +78,7 @@ internal sealed record MeResponse(
     bool RequiresTwoFactorSetup,
     bool IsActive,
     ColorTheme? Theme,
+    string? AvatarUrl,
     AddressResponse? DefaultAddress,
     InvoiceInfoResponse? InvoiceInfo);
 
@@ -113,7 +114,13 @@ internal sealed record UserResponse(
     bool TwoFactorEnabled,
     bool RequiresTwoFactorSetup,
     bool IsActive,
-    ColorTheme? Theme);
+    ColorTheme? Theme,
+    string? AvatarUrl);
+
+/// <param name="AvatarUrl"><c>secure_url</c> Cloudinary trả về sau khi upload bằng chữ ký của <c>/me/avatar</c>.</param>
+internal sealed record SetAvatarRequest(string AvatarUrl);
+
+internal sealed record AvatarResponse(string? AvatarUrl);
 
 /// <param name="Theme">Giao diện storefront khách chọn (<c>dark</c>/<c>light</c>), ghi nhớ theo tài khoản.</param>
 internal sealed record UpdatePreferencesRequest(ColorTheme? Theme);

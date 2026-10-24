@@ -7,6 +7,24 @@ internal sealed record ShippingAddressDto(string Province, string Ward, string S
 
 internal sealed record InvoiceInfoDto(string CompanyName, string TaxCode, string Address, string Email);
 
+/// <summary>Thông tin người nhận và thanh toán, dùng chung cho đặt từ giỏ và "Mua ngay".</summary>
+internal interface ICheckoutDetails
+{
+    string CustomerName { get; }
+
+    string Phone { get; }
+
+    string? Email { get; }
+
+    ShippingAddressDto ShippingAddress { get; }
+
+    PaymentMethod PaymentMethod { get; }
+
+    InvoiceInfoDto? InvoiceInfo { get; }
+
+    string? Note { get; }
+}
+
 /// <summary>Tạo đơn từ giỏ hàng hiện tại (FR-33: không bắt buộc đăng nhập).</summary>
 internal sealed record CreateOrderRequest(
     string CustomerName,
@@ -15,7 +33,19 @@ internal sealed record CreateOrderRequest(
     ShippingAddressDto ShippingAddress,
     PaymentMethod PaymentMethod,
     InvoiceInfoDto? InvoiceInfo,
-    string? Note);
+    string? Note) : ICheckoutDetails;
+
+/// <summary>"Mua ngay": đặt thẳng một SKU, không đọc và không xóa giỏ hàng.</summary>
+internal sealed record BuyNowOrderRequest(
+    long SkuId,
+    int Quantity,
+    string CustomerName,
+    string Phone,
+    string? Email,
+    ShippingAddressDto ShippingAddress,
+    PaymentMethod PaymentMethod,
+    InvoiceInfoDto? InvoiceInfo,
+    string? Note) : ICheckoutDetails;
 
 internal sealed record LookupOrderRequest(string OrderCode, string Phone);
 
