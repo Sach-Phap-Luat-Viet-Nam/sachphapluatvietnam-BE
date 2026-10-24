@@ -15,7 +15,8 @@
 - **Test**: xUnit v3 (Microsoft.Testing.Platform) + NSubstitute + AwesomeAssertions
   (fork Apache-2.0 của FluentAssertions; FluentAssertions 8+ là license thương mại).
   Test cần dịch vụ thật dùng biến `SACHLUAT_TEST_DB`, `SACHLUAT_TEST_REDIS` (thiếu thì skip)
-- **CI**: GitHub Actions `.github/workflows/ci.yml` (format, build `-warnaserror`, test kèm PostgreSQL + Redis)
+- **CI**: GitHub Actions `.github/workflows/ci.yml` (format, build `-warnaserror`, test kèm PostgreSQL + Redis,
+  build Docker image)
 - **Frontend**: Next.js (React, TypeScript) + Tailwind CSS, repo riêng (quy tắc FE ở mục 8)
 - Hướng dẫn cài đặt, quy tắc module, thêm module mới, quy ước API: `docs/setup.md`
 
