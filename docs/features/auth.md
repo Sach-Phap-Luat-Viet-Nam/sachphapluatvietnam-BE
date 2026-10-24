@@ -58,6 +58,9 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
   `super_admin`, ngược lại → `CANNOT_MANAGE_USER` 422):
   - **Đổi vai trò** `PUT /admin/users/{id}/roles`: không đổi được vai trò của chính mình hay Super Admin khác (chỉ có
     1–2 tài khoản Super Admin), tránh tự gỡ hoặc tự cấp quyền.
+  - **Không cấp vai trò `super_admin` qua API**: `POST /admin/users` và `PUT .../roles` có `super_admin` trong `roles` →
+    `VALIDATION_ERROR` (400). Super Admin chỉ tạo từ cấu hình `Auth:BootstrapAdmin` hoặc thao tác trực tiếp trên CSDL,
+    để một tài khoản Super Admin bị lộ không tự nhân thêm Super Admin khác.
   - **Đặt mật khẩu mới** `PUT /admin/users/{id}/password`: dùng khi nhân viên/khách quên mật khẩu. Đổi hash và
     security stamp trong một lần ghi, mở khóa nếu đang bị khóa do sai mật khẩu (`access_failed_count = 0`,
     `lockout_end = null`), thu hồi mọi phiên. Không gửi email, admin tự báo mật khẩu cho người dùng.

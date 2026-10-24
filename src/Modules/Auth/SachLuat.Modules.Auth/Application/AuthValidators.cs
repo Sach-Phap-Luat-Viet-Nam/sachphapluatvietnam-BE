@@ -22,6 +22,13 @@ internal static class AuthRules
     public static IRuleBuilderOptions<T, string> ValidEmail<T>(this IRuleBuilder<T, string> rule) =>
         rule.NotEmpty().EmailAddress().MaximumLength(256);
 
+    /// <summary>
+    /// Vai trò Super Admin không cấp qua API (chỉ 1–2 tài khoản, tạo từ cấu hình <c>Auth:BootstrapAdmin</c> hoặc
+    /// thao tác trực tiếp trên CSDL), tránh một tài khoản Super Admin bị lộ tự nhân thêm Super Admin khác.
+    /// </summary>
+    public static IRuleBuilderOptions<T, string> NotSuperAdmin<T>(this IRuleBuilder<T, string> rule) =>
+        rule.NotEqual(Roles.SuperAdmin).WithMessage("Không cấp được vai trò Super Admin qua trang quản trị");
+
     public static IRuleBuilderOptions<T, string> ValidOtp<T>(this IRuleBuilder<T, string> rule) =>
         rule.NotEmpty().Matches("^[0-9]{6}$").WithMessage("Mã OTP gồm 6 chữ số");
 }
@@ -121,13 +128,17 @@ internal sealed class CreateStaffRequestValidator : AbstractValidator<CreateStaf
         RuleFor(request => request.Password).ValidPassword();
         RuleFor(request => request.Roles).NotEmpty();
         RuleForEach(request => request.Roles).Must(Roles.Staff.Contains).WithMessage("Vai trò nhân viên không hợp lệ");
+        RuleForEach(request => request.Roles).NotSuperAdmin();
     }
 }
 
 internal sealed class SetRolesRequestValidator : AbstractValidator<SetRolesRequest>
 {
-    public SetRolesRequestValidator() =>
+    public SetRolesRequestValidator()
+    {
         RuleForEach(request => request.Roles).Must(Roles.All.Contains).WithMessage("Vai trò không hợp lệ");
+        RuleForEach(request => request.Roles).NotSuperAdmin();
+    }
 }
 
 internal sealed class AdminUsersQueryValidator : PagedQueryValidator<AdminUsersQuery>

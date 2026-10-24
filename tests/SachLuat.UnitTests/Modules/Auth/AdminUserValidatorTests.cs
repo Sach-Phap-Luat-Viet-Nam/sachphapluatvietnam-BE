@@ -31,4 +31,22 @@ public sealed class AdminUserValidatorTests
 
         new ResetPasswordRequestValidator().Validate(new ResetPasswordRequest(password)).IsValid.Should().BeFalse();
     }
+
+    [Fact]
+    public void SetRoles_SuperAdmin_IsInvalid()
+    {
+        new SetRolesRequestValidator().Validate(new SetRolesRequest(["marketing", "super_admin"])).IsValid
+            .Should().BeFalse();
+        new SetRolesRequestValidator().Validate(new SetRolesRequest(["customer", "marketing"])).IsValid
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateStaff_SuperAdmin_IsInvalid()
+    {
+        var request = new CreateStaffRequest("sa@example.com", "Super Admin", "mat-khau-tam-1", ["super_admin"]);
+
+        new CreateStaffRequestValidator().Validate(request).IsValid.Should().BeFalse();
+        new CreateStaffRequestValidator().Validate(request with { Roles = ["accountant"] }).IsValid.Should().BeTrue();
+    }
 }

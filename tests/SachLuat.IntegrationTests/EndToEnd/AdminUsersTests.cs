@@ -96,9 +96,20 @@ public sealed class AdminUsersTests(EndToEndFactory factory)
         foreach (var targetId in new[] { adminId, bootstrapAdminId })
         {
             (await admin.PutAsync($"/api/v1/admin/users/{targetId}/roles",
-                    new { roles = new[] { "super_admin", "marketing" } }, HttpStatusCode.UnprocessableEntity))
+                    new { roles = new[] { "marketing" } }, HttpStatusCode.UnprocessableEntity))
                 .GetProperty("code").GetString().Should().Be("CANNOT_MANAGE_USER");
         }
+
+        // Không cấp vai trò Super Admin qua API, kể cả khi tạo nhân viên mới.
+        await admin.PutAsync($"/api/v1/admin/users/{customerId}/roles",
+            new { roles = new[] { "customer", "super_admin" } }, HttpStatusCode.BadRequest);
+        await admin.PostAsync("/api/v1/admin/users", new
+        {
+            email = "sa-moi@e2e.test",
+            fullName = "Super Admin mới",
+            password = "sa-moi-password-1",
+            roles = new[] { "super_admin" },
+        }, HttpStatusCode.BadRequest);
 
         // Khách hàng không gọi được API quản trị.
         await customer.GetAsync("/api/v1/admin/customers", HttpStatusCode.Forbidden);
