@@ -51,6 +51,39 @@ public sealed class PopupPersistenceTests(ContentDatabaseFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task GetRunning_ReturnsAtMostThreeRunningPopupsByPriority()
+    {
+        await using var scope = await fixture.CreateCleanScopeAsync();
+        var service = scope.ServiceProvider.GetRequiredService<PopupService>();
+
+        var low = await service.CreateAsync(Request("Ưu tiên thấp", priority: 1), CancellationToken);
+        var third = await service.CreateAsync(Request("Ưu tiên 5", priority: 5), CancellationToken);
+        var first = await service.CreateAsync(Request("Ưu tiên 30", priority: 30), CancellationToken);
+        var second = await service.CreateAsync(Request("Ưu tiên 20", priority: 20), CancellationToken);
+        await service.CreateAsync(Request("Đã tắt", priority: 100) with { IsActive = false }, CancellationToken);
+        await service.CreateAsync(
+            Request("Đã hết lịch", priority: 100) with { StartsAt = Now.AddDays(-7), EndsAt = Now.AddDays(-1) },
+            CancellationToken);
+
+        var running = await service.GetRunningAsync(CancellationToken);
+
+        running.Select(popup => popup.Id).Should().Equal(first.Id, second.Id, third.Id);
+        running.Select(popup => popup.Id).Should().NotContain(low.Id);
+        // Phần tử đầu cũng là popup tự bật lúc vào web.
+        (await service.GetActiveAsync(CancellationToken))!.Id.Should().Be(running[0].Id);
+    }
+
+    [Fact]
+    public async Task GetRunning_NothingRunning_ReturnsEmpty()
+    {
+        await using var scope = await fixture.CreateCleanScopeAsync();
+        var service = scope.ServiceProvider.GetRequiredService<PopupService>();
+        await service.CreateAsync(Request("Đã tắt", priority: 1) with { IsActive = false }, CancellationToken);
+
+        (await service.GetRunningAsync(CancellationToken)).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task CreateUpdateDelete_StoresSnakeCaseAndSoftDeletes()
     {
         await using var scope = await fixture.CreateCleanScopeAsync();

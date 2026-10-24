@@ -20,6 +20,13 @@ internal sealed class PopupsController(PopupService service) : ControllerBase
         var popup = await service.GetActiveAsync(cancellationToken);
         return popup is null ? NoContent() : popup;
     }
+
+    /// <summary>
+    /// Tối đa 3 popup đang chạy theo thứ tự ưu tiên để khách xem lại ở trang chủ; mảng rỗng khi không có.
+    /// </summary>
+    [HttpGet("running")]
+    public async Task<IReadOnlyList<PopupResponse>> GetRunning(CancellationToken cancellationToken) =>
+        await service.GetRunningAsync(cancellationToken);
 }
 
 [ApiController]
