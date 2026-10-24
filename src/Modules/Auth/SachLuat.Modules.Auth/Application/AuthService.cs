@@ -269,6 +269,11 @@ internal sealed class AuthService(
 
     private async Task EnsureNotLockedOutAsync(AppUser user)
     {
+        if (user.IsDisabled)
+        {
+            throw AuthErrors.AccountDisabled();
+        }
+
         if (await userManager.IsLockedOutAsync(user))
         {
             throw AuthErrors.AccountLocked();

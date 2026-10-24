@@ -1,4 +1,5 @@
 using SachLuat.Modules.Auth.Domain;
+using SachLuat.SharedKernel.Api;
 
 namespace SachLuat.Modules.Auth.Application;
 
@@ -69,6 +70,35 @@ internal sealed record MeResponse(
 internal sealed record CreateStaffRequest(string Email, string FullName, string Password, IReadOnlyList<string> Roles);
 
 internal sealed record SetRolesRequest(IReadOnlyList<string> Roles);
+
+internal sealed record ResetPasswordRequest(string NewPassword);
+
+/// <summary>Lọc danh sách nhân viên/khách hàng: <see cref="Q"/> tìm trong email, họ tên, số điện thoại.</summary>
+internal sealed class AdminUsersQuery : PagedQuery
+{
+    public string? Q { get; set; }
+}
+
+/// <param name="IsLocked">Đang bị khóa: do Super Admin khóa, hoặc tạm khóa 15 phút vì đăng nhập sai nhiều lần.</param>
+/// <param name="LockedUntil">Hết hạn tạm khóa; null khi không khóa hoặc bị Super Admin khóa (không thời hạn).</param>
+internal sealed record AdminUserResponse(
+    long Id,
+    string Email,
+    string FullName,
+    string? PhoneNumber,
+    IReadOnlyList<string> Roles,
+    bool TwoFactorEnabled,
+    bool RequiresTwoFactorSetup,
+    bool IsLocked,
+    DateTime? LockedUntil,
+    DateTime CreatedAt);
+
+internal sealed record AdminCustomerResponse(
+    AdminUserResponse Account,
+    DateOnly? BirthDate,
+    Occupation? Occupation,
+    IReadOnlyList<AddressResponse> Addresses,
+    InvoiceInfoResponse? InvoiceInfo);
 
 /// <param name="RevokedSessions">Số phiên (refresh token còn hiệu lực) vừa bị thu hồi; 0 khi user không đăng nhập.</param>
 internal sealed record LogoutUserResponse(int RevokedSessions);

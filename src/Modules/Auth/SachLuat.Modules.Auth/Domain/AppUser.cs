@@ -15,6 +15,11 @@ internal sealed class AppUser : IdentityUser<long>, IAuditable
     public DateTime CreatedAt { get; private set; }
 
     public DateTime UpdatedAt { get; private set; }
+
+    /// <summary>Super Admin khóa tài khoản: khóa không thời hạn, khác tạm khóa 15 phút do đăng nhập sai.</summary>
+    public bool IsDisabled => LockoutEnd == DisabledLockoutEnd;
+
+    public static DateTimeOffset DisabledLockoutEnd => DateTimeOffset.MaxValue;
 }
 
 internal enum Occupation

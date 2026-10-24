@@ -115,6 +115,13 @@ internal sealed class ProfileService(
         return ToResponse(invoiceInfo);
     }
 
+    public async Task<InvoiceInfoResponse?> GetInvoiceInfoAsync(long userId, CancellationToken cancellationToken)
+    {
+        var invoiceInfo = await dbContext.UserInvoiceInfos.AsNoTracking()
+            .SingleOrDefaultAsync(info => info.UserId == userId, cancellationToken);
+        return invoiceInfo is null ? null : ToResponse(invoiceInfo);
+    }
+
     public Task DeleteInvoiceInfoAsync(long userId, CancellationToken cancellationToken) =>
         dbContext.UserInvoiceInfos.Where(info => info.UserId == userId).ExecuteDeleteAsync(cancellationToken);
 
