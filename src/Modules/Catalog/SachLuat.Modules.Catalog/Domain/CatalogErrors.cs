@@ -13,9 +13,14 @@ internal static class CatalogErrors
     public const string PriceInvalidCode = "PRICE_INVALID";
     public const string EditionNotFoundCode = "EDITION_NOT_FOUND";
     public const string CategoryParentInvalidCode = "CATEGORY_PARENT_INVALID";
+    public const string PriceScheduleOverlapCode = "PRICE_SCHEDULE_OVERLAP";
+    public const string PriceScheduleEndedCode = "PRICE_SCHEDULE_ENDED";
 
     public static BusinessException Required(string fieldLabel) =>
         new(ErrorCodes.ValidationError, $"Thiếu {fieldLabel}", StatusCodes.Status400BadRequest);
+
+    public static BusinessException Invalid(string message) =>
+        new(ErrorCodes.ValidationError, message, StatusCodes.Status400BadRequest);
 
     public static BusinessException IsbnInvalid() =>
         new(IsbnInvalidCode, "ISBN không hợp lệ (13 chữ số, bắt đầu bằng 978 hoặc 979, đúng số kiểm tra)");
@@ -34,6 +39,15 @@ internal static class CatalogErrors
 
     public static BusinessException PriceInvalid() =>
         new(PriceInvalidCode, "Giá phải là số nguyên VNĐ lớn hơn 0 và giá bán không vượt giá bìa");
+
+    public static BusinessException PriceScheduleNotLower() =>
+        new(PriceInvalidCode, "Giá theo lịch phải là số nguyên VNĐ và thấp hơn giá bán thường");
+
+    public static BusinessException PriceScheduleOverlap() => new(
+        PriceScheduleOverlapCode, "SKU đã có lịch giá khác trong khoảng thời gian này", StatusCodes.Status409Conflict);
+
+    public static BusinessException PriceScheduleEnded() =>
+        new(PriceScheduleEndedCode, "Lịch giá đã kết thúc, không sửa hoặc xóa được");
 
     public static BusinessException PhysicalInfoInvalid() =>
         new(ErrorCodes.ValidationError, "Số trang và trọng lượng phải lớn hơn 0", StatusCodes.Status400BadRequest);

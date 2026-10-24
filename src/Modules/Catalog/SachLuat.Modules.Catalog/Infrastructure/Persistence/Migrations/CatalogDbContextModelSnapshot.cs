@@ -396,6 +396,59 @@ namespace SachLuat.Modules.Catalog.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SachLuat.Modules.Catalog.Domain.Editions.SkuPriceSchedule", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("EndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("note");
+
+                    b.Property<decimal>("SalePrice")
+                        .HasPrecision(12)
+                        .HasColumnType("numeric(12,0)")
+                        .HasColumnName("sale_price");
+
+                    b.Property<long>("SkuId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sku_id");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sku_price_schedules");
+
+                    b.HasIndex("SkuId", "EndsAt")
+                        .HasDatabaseName("ix_sku_price_schedules_sku_id_ends_at");
+
+                    b.ToTable("sku_price_schedules", "catalog", t =>
+                        {
+                            t.HasCheckConstraint("ck_sku_price_schedules_period", "ends_at > starts_at");
+
+                            t.HasCheckConstraint("ck_sku_price_schedules_price", "sale_price > 0");
+                        });
+                });
+
             modelBuilder.Entity("SachLuat.Modules.Catalog.Domain.LegalDocuments.LegalDocument", b =>
                 {
                     b.Property<long>("Id")
@@ -540,6 +593,16 @@ namespace SachLuat.Modules.Catalog.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_skus_editions_edition_id");
                 });
 
+            modelBuilder.Entity("SachLuat.Modules.Catalog.Domain.Editions.SkuPriceSchedule", b =>
+                {
+                    b.HasOne("SachLuat.Modules.Catalog.Domain.Editions.Sku", null)
+                        .WithMany("PriceSchedules")
+                        .HasForeignKey("SkuId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sku_price_schedules_skus_sku_id");
+                });
+
             modelBuilder.Entity("book_authors", b =>
                 {
                     b.HasOne("SachLuat.Modules.Catalog.Domain.Authors.Author", null)
@@ -599,6 +662,11 @@ namespace SachLuat.Modules.Catalog.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("SachLuat.Modules.Catalog.Domain.Editions.Edition", b =>
                 {
                     b.Navigation("Skus");
+                });
+
+            modelBuilder.Entity("SachLuat.Modules.Catalog.Domain.Editions.Sku", b =>
+                {
+                    b.Navigation("PriceSchedules");
                 });
 #pragma warning restore 612, 618
         }

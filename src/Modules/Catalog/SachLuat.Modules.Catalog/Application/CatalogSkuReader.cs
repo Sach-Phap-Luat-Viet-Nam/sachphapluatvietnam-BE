@@ -6,7 +6,7 @@ using SachLuat.SharedKernel.Persistence;
 
 namespace SachLuat.Modules.Catalog.Application;
 
-internal sealed class CatalogSkuReader(CatalogDbContext dbContext) : ICatalogSkuReader
+internal sealed class CatalogSkuReader(CatalogDbContext dbContext, TimeProvider timeProvider) : ICatalogSkuReader
 {
     public async Task<IReadOnlyDictionary<long, SkuInfo>> GetSkusAsync(
         IReadOnlyCollection<long> skuIds,
@@ -18,6 +18,7 @@ internal sealed class CatalogSkuReader(CatalogDbContext dbContext) : ICatalogSku
         }
 
         var ids = skuIds.Distinct().ToList();
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var rows = await (
                 from sku in dbContext.Skus.AsNoTracking()
                 join edition in dbContext.Editions.AsNoTracking() on sku.EditionId equals edition.Id
@@ -36,7 +37,12 @@ internal sealed class CatalogSkuReader(CatalogDbContext dbContext) : ICatalogSku
                     edition.Isbn,
                     sku.CoverType,
                     sku.ListPrice,
-                    sku.SalePrice,
+                    // Giá hiện hành, khớp Sku.CurrentPriceAt.
+                    CurrentPrice = sku.PriceSchedules
+                        .Where(schedule => schedule.StartsAt <= now && schedule.EndsAt > now
+                            && schedule.SalePrice < sku.SalePrice)
+                        .Select(schedule => (decimal?)schedule.SalePrice)
+                        .FirstOrDefault() ?? sku.SalePrice,
                     edition.WeightGram,
                     edition.CoverImageUrl,
                     edition.IsLatest,
@@ -55,7 +61,7 @@ internal sealed class CatalogSkuReader(CatalogDbContext dbContext) : ICatalogSku
             row.Isbn,
             SnakeCaseEnumConverter<CoverType>.ToProvider(row.CoverType),
             row.ListPrice,
-            row.SalePrice,
+            row.CurrentPrice,
             row.WeightGram,
             row.CoverImageUrl,
             row.IsLatest,

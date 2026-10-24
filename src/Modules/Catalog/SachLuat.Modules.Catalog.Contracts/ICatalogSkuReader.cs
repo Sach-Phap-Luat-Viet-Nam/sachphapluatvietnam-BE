@@ -9,6 +9,7 @@ public interface ICatalogSkuReader
 }
 
 /// <param name="CoverType">Giá trị snake_case: <c>paperback</c>, <c>hardcover</c>.</param>
+/// <param name="SalePrice">Giá bán hiện hành (VNĐ), đã áp lịch giá đang chạy.</param>
 /// <param name="IsSellable">Đầu sách đang hiển thị và ấn bản đang bán (<c>on_sale</c> hoặc <c>clearance</c>).</param>
 public sealed record SkuInfo(
     long SkuId,

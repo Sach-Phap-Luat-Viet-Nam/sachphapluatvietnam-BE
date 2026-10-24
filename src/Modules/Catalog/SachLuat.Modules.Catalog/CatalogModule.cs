@@ -34,6 +34,7 @@ public sealed class CatalogModule : IModule
 
         services.AddScoped<StorefrontQueryService>();
         services.AddScoped<CatalogAdminService>();
+        services.AddScoped<PriceScheduleAdminService>();
         services.AddScoped<ReferenceDataAdminService>();
         services.AddScoped<ICatalogSkuReader, CatalogSkuReader>();
         services.AddCloudinaryUploads(configuration);

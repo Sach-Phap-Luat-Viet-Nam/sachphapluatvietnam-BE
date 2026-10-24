@@ -95,6 +95,17 @@ internal sealed class UpdateSkuRequestValidator : AbstractValidator<UpdateSkuReq
     }
 }
 
+internal sealed class UpsertPriceScheduleRequestValidator : AbstractValidator<UpsertPriceScheduleRequest>
+{
+    public UpsertPriceScheduleRequestValidator()
+    {
+        RuleFor(request => request.SalePrice).ValidVnd();
+        RuleFor(request => request.EndsAt).GreaterThan(request => request.StartsAt)
+            .WithMessage("Thời gian kết thúc phải sau thời gian bắt đầu");
+        RuleFor(request => request.Note).MaximumLength(SkuPriceSchedule.NoteMaxLength);
+    }
+}
+
 internal sealed class UpsertCategoryRequestValidator : AbstractValidator<UpsertCategoryRequest>
 {
     public UpsertCategoryRequestValidator()

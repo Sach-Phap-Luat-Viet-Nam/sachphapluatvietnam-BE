@@ -11,7 +11,10 @@ using SachLuat.SharedKernel.Persistence;
 namespace SachLuat.Modules.Catalog.Application.Admin;
 
 /// <summary>Quản lý đầu sách, ấn bản, SKU trên Admin (FR-61, FR-62, FR-63).</summary>
-internal sealed class CatalogAdminService(CatalogDbContext dbContext, IInventoryService inventoryService)
+internal sealed class CatalogAdminService(
+    CatalogDbContext dbContext,
+    IInventoryService inventoryService,
+    TimeProvider timeProvider)
 {
     public async Task<PagedResponse<AdminBookSummaryResponse>> ListBooksAsync(
         AdminBooksQuery query,
@@ -47,10 +50,12 @@ internal sealed class CatalogAdminService(CatalogDbContext dbContext, IInventory
 
     public async Task<AdminBookResponse> GetBookAsync(long bookId, CancellationToken cancellationToken)
     {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var book = await dbContext.Books.AsNoTracking()
             .Include(b => b.Categories)
             .Include(b => b.Authors)
             .Include(b => b.Editions).ThenInclude(edition => edition.Skus)
+                .ThenInclude(sku => sku.PriceSchedules.Where(schedule => schedule.EndsAt > now))
             .Include(b => b.Editions).ThenInclude(edition => edition.LegalDocuments)
             .AsSplitQuery()
             .SingleOrDefaultAsync(b => b.Id == bookId, cancellationToken)
@@ -74,7 +79,7 @@ internal sealed class CatalogAdminService(CatalogDbContext dbContext, IInventory
             book.Editions
                 .OrderByDescending(edition => edition.IsLatest)
                 .ThenByDescending(edition => edition.Id)
-                .Select(edition => StorefrontQueryService.ToEditionResponse(edition, stock))
+                .Select(edition => StorefrontQueryService.ToEditionResponse(edition, stock, now))
                 .ToList(),
             book.CreatedAt,
             book.UpdatedAt);

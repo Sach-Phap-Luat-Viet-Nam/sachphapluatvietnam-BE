@@ -19,5 +19,10 @@ internal sealed class SkuConfiguration : IEntityTypeConfiguration<Sku>
         // Tiền VNĐ: số nguyên, không dùng float (mục 10.3).
         builder.Property(sku => sku.ListPrice).HasPrecision(12, 0);
         builder.Property(sku => sku.SalePrice).HasPrecision(12, 0);
+
+        builder.HasMany(sku => sku.PriceSchedules)
+            .WithOne()
+            .HasForeignKey(schedule => schedule.SkuId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

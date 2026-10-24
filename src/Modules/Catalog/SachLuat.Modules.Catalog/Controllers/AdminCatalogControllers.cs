@@ -74,6 +74,36 @@ internal sealed class AdminSkusController(CatalogAdminService service) : Control
 }
 
 [ApiController]
+[Authorize(Policy = Policies.PricingAdmin)]
+[Route(ApiRoutes.AdminV1)]
+internal sealed class AdminPriceSchedulesController(PriceScheduleAdminService service) : ControllerBase
+{
+    [HttpGet("skus/{skuId:long}/price-schedules")]
+    public Task<IReadOnlyList<PriceScheduleResponse>> List(long skuId, CancellationToken cancellationToken) =>
+        service.ListAsync(skuId, cancellationToken);
+
+    [HttpPost("skus/{skuId:long}/price-schedules")]
+    public async Task<ActionResult<PriceScheduleResponse>> Create(
+        long skuId,
+        UpsertPriceScheduleRequest request,
+        CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, await service.CreateAsync(skuId, request, cancellationToken));
+
+    [HttpPut("price-schedules/{id:long}")]
+    public Task<PriceScheduleResponse> Update(
+        long id,
+        UpsertPriceScheduleRequest request,
+        CancellationToken cancellationToken) => service.UpdateAsync(id, request, cancellationToken);
+
+    [HttpDelete("price-schedules/{id:long}")]
+    public async Task<IActionResult> Delete(long id, CancellationToken cancellationToken)
+    {
+        await service.DeleteAsync(id, cancellationToken);
+        return NoContent();
+    }
+}
+
+[ApiController]
 [Authorize(Policy = Policies.CatalogAdmin)]
 [Route(ApiRoutes.AdminV1 + "/categories")]
 internal sealed class AdminCategoriesController(ReferenceDataAdminService service) : ControllerBase

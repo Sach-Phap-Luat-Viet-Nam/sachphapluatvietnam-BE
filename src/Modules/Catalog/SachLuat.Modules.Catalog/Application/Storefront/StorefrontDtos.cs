@@ -27,6 +27,9 @@ internal sealed class BooksQuery : PagedQuery
     /// <summary>Số hiệu văn bản, ví dụ <c>91/2015/QH13</c> (FR-14).</summary>
     public string? LegalDocument { get; set; }
 
+    /// <summary><c>true</c>: chỉ sách có SKU đang bán thấp hơn giá bìa (FR-12).</summary>
+    public bool OnSale { get; set; }
+
     public string Sort { get; set; } = BookSorts.Newest;
 }
 
@@ -52,6 +55,7 @@ internal sealed record BookSummaryResponse(
     decimal? SalePrice,
     decimal? ListPrice,
     int? DiscountPercent,
+    DateTime? SaleEndsAt,
     bool InStock);
 
 internal sealed record NamedReference(long Id, string Name, string Slug);
@@ -64,13 +68,18 @@ internal sealed record LegalDocumentResponse(
     DateOnly? IssuedDate,
     DateOnly? EffectiveDate);
 
+/// <param name="SalePrice">Giá khách trả lúc này (đã áp lịch giá).</param>
+/// <param name="RegularSalePrice">Giá bán thường, khi không có lịch giá.</param>
+/// <param name="SaleEndsAt">Hết giá lịch lúc này (UTC); null khi đang bán giá thường.</param>
 internal sealed record SkuResponse(
     long Id,
     string SkuCode,
     CoverType CoverType,
     decimal ListPrice,
     decimal SalePrice,
+    decimal RegularSalePrice,
     int DiscountPercent,
+    DateTime? SaleEndsAt,
     bool AllowPreorder,
     bool InStock);
 

@@ -1,5 +1,6 @@
 using SachLuat.Modules.Catalog.Application.Storefront;
 using SachLuat.Modules.Catalog.Domain;
+using SachLuat.Modules.Catalog.Domain.Editions;
 using SachLuat.SharedKernel.Api;
 
 namespace SachLuat.Modules.Catalog.Application.Admin;
@@ -57,6 +58,27 @@ internal sealed record CreateSkuRequest(
     bool AllowPreorder);
 
 internal sealed record UpdateSkuRequest(decimal ListPrice, decimal SalePrice, bool AllowPreorder);
+
+/// <param name="StartsAt">Có offset (ví dụ <c>2026-11-01T00:00:00+07:00</c>); lưu UTC.</param>
+/// <param name="EndsAt">Hết giảm giá từ thời điểm này.</param>
+internal sealed record UpsertPriceScheduleRequest(
+    decimal SalePrice,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt,
+    string? Note);
+
+/// <param name="DiscountPercent">% giảm so với giá bìa.</param>
+internal sealed record PriceScheduleResponse(
+    long Id,
+    long SkuId,
+    decimal SalePrice,
+    int DiscountPercent,
+    DateTime StartsAt,
+    DateTime EndsAt,
+    string? Note,
+    PriceScheduleStatus Status,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
 
 internal sealed record UpsertCategoryRequest(string Name, string Slug, long? ParentId, int SortOrder);
 

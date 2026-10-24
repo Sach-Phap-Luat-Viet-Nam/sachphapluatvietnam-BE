@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using SachLuat.Modules.Catalog.Domain;
 using SachLuat.Modules.Catalog.Domain.Books;
@@ -10,17 +11,21 @@ using SachLuat.SharedKernel.Persistence;
 namespace SachLuat.Modules.Catalog.Application.Storefront;
 
 /// <summary>Truy vấn chỉ đọc cho website khách hàng: chỉ đầu sách <c>active</c> và ấn bản đã công bố.</summary>
-internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInventoryService inventoryService)
+internal sealed class StorefrontQueryService(
+    CatalogDbContext dbContext,
+    IInventoryService inventoryService,
+    TimeProvider timeProvider)
 {
     public async Task<PagedResponse<BookSummaryResponse>> ListBooksAsync(
         BooksQuery query,
         CancellationToken cancellationToken)
     {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var books = PublishedBooks();
-        books = await ApplyFiltersAsync(books, query, cancellationToken);
+        books = await ApplyFiltersAsync(books, query, now, cancellationToken);
 
         var total = await books.CountAsync(cancellationToken);
-        var page = await Sort(books, query.Sort)
+        var page = await Sort(books, query.Sort, now)
             .Skip(query.Skip)
             .Take(query.Limit)
             .Select(book => new
@@ -38,7 +43,17 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
                         edition.CoverImageUrl,
                         edition.UpdatedToText,
                         edition.Status,
-                        Skus = edition.Skus.Select(sku => new { sku.Id, sku.ListPrice, sku.SalePrice }).ToList(),
+                        Skus = edition.Skus.Select(sku => new
+                        {
+                            sku.Id,
+                            sku.ListPrice,
+                            sku.SalePrice,
+                            Schedule = sku.PriceSchedules
+                                .Where(schedule => schedule.StartsAt <= now && schedule.EndsAt > now
+                                    && schedule.SalePrice < sku.SalePrice)
+                                .Select(schedule => new { schedule.SalePrice, schedule.EndsAt })
+                                .FirstOrDefault(),
+                        }).ToList(),
                     })
                     .FirstOrDefault(),
             })
@@ -49,7 +64,14 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
 
         var items = page.Select(book =>
         {
-            var cheapest = book.Latest?.Skus.MinBy(sku => sku.SalePrice);
+            var cheapest = book.Latest?.Skus
+                .Select(sku => new
+                {
+                    sku.ListPrice,
+                    Price = sku.Schedule?.SalePrice ?? sku.SalePrice,
+                    SaleEndsAt = sku.Schedule?.EndsAt,
+                })
+                .MinBy(sku => sku.Price);
             return new BookSummaryResponse(
                 book.Id,
                 book.Title,
@@ -60,9 +82,10 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
                 book.Latest?.CoverImageUrl,
                 book.Latest?.UpdatedToText,
                 book.Latest?.Status,
-                cheapest?.SalePrice,
+                cheapest?.Price,
                 cheapest?.ListPrice,
-                cheapest is null ? null : Pricing.DiscountPercent(cheapest.ListPrice, cheapest.SalePrice),
+                cheapest is null ? null : Pricing.DiscountPercent(cheapest.ListPrice, cheapest.Price),
+                cheapest?.SaleEndsAt,
                 InStock: book.Latest?.Skus.Any(sku => stock.GetValueOrDefault(sku.Id) > 0) ?? false);
         }).ToList();
 
@@ -71,11 +94,13 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
 
     public async Task<BookDetailResponse> GetBookAsync(string slug, CancellationToken cancellationToken)
     {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         var book = await PublishedBooks()
             .Include(b => b.Categories)
             .Include(b => b.Authors)
             .Include(b => b.Editions.Where(edition => edition.Status != EditionStatus.Draft))
                 .ThenInclude(edition => edition.Skus)
+                .ThenInclude(sku => sku.PriceSchedules.Where(schedule => schedule.EndsAt > now))
             .Include(b => b.Editions.Where(edition => edition.Status != EditionStatus.Draft))
                 .ThenInclude(edition => edition.LegalDocuments)
             .AsSplitQuery()
@@ -89,7 +114,7 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
             .OrderByDescending(edition => edition.IsLatest)
             .ThenByDescending(edition => edition.ReleaseDate)
             .ThenByDescending(edition => edition.Id)
-            .Select(edition => ToEditionResponse(edition, stock))
+            .Select(edition => ToEditionResponse(edition, stock, now))
             .ToList();
 
         return new BookDetailResponse(
@@ -128,7 +153,11 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
         return [.. Build(null), .. orphans];
     }
 
-    internal static EditionResponse ToEditionResponse(Edition edition, IReadOnlyDictionary<long, int> stock) => new(
+    /// <remarks>Cần nạp lịch giá chưa kết thúc của các SKU để tính giá hiện hành.</remarks>
+    internal static EditionResponse ToEditionResponse(
+        Edition edition,
+        IReadOnlyDictionary<long, int> stock,
+        DateTime now) => new(
         edition.Id,
         edition.EditionName,
         edition.Isbn,
@@ -147,15 +176,7 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
         edition.ReleaseDate,
         edition.IsLatest,
         edition.Status,
-        edition.Skus.OrderBy(sku => sku.CoverType).Select(sku => new SkuResponse(
-            sku.Id,
-            sku.SkuCode,
-            sku.CoverType,
-            sku.ListPrice,
-            sku.SalePrice,
-            Pricing.DiscountPercent(sku.ListPrice, sku.SalePrice),
-            sku.AllowPreorder,
-            InStock: stock.GetValueOrDefault(sku.Id) > 0)).ToList(),
+        edition.Skus.OrderBy(sku => sku.CoverType).Select(sku => ToSkuResponse(sku, stock, now)).ToList(),
         edition.LegalDocuments.Select(document => new LegalDocumentResponse(
             document.Id,
             document.DocNumber,
@@ -163,6 +184,23 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
             document.Title,
             document.IssuedDate,
             document.EffectiveDate)).ToList());
+
+    private static SkuResponse ToSkuResponse(Sku sku, IReadOnlyDictionary<long, int> stock, DateTime now)
+    {
+        var schedule = sku.ActivePriceScheduleAt(now);
+        var price = schedule?.SalePrice ?? sku.SalePrice;
+        return new SkuResponse(
+            sku.Id,
+            sku.SkuCode,
+            sku.CoverType,
+            sku.ListPrice,
+            price,
+            sku.SalePrice,
+            Pricing.DiscountPercent(sku.ListPrice, price),
+            schedule?.EndsAt,
+            sku.AllowPreorder,
+            InStock: stock.GetValueOrDefault(sku.Id) > 0);
+    }
 
     // Đầu sách hiển thị trên website: active và ấn bản mới nhất đã công bố (không còn nháp).
     private IQueryable<Book> PublishedBooks() => dbContext.Books.AsNoTracking()
@@ -172,6 +210,7 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
     private async Task<IQueryable<Book>> ApplyFiltersAsync(
         IQueryable<Book> books,
         BooksQuery query,
+        DateTime now,
         CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(query.Q))
@@ -208,27 +247,52 @@ internal sealed class StorefrontQueryService(CatalogDbContext dbContext, IInvent
                 || EF.Functions.ILike(edition.UpdatedToText ?? string.Empty, pattern, LikePatterns.EscapeCharacter)));
         }
 
+        // Lọc và sắp xếp theo giá hiện hành (đã áp lịch giá), khớp Sku.CurrentPriceAt.
         var hasCover = SnakeCaseEnumConverter<CoverType>.TryParse(query.Cover, out var cover);
         if (hasCover || query.MinPrice is not null || query.MaxPrice is not null)
         {
+            books = books.Where(book => book.Editions.Any(edition => edition.IsLatest && edition.Skus
+                .Where(sku => !hasCover || sku.CoverType == cover)
+                .Select(sku => sku.PriceSchedules
+                    .Where(schedule => schedule.StartsAt <= now && schedule.EndsAt > now
+                        && schedule.SalePrice < sku.SalePrice)
+                    .Select(schedule => (decimal?)schedule.SalePrice)
+                    .FirstOrDefault() ?? sku.SalePrice)
+                .Any(price => (query.MinPrice == null || price >= query.MinPrice)
+                    && (query.MaxPrice == null || price <= query.MaxPrice))));
+        }
+
+        if (query.OnSale)
+        {
             books = books.Where(book => book.Editions.Any(edition => edition.IsLatest && edition.Skus.Any(sku =>
-                (!hasCover || sku.CoverType == cover)
-                && (query.MinPrice == null || sku.SalePrice >= query.MinPrice)
-                && (query.MaxPrice == null || sku.SalePrice <= query.MaxPrice))));
+                sku.SalePrice < sku.ListPrice
+                || sku.PriceSchedules.Any(schedule => schedule.StartsAt <= now && schedule.EndsAt > now
+                    && schedule.SalePrice < sku.SalePrice))));
         }
 
         return books;
     }
 
-    private static IQueryable<Book> Sort(IQueryable<Book> books, string sort) => sort switch
+    private static IQueryable<Book> Sort(IQueryable<Book> books, string sort, DateTime now)
     {
-        BookSorts.PriceAsc => books.OrderBy(book => book.Editions.Where(edition => edition.IsLatest)
-            .SelectMany(edition => edition.Skus).Min(sku => (decimal?)sku.SalePrice)).ThenBy(book => book.Id),
-        BookSorts.PriceDesc => books.OrderByDescending(book => book.Editions.Where(edition => edition.IsLatest)
-            .SelectMany(edition => edition.Skus).Min(sku => (decimal?)sku.SalePrice)).ThenBy(book => book.Id),
-        _ => books.OrderByDescending(book => book.Editions.Where(edition => edition.IsLatest)
-            .Max(edition => edition.ReleaseDate)).ThenByDescending(book => book.Id),
-    };
+        // Giá rẻ nhất của ấn bản mới nhất, theo giá hiện hành.
+        Expression<Func<Book, decimal?>> cheapestPrice = book => book.Editions
+            .Where(edition => edition.IsLatest)
+            .SelectMany(edition => edition.Skus)
+            .Min(sku => sku.PriceSchedules
+                .Where(schedule => schedule.StartsAt <= now && schedule.EndsAt > now
+                    && schedule.SalePrice < sku.SalePrice)
+                .Select(schedule => (decimal?)schedule.SalePrice)
+                .FirstOrDefault() ?? sku.SalePrice);
+
+        return sort switch
+        {
+            BookSorts.PriceAsc => books.OrderBy(cheapestPrice).ThenBy(book => book.Id),
+            BookSorts.PriceDesc => books.OrderByDescending(cheapestPrice).ThenBy(book => book.Id),
+            _ => books.OrderByDescending(book => book.Editions.Where(edition => edition.IsLatest)
+                .Max(edition => edition.ReleaseDate)).ThenByDescending(book => book.Id),
+        };
+    }
 
     private async Task<List<long>> GetCategoryWithDescendantIdsAsync(string slug, CancellationToken cancellationToken)
     {

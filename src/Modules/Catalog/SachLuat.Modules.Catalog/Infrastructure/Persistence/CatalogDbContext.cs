@@ -20,6 +20,8 @@ internal sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> option
 
     public DbSet<Sku> Skus => Set<Sku>();
 
+    public DbSet<SkuPriceSchedule> SkuPriceSchedules => Set<SkuPriceSchedule>();
+
     public DbSet<Category> Categories => Set<Category>();
 
     public DbSet<Author> Authors => Set<Author>();

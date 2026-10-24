@@ -8,6 +8,9 @@ namespace SachLuat.SharedKernel.Security;
 public static class Policies
 {
     public const string CatalogAdmin = "catalog_admin";
+
+    /// <summary>Lịch giá, khuyến mãi: product manager lẫn marketing cùng chạy chương trình giảm giá.</summary>
+    public const string PricingAdmin = "pricing_admin";
     public const string InventoryAdmin = "inventory_admin";
     public const string InventoryApprove = "inventory_approve";
     public const string OrdersRead = "orders_read";
@@ -18,6 +21,7 @@ public static class Policies
     public static readonly IReadOnlyDictionary<string, string[]> StaffRoles = new Dictionary<string, string[]>
     {
         [CatalogAdmin] = [Roles.SuperAdmin, Roles.ProductManager],
+        [PricingAdmin] = [Roles.SuperAdmin, Roles.ProductManager, Roles.Marketing],
         [InventoryAdmin] = [Roles.SuperAdmin, Roles.WarehouseKeeper],
         [InventoryApprove] = [Roles.SuperAdmin],
         [OrdersRead] = [Roles.SuperAdmin, Roles.OrderManager, Roles.CustomerService, Roles.Accountant],
