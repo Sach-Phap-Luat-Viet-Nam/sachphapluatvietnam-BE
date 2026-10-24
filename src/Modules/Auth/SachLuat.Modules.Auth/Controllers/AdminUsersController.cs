@@ -49,6 +49,6 @@ internal sealed class AdminUsersController(UserAdminService userAdminService, IC
         userAdminService.SetActiveAsync(currentUser.RequireUserId(), id, isActive: true, cancellationToken);
 
     [HttpPost("{id:long}/impersonate")]
-    public Task<AuthResponse> Impersonate(long id) =>
-        userAdminService.ImpersonateAsync(currentUser.RequireUserId(), id);
+    public Task<AuthResponse> Impersonate(long id, CancellationToken cancellationToken) =>
+        userAdminService.ImpersonateAsync(currentUser.RequireUserId(), id, cancellationToken);
 }

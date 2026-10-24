@@ -60,7 +60,8 @@ public sealed class AuthSecurityTests
     public async Task AccessToken_IsNotAcceptedAsTwoFactorTicket()
     {
         var service = new TokenService(Options.Create(Jwt), TimeProvider.System);
-        var accessToken = service.CreateAccessToken(new AppUser { Id = 42, Email = "a@b.vn" }, ["customer"], false);
+        var accessToken = service.CreateAccessToken(
+            new AppUser { Id = 42, Email = "a@b.vn" }, ["customer"], isMultiFactor: false, sessionVersion: 0);
 
         (await service.ValidateTwoFactorTicketAsync(accessToken.Token)).Should().BeNull();
     }
@@ -71,7 +72,9 @@ public sealed class AuthSecurityTests
         var service = new TokenService(Options.Create(Jwt), TimeProvider.System);
 
         var token = new JsonWebToken(
-            service.CreateAccessToken(new AppUser { Id = 42, Email = "a@b.vn" }, ["customer"], false).Token);
+            service.CreateAccessToken(
+                new AppUser { Id = 42, Email = "a@b.vn" }, ["customer"], isMultiFactor: false, sessionVersion: 0)
+            .Token);
 
         token.GetClaim(AuthClaimTypes.LoginVia).Value.Should().Be(AuthClaimTypes.LoginViaPortal);
         token.TryGetClaim(AuthClaimTypes.ImpersonatorId, out _).Should().BeFalse();
@@ -83,12 +86,16 @@ public sealed class AuthSecurityTests
         var service = new TokenService(Options.Create(Jwt), TimeProvider.System);
 
         var token = new JsonWebToken(service.CreateAccessToken(
-            new AppUser { Id = 42, Email = "a@b.vn" }, ["warehouse_keeper"], isMultiFactor: true, impersonatorId: 1)
-            .Token);
+            new AppUser { Id = 42, Email = "a@b.vn" },
+            ["warehouse_keeper"],
+            isMultiFactor: true,
+            sessionVersion: 3,
+            impersonatorId: 1).Token);
 
         token.GetClaim(AuthClaimTypes.Subject).Value.Should().Be("42");
         token.GetClaim(AuthClaimTypes.LoginVia).Value.Should().Be(AuthClaimTypes.LoginViaAdmin);
         token.GetClaim(AuthClaimTypes.ImpersonatorId).Value.Should().Be("1");
+        token.GetClaim(AuthClaimTypes.SessionVersion).Value.Should().Be("3");
         token.GetClaim(AuthClaimTypes.AuthenticationMethod).Value.Should().Be(AuthClaimTypes.MultiFactor);
     }
 

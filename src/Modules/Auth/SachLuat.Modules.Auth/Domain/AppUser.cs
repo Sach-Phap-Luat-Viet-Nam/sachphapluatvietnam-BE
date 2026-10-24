@@ -15,6 +15,12 @@ internal sealed class AppUser : IdentityUser<long>, IAuditable
     /// <summary>Giao diện sáng/tối khách đã chọn; null là chưa chọn (FE dùng mặc định tối).</summary>
     public ColorTheme? Theme { get; set; }
 
+    /// <summary>
+    /// Tăng mỗi lần kết thúc mọi phiên của tài khoản (xem <c>AuthClaimTypes.SessionVersion</c>). Chỉ tăng bằng câu
+    /// UPDATE nguyên tử trong <c>AuthService</c>, không ghi qua <c>UserManager.UpdateAsync</c>.
+    /// </summary>
+    public int SessionVersion { get; set; }
+
     /// <summary>false: Super Admin đã vô hiệu hóa, không đăng nhập hay làm mới phiên được nữa.</summary>
     public bool IsActive { get; set; } = true;
 

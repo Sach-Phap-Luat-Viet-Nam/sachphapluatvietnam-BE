@@ -329,6 +329,12 @@ namespace SachLuat.Modules.Auth.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("security_stamp");
 
+                    b.Property<int>("SessionVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("session_version");
+
                     b.Property<string>("Theme")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")

@@ -34,11 +34,13 @@ internal sealed class TokenService(IOptions<JwtOptions> jwtOptions, TimeProvider
     public static string HashRefreshToken(string token) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
+    /// <param name="sessionVersion">Phiên bản phiên hiện tại của tài khoản (<c>auth.users.session_version</c>).</param>
     /// <param name="impersonatorId">Id Super Admin khi fast login; null khi người dùng tự đăng nhập.</param>
     public AccessToken CreateAccessToken(
         AppUser user,
         IEnumerable<string> roles,
         bool isMultiFactor,
+        int sessionVersion,
         long? impersonatorId = null)
     {
         var claims = new List<Claim>
@@ -47,6 +49,7 @@ internal sealed class TokenService(IOptions<JwtOptions> jwtOptions, TimeProvider
             new(AuthClaimTypes.Email, user.Email ?? string.Empty),
             new(AuthClaimTypes.AuthenticationMethod, isMultiFactor ? AuthClaimTypes.MultiFactor : AuthClaimTypes.Password),
             new(AuthClaimTypes.LoginVia, LoginVia(impersonatorId)),
+            new(AuthClaimTypes.SessionVersion, sessionVersion.ToString(CultureInfo.InvariantCulture)),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
         };
         if (impersonatorId is { } actorId)

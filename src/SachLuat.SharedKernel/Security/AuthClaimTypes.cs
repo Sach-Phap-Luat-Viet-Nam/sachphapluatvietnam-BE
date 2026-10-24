@@ -18,6 +18,13 @@ public static class AuthClaimTypes
     public const string LoginViaPortal = "portal";
     public const string LoginViaAdmin = "admin";
 
+    /// <summary>
+    /// Phiên bản phiên của tài khoản lúc cấp token (<c>auth.users.session_version</c>). Token chỉ còn hiệu lực khi
+    /// bằng phiên bản hiện tại: đăng nhập nơi khác, buộc đăng xuất, đặt lại mật khẩu, vô hiệu hóa đều tăng phiên bản
+    /// nên mọi access token cũ hết hiệu lực ngay (không chờ 15 phút). Token cũ không có claim này coi là 0.
+    /// </summary>
+    public const string SessionVersion = "sv";
+
     /// <summary>Id Super Admin đã fast login vào tài khoản, chỉ có khi <c>login_via=admin</c>.</summary>
     public const string ImpersonatorId = "impersonator_id";
 }

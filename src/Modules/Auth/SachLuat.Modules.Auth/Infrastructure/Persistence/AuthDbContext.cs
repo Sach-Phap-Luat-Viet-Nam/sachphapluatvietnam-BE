@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using SachLuat.Modules.Auth.Domain;
 using SachLuat.SharedKernel.Persistence;
 using SecurityRoles = SachLuat.SharedKernel.Security.Roles;
@@ -27,6 +28,10 @@ internal sealed class AuthDbContext(DbContextOptions<AuthDbContext> options)
         {
             user.ToTable("users");
             user.Property(u => u.FullName).HasMaxLength(255);
+            user.Property(u => u.SessionVersion).HasDefaultValue(0);
+            // Không ghi cột này khi lưu user: một lần UserManager.UpdateAsync với bản cũ trong bộ nhớ sẽ ghi đè phiên
+            // bản vừa tăng và làm token đã bị thu hồi sống lại.
+            user.Property(u => u.SessionVersion).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
         });
         builder.Entity<AppRole>(role =>
         {

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
+using SachLuat.Modules.Auth.Infrastructure.Realtime;
 using Xunit;
 
 namespace SachLuat.IntegrationTests.EndToEnd;
@@ -27,6 +28,9 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
 
     /// <summary>Đồng hồ giả để tua thời gian (đơn quá hạn thanh toán). Bắt đầu ở thời điểm thật.</summary>
     public FakeTimeProvider Clock { get; } = new(DateTimeOffset.UtcNow);
+
+    /// <summary>Ghi lại các thông báo kết thúc phiên thay cho Pusher thật.</summary>
+    internal RecordingSessionNotifier SessionNotices { get; } = new();
 
     public bool IsConfigured => _connectionString is not null && !string.IsNullOrWhiteSpace(_redis);
 
@@ -67,7 +71,11 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
         builder.UseSetting("Cart:KeyPrefix", $"e2e:{Guid.NewGuid():N}:cart:");
         builder.UseSetting("Auth:BootstrapAdmin:Email", AdminEmail);
         builder.UseSetting("Auth:BootstrapAdmin:Password", AdminPassword);
-        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<TimeProvider>(Clock);
+            services.AddSingleton<ISessionNotifier>(SessionNotices);
+        });
     }
 
     private static string? BuildConnectionString()
@@ -78,3 +86,33 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
             : new NpgsqlConnectionStringBuilder(value) { Database = DatabaseName }.ConnectionString;
     }
 }
+
+internal sealed class RecordingSessionNotifier : ISessionNotifier
+{
+    private readonly List<SessionNotice> _notices = [];
+    private readonly Lock _gate = new();
+
+    public IReadOnlyList<SessionNotice> For(long userId)
+    {
+        lock (_gate)
+        {
+            return _notices.Where(notice => notice.UserId == userId).ToList();
+        }
+    }
+
+    public Task NotifySessionEndedAsync(
+        long userId,
+        int sessionVersion,
+        SessionEndReason reason,
+        CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            _notices.Add(new SessionNotice(userId, sessionVersion, reason));
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed record SessionNotice(long UserId, int Version, SessionEndReason Reason);

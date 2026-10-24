@@ -21,6 +21,7 @@ internal static class AuthErrors
     public const string IdentityErrorCode = "IDENTITY_ERROR";
     public const string AddressNotFoundCode = "ADDRESS_NOT_FOUND";
     public const string AddressLimitReachedCode = "ADDRESS_LIMIT_REACHED";
+    public const string RealtimeUnavailableCode = "REALTIME_UNAVAILABLE";
 
     public static BusinessException InvalidCredentials() => new(
         InvalidCredentialsCode, "Email hoặc mật khẩu không đúng", StatusCodes.Status401Unauthorized);
@@ -73,4 +74,7 @@ internal static class AuthErrors
 
     public static BusinessException IdentityFailed(IEnumerable<string> errors) =>
         new(IdentityErrorCode, string.Join("; ", errors));
+
+    public static BusinessException RealtimeUnavailable() => new(
+        RealtimeUnavailableCode, "Thông báo realtime chưa được bật", StatusCodes.Status503ServiceUnavailable);
 }

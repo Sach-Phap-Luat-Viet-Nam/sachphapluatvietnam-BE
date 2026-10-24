@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using SachLuat.Modules.Auth.Domain;
 using SachLuat.Modules.Auth.Infrastructure;
 using SachLuat.Modules.Auth.Infrastructure.Persistence;
+using SachLuat.Modules.Auth.Infrastructure.Realtime;
 using SachLuat.SharedKernel.Security;
 
 namespace SachLuat.Modules.Auth.Application;
@@ -14,6 +15,7 @@ internal sealed class AuthService(
     UserManager<AppUser> userManager,
     AuthDbContext dbContext,
     TokenService tokenService,
+    ISessionNotifier sessionNotifier,
     IOptions<AuthOptions> authOptions,
     TimeProvider timeProvider,
     ILogger<AuthService> logger)
@@ -81,6 +83,7 @@ internal sealed class AuthService(
             return (new LoginResponse(RequiresTwoFactor: true, ticket, Session: null), null);
         }
 
+        await EndOtherSessionsAsync(user.Id, cancellationToken);
         var session = await IssueSessionAsync(user, request.RememberMe, isMultiFactor: false, cancellationToken);
         return (new LoginResponse(RequiresTwoFactor: false, TwoFactorToken: null, session.Response), session.RefreshToken);
     }
@@ -95,6 +98,7 @@ internal sealed class AuthService(
         await VerifyAuthenticatorCodeAsync(user, request.Code);
         EnsureActive(user);
 
+        await EndOtherSessionsAsync(user.Id, cancellationToken);
         return await IssueSessionAsync(user, ticket.RememberMe, isMultiFactor: true, cancellationToken);
     }
 
@@ -248,7 +252,8 @@ internal sealed class AuthService(
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var roles = await userManager.GetRolesAsync(user);
-        var accessToken = tokenService.CreateAccessToken(user, roles, isMultiFactor);
+        var sessionVersion = await GetSessionVersionAsync(user.Id, cancellationToken);
+        var accessToken = tokenService.CreateAccessToken(user, roles, isMultiFactor, sessionVersion);
 
         var (refreshToken, hash) = TokenService.CreateRefreshToken();
         var expiresAt = isPersistent
@@ -265,7 +270,8 @@ internal sealed class AuthService(
             accessToken.ExpiresInSeconds,
             await ToResponseAsync(user),
             AuthClaimTypes.LoginViaPortal,
-            ImpersonatorId: null);
+            ImpersonatorId: null,
+            sessionVersion);
         return new AuthResult(response, new IssuedRefreshToken(refreshToken, expiresAt, isPersistent));
     }
 
@@ -309,13 +315,61 @@ internal sealed class AuthService(
         }
     }
 
-    /// <summary>Thu hồi mọi refresh token còn hiệu lực của user; trả về số phiên bị thu hồi.</summary>
-    internal Task<int> RevokeAllAsync(long userId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Kết thúc mọi phiên của user: thu hồi refresh token và tăng phiên bản phiên nên access token đang cầm hết hiệu lực
+    /// ngay. Không báo FE; trả về số refresh token bị thu hồi.
+    /// </summary>
+    internal async Task<int> RevokeAllAsync(long userId, CancellationToken cancellationToken) =>
+        (await EndSessionsAsync(userId, cancellationToken)).Revoked;
+
+    /// <summary>
+    /// Như <see cref="RevokeAllAsync"/> rồi báo các thiết bị đang mở qua Pusher kèm <paramref name="reason"/>. Với
+    /// <paramref name="onlyIfHadSessions"/> thì chỉ báo khi thật sự có phiên bị thu hồi (tránh bắn thừa khi đăng nhập
+    /// lần đầu); buộc đăng xuất thì luôn báo vì access token còn sống có thể không còn refresh token.
+    /// </summary>
+    internal async Task<int> ForceLogoutAsync(
+        long userId,
+        SessionEndReason reason,
+        bool onlyIfHadSessions,
+        CancellationToken cancellationToken)
+    {
+        var (revoked, version) = await EndSessionsAsync(userId, cancellationToken);
+        if (!onlyIfHadSessions || revoked > 0)
+        {
+            await sessionNotifier.NotifySessionEndedAsync(userId, version, reason, cancellationToken);
+        }
+
+        return revoked;
+    }
+
+    /// <summary>Phiên bản phiên hiện tại của user trong CSDL (đọc mới, không dùng bản đang theo dõi trong bộ nhớ).</summary>
+    internal Task<int> GetSessionVersionAsync(long userId, CancellationToken cancellationToken) =>
+        dbContext.Users.AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => user.SessionVersion)
+            .SingleAsync(cancellationToken);
+
+    /// <summary>
+    /// Mỗi tài khoản chỉ đăng nhập một nơi: đăng nhập mới đá mọi phiên cũ và báo cho chúng. Gọi ngay trước khi cấp phiên
+    /// mới để phiên mới mang đúng phiên bản vừa tăng.
+    /// </summary>
+    private Task EndOtherSessionsAsync(long userId, CancellationToken cancellationToken) =>
+        ForceLogoutAsync(userId, SessionEndReason.SignedInElsewhere, onlyIfHadSessions: true, cancellationToken);
+
+    private async Task<(int Revoked, int Version)> EndSessionsAsync(long userId, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        return dbContext.RefreshTokens
+        // Xóa hẳn thay vì đánh dấu thu hồi: thiết bị bị đá thường còn thử refresh, và token đã thu hồi bị dùng lại sẽ
+        // bị coi là bị đánh cắp (RefreshAsync) và kéo sập luôn phiên mới của chính chủ.
+        var revoked = await dbContext.RefreshTokens
             .Where(token => token.UserId == userId && token.RevokedAt == null && token.ExpiresAt > now)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(token => token.RevokedAt, now), cancellationToken);
+            .ExecuteDeleteAsync(cancellationToken);
+
+        // Tăng nguyên tử trong một câu UPDATE: hai lần đăng nhập đồng thời không cùng đọc một phiên bản cũ.
+        var versions = await dbContext.Database
+            .SqlQuery<int>($"UPDATE auth.users SET session_version = session_version + 1 WHERE id = {userId} RETURNING session_version AS \"Value\"")
+            .ToListAsync(cancellationToken);
+        return (revoked, versions.Count == 1 ? versions[0] : throw AuthErrors.UserNotFound());
     }
 
     private Task<AppUser?> FindUserAsync(long userId) =>

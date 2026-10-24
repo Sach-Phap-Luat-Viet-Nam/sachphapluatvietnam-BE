@@ -87,13 +87,14 @@ public sealed class ProfileTests(EndToEndFactory factory)
         (await otherDevice.PostAsync("/api/v1/auth/refresh"))
             .GetProperty("user").GetProperty("theme").GetString().Should().Be("light");
 
-        await client.PutAsync("/api/v1/me/preferences", new { theme = "dark" });
-        (await client.GetAsync("/api/v1/me")).GetProperty("theme").GetString().Should().Be("dark");
+        // Thiết bị đầu đã bị đá (mỗi tài khoản một nơi) nên từ đây dùng thiết bị mới.
+        await otherDevice.PutAsync("/api/v1/me/preferences", new { theme = "dark" });
+        (await otherDevice.GetAsync("/api/v1/me")).GetProperty("theme").GetString().Should().Be("dark");
 
         // Giá trị lạ hoặc thiếu thì từ chối, không đổi gì.
-        await client.PutAsync("/api/v1/me/preferences", new { theme = "neon" }, HttpStatusCode.BadRequest);
-        await client.PutAsync("/api/v1/me/preferences", new { }, HttpStatusCode.BadRequest);
-        (await client.GetAsync("/api/v1/me")).GetProperty("theme").GetString().Should().Be("dark");
+        await otherDevice.PutAsync("/api/v1/me/preferences", new { theme = "neon" }, HttpStatusCode.BadRequest);
+        await otherDevice.PutAsync("/api/v1/me/preferences", new { }, HttpStatusCode.BadRequest);
+        (await otherDevice.GetAsync("/api/v1/me")).GetProperty("theme").GetString().Should().Be("dark");
 
         // Chưa đăng nhập thì không lưu được.
         using var anonymous = new ApiClient(factory);

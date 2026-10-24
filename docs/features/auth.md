@@ -70,10 +70,26 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
     `ACCOUNT_DISABLED`. Login kiểm tra cờ **sau** mật khẩu: sai mật khẩu vẫn chỉ báo `INVALID_CREDENTIALS`, nên người
     không biết mật khẩu không dò được tài khoản nào bị vô hiệu hóa.
   - Ghi log `Warning` kèm `ActorUserId`, `UserId` (không log mật khẩu).
+- **Mỗi tài khoản một nơi đăng nhập + buộc đăng xuất tức thì**:
+  - Cột `auth.users.session_version` (số nguyên) nằm trong access token (claim `sv`). Mỗi request, JWT bearer so `sv`
+    với CSDL (`OnTokenValidated`); lệch hoặc thiếu claim → 401. Nhờ đó access token hết hiệu lực **ngay**, không chờ
+    `Jwt:AccessTokenMinutes`. Token cấp trước bản này không có `sv` nên người dùng phải đăng nhập lại một lần.
+  - Tăng phiên bản (nguyên tử, `UPDATE ... RETURNING`) và xóa mọi refresh token còn hiệu lực khi: đăng nhập mới
+    (login/2FA) đá phiên cũ; Super Admin "Đăng xuất hộ"; đặt mật khẩu mới; vô hiệu hóa tài khoản. Refresh token bị
+    **xóa** (không chỉ đánh dấu thu hồi) để thiết bị bị đá thử refresh không bị coi là token bị đánh cắp và làm sập
+    phiên mới. Đăng ký và refresh không tăng phiên bản.
+  - Fast login (impersonate) mang đúng `sv` hiện tại của tài khoản đích và **không** tăng nó: không đá chính chủ,
+    nhưng chính chủ đăng nhập lại hoặc bị buộc đăng xuất thì phiên vào hộ cũng chấm dứt.
+  - **Pusher**: sau khi kết thúc phiên, backend bắn sự kiện `session-ended` `{reason, version}` lên kênh riêng
+    `private-user-{id}`; `reason` là `signed_in_elsewhere` (đăng nhập nơi khác; chỉ bắn khi có phiên bị đá) hoặc
+    `forced_logout` (đăng xuất hộ / đặt mật khẩu mới có phiên / vô hiệu hóa; "đăng xuất hộ" luôn bắn vì thiết bị có thể
+    chỉ còn access token). FE bỏ qua sự kiện có `version` ≤ `sessionVersion` của chính nó (thiết bị vừa đăng nhập),
+    còn lại thì xóa phiên và hiện thông báo. Gửi lỗi/quá 3 giây chỉ log `Warning`, không làm hỏng request; thiết bị
+    bỏ lỡ sự kiện vẫn nhận 401 ở lần gọi API kế tiếp. Chưa cấu hình Pusher thì dùng `NullSessionNotifier` (không bắn).
 - **Cờ đường đăng nhập**: mọi access token có claim `login_via`:
   - `portal`: người dùng tự đăng nhập (login, 2FA, register, refresh). Token cũ không có claim này coi là `portal`.
   - `admin`: Super Admin fast login; kèm claim `impersonator_id` = id của admin.
-  - `AuthResponse` trả thêm `loginVia`, `impersonatorId`. Module khác đọc qua `ICurrentUser.ImpersonatorUserId`
+  - `AuthResponse` trả thêm `loginVia`, `impersonatorId`, `sessionVersion`. Module khác đọc qua `ICurrentUser.ImpersonatorUserId`
     / `ICurrentUser.IsImpersonated`.
 - **Rate limit** (NFR-13): nhóm `/auth/*` và `/orders/lookup` tối đa 10 request/phút/IP (cấu hình được), vượt → 429.
   - IP thật của khách: FE (Next.js trên Vercel) proxy `/api/v1/*` sang backend, gửi kèm `X-Client-Ip` và
@@ -109,7 +125,8 @@ Tiền tố `/api/v1`.
 | PUT | `/admin/users/{id}/roles` | users_admin | `{roles[]}` → `UserResponse` |
 | GET | `/admin/customers` | users_admin | `?q=&page=&limit=` → `PagedResponse<UserResponse>` (khách hàng) |
 | GET | `/admin/customers/{id}` | users_admin | → `AdminCustomerResponse` |
-| POST | `/admin/users/{id}/logout` | users_admin | Đăng xuất hộ: thu hồi mọi phiên của user trên mọi thiết bị → `{revokedSessions}` |
+| POST | `/admin/users/{id}/logout` | users_admin | Đăng xuất hộ (force logout): kết thúc mọi phiên của user **ngay lập tức** và báo qua Pusher → `{revokedSessions}` (số refresh token; có thể 0 mà access token vẫn bị cắt) |
+| POST | `/realtime/auth` | Bearer | Ký quyền nghe kênh Pusher riêng: body `{socketId, channelName}`; chỉ `private-user-{id của mình}` (khác → 403); chưa cấu hình Pusher → 503 `REALTIME_UNAVAILABLE`. Trả JSON `{auth}` cho pusher-js |
 | PUT | `/admin/users/{id}/password` | users_admin | `{newPassword}` (8–128 ký tự) → 204; mở khóa, thu hồi mọi phiên |
 | POST | `/admin/users/{id}/deactivate` | users_admin | Vô hiệu hóa, thu hồi mọi phiên → `UserResponse` (`isActive: false`) |
 | POST | `/admin/users/{id}/activate` | users_admin | Kích hoạt lại → `UserResponse` (`isActive: true`) |
@@ -184,7 +201,7 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 `CANNOT_IMPERSONATE` (422), `CANNOT_MANAGE_USER` (422), `ACCOUNT_DISABLED` (403),
 `USER_NOT_FOUND` (404), `TOO_MANY_REQUESTS` (429),
 `ADDRESS_NOT_FOUND` (404, kể cả địa chỉ của người khác), `ADDRESS_LIMIT_REACHED` (422),
-`SUPER_ADMIN_PORTAL_FORBIDDEN` (403).
+`SUPER_ADMIN_PORTAL_FORBIDDEN` (403), `REALTIME_UNAVAILABLE` (503).
 
 ## Cấu hình cần thiết
 
@@ -195,6 +212,7 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 | `Auth:RefreshTokenDays`, `Auth:SessionRefreshTokenHours`, `Auth:TotpIssuer` | Mặc định 30 ngày / 12 giờ |
 | `Auth:BootstrapAdmin:Email`, `Auth:BootstrapAdmin:Password` | **Bí mật**, chỉ cần lần đầu |
 | `RateLimiting:AuthPermitPerMinute` | Mặc định 10 |
+| `Pusher:AppId`, `Pusher:Key`, `Pusher:Secret`, `Pusher:Cluster` | Tùy chọn; thiếu bất kỳ khóa nào thì tắt realtime. `Secret` là **bí mật** (Render: `Pusher__Secret`). FE cần `NEXT_PUBLIC_PUSHER_KEY` và `NEXT_PUBLIC_PUSHER_CLUSTER` |
 | `TrustedProxy:Secret` | **Bí mật**, trống hoặc ≥ 32 ký tự, phải trùng `PROXY_SECRET` bên FE. Render: `TrustedProxy__Secret` |
 
 ## Thay đổi CSDL (migration liên quan)
@@ -204,6 +222,9 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 
 `AddUserTheme`: thêm cột `auth.users.theme` (varchar(30), cho phép null, lưu `dark`/`light`). Chỉ thêm cột, dữ liệu cũ
 giữ nguyên (null). **Phải chạy migration lên CSDL production trước khi deploy bản này**, backend không tự migrate.
+
+`AddUserSessionVersion`: cột `auth.users.session_version` (integer, not null, mặc định 0). Chỉ thêm cột.
+**Phải chạy migration lên CSDL production trước khi deploy bản này** (thiếu cột thì mọi request có token đều lỗi).
 
 `AddUserAddressesAndInvoiceInfo`: bảng `user_addresses` (`recipient_name, phone, province, ward, street_address,
 is_default`, index `user_id`) và `user_invoice_infos` (khóa chính `user_id`), cả hai cascade khi xóa user.
@@ -218,15 +239,7 @@ Chỉ thêm bảng, không đổi dữ liệu cũ.
 - Tỉnh/thành, phường/xã nhập dạng chữ tự do, chưa có danh mục hành chính để chọn (FR-06); đơn hàng cũng vậy.
 - Mỗi user chỉ lưu một bộ thông tin hóa đơn.
 - Chưa có mã khôi phục 2FA; mã TOTP vừa dùng chưa bị chặn dùng lại trong cùng 30 giây.
+- Mỗi request có token tốn thêm một truy vấn theo khóa chính (`session_version`); chưa cache.
 - Hai tab cùng refresh một lúc có thể bị coi là dùng lại token và bị đăng xuất.
 - Chưa có nhật ký thao tác (FR-98) cho việc đổi quyền, fast login, đăng xuất hộ, đặt mật khẩu mới và vô hiệu hóa
   tài khoản (hiện chỉ ghi log).
-- Đăng xuất hộ, đặt mật khẩu mới và vô hiệu hóa chỉ thu hồi refresh token: access token user đang cầm vẫn dùng được
-  tới khi hết hạn (tối đa 15 phút). Muốn chặn ngay thì cần kiểm tra security stamp hoặc danh sách token bị chặn ở mỗi request (chưa làm).
-- Fast login không chặn thao tác nào (đổi mật khẩu, bật 2FA... thay người dùng); access token vào hộ không thu hồi
-  được trước hạn 15 phút.
-- Tìm khách bằng ILIKE, chưa tìm không dấu; chưa có index cho email/họ tên/SĐT (đủ dùng khi số khách còn nhỏ).
-- Chi tiết khách chưa có lịch sử đơn hàng (cần API ở module Ordering).
-- `portal` do FE tự khai báo nên chỉ chặn đăng nhập nhầm chỗ, không phải ranh giới bảo mật: gọi thẳng API với
-  `portal = admin` vẫn được (Super Admin vẫn phải qua 2FA). Chỉ kiểm tra ở `/auth/login`, không ở `/auth/refresh`.
-- Request gọi thẳng vào Render (không qua FE) bị tính theo IP proxy của Render, dùng chung một quota.

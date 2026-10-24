@@ -8,10 +8,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using PusherServer;
 using SachLuat.Modules.Auth.Application;
 using SachLuat.Modules.Auth.Domain;
 using SachLuat.Modules.Auth.Infrastructure;
 using SachLuat.Modules.Auth.Infrastructure.Persistence;
+using SachLuat.Modules.Auth.Infrastructure.Realtime;
 using SachLuat.SharedKernel.Configuration;
 using SachLuat.SharedKernel.HealthChecks;
 using SachLuat.SharedKernel.Modules;
@@ -32,6 +34,10 @@ public sealed class AuthModule : IModule
             .Bind(configuration.GetSection(AuthOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        var realtime = configuration.GetSection(RealtimeOptions.SectionName).Get<RealtimeOptions>() ?? new();
+        services.Configure<RealtimeOptions>(configuration.GetSection(RealtimeOptions.SectionName));
+        AddRealtime(services, realtime);
 
         var connectionString = configuration.GetRequiredConnectionString();
         services.TryAddSingleton(TimeProvider.System);
@@ -80,6 +86,22 @@ public sealed class AuthModule : IModule
         await scope.ServiceProvider.GetRequiredService<AuthDbContext>().Database.MigrateAsync(cancellationToken);
     }
 
+    private static void AddRealtime(IServiceCollection services, RealtimeOptions options)
+    {
+        if (!options.IsConfigured)
+        {
+            services.AddSingleton<ISessionNotifier, NullSessionNotifier>();
+            return;
+        }
+
+        services.AddSingleton<IPusher>(_ => new Pusher(
+            options.AppId,
+            options.Key,
+            options.Secret,
+            new PusherOptions { Cluster = options.Cluster, Encrypted = true }));
+        services.AddSingleton<ISessionNotifier, PusherSessionNotifier>();
+    }
+
     private static void AddJwtAuthentication(IServiceCollection services)
     {
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
@@ -98,7 +120,33 @@ public sealed class AuthModule : IModule
                     RoleClaimType = AuthClaimTypes.Role,
                     ClockSkew = TimeSpan.FromSeconds(30),
                 };
+                options.Events = new JwtBearerEvents { OnTokenValidated = ValidateSessionVersionAsync };
             });
+    }
+
+    /// <summary>
+    /// Token chỉ hợp lệ khi phiên bản phiên trong token (<c>sv</c>) còn bằng phiên bản của tài khoản; đăng nhập nơi khác,
+    /// buộc đăng xuất, đặt lại mật khẩu hay khóa tài khoản đều tăng phiên bản nên token cũ bị từ chối ngay.
+    /// </summary>
+    private static async Task ValidateSessionVersionAsync(TokenValidatedContext context)
+    {
+        var principal = context.Principal;
+        if (!long.TryParse(principal?.FindFirst(AuthClaimTypes.Subject)?.Value, out var userId)
+            || !int.TryParse(principal.FindFirst(AuthClaimTypes.SessionVersion)?.Value, out var tokenVersion))
+        {
+            context.Fail("Token missing session version");
+            return;
+        }
+
+        var dbContext = context.HttpContext.RequestServices.GetRequiredService<AuthDbContext>();
+        var currentVersion = await dbContext.Users.AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => (int?)user.SessionVersion)
+            .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+        if (currentVersion != tokenVersion)
+        {
+            context.Fail("Session ended");
+        }
     }
 
     private static void AddAuthorizationPolicies(IServiceCollection services)

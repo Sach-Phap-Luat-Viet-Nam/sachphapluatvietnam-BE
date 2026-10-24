@@ -20,6 +20,7 @@
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
+    <PackageVersion Include="PusherServer" Version="5.0.0" />
     <PackageVersion Include="Scalar.AspNetCore" Version="2.18.2" />
     <PackageVersion Include="StackExchange.Redis" Version="3.4.5" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />

@@ -128,7 +128,8 @@ internal sealed record AuthResponse(
     int ExpiresIn,
     UserResponse User,
     string LoginVia,
-    long? ImpersonatorId);
+    long? ImpersonatorId,
+    int SessionVersion);
 
 /// <summary>
 /// <see cref="RequiresTwoFactor"/> = true: gọi tiếp <c>/auth/login/2fa</c> với <see cref="TwoFactorToken"/>;

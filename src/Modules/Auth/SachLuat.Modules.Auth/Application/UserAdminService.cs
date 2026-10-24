@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SachLuat.Modules.Auth.Domain;
 using SachLuat.Modules.Auth.Infrastructure.Persistence;
+using SachLuat.Modules.Auth.Infrastructure.Realtime;
 using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.Persistence;
 using SachLuat.SharedKernel.Security;
@@ -76,8 +77,9 @@ internal sealed class UserAdminService(
     }
 
     /// <summary>
-    /// Đăng xuất hộ: thu hồi mọi phiên (refresh token) của user trên mọi thiết bị, ví dụ nhân viên nghỉ việc
-    /// hoặc tài khoản bị lộ. Access token đã cấp vẫn dùng được tới khi hết hạn (tối đa <c>Jwt:AccessTokenMinutes</c>).
+    /// Buộc đăng xuất (đăng xuất hộ): kết thúc mọi phiên của user trên mọi thiết bị **ngay lập tức** (access token cũng hết
+    /// hiệu lực, không chờ <c>Jwt:AccessTokenMinutes</c>) và báo thiết bị đang mở qua Pusher, ví dụ nhân viên nghỉ việc
+    /// hoặc tài khoản bị lộ.
     /// </summary>
     public async Task<LogoutUserResponse> LogoutUserAsync(
         long actorUserId,
@@ -87,9 +89,11 @@ internal sealed class UserAdminService(
         var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
             ?? throw AuthErrors.UserNotFound();
 
-        var revoked = await authService.RevokeAllAsync(user.Id, cancellationToken);
+        var revoked = await authService.ForceLogoutAsync(
+            user.Id, SessionEndReason.ForcedLogout, onlyIfHadSessions: false, cancellationToken);
         logger.LogWarning(
-            "User {ActorUserId} logged out user {UserId} ({RevokedSessions} sessions)", actorUserId, user.Id, revoked);
+            "User {ActorUserId} force-logged out user {UserId} ({RevokedSessions} sessions)",
+            actorUserId, user.Id, revoked);
         return new LogoutUserResponse(revoked);
     }
 
@@ -115,7 +119,8 @@ internal sealed class UserAdminService(
         user.LockoutEnd = null;
         AuthService.EnsureSucceeded(await userManager.UpdateSecurityStampAsync(user));
 
-        var revoked = await authService.RevokeAllAsync(user.Id, cancellationToken);
+        var revoked = await authService.ForceLogoutAsync(
+            user.Id, SessionEndReason.ForcedLogout, onlyIfHadSessions: true, cancellationToken);
         logger.LogWarning(
             "User {ActorUserId} reset the password of user {UserId} ({RevokedSessions} sessions revoked)",
             actorUserId, user.Id, revoked);
@@ -142,7 +147,8 @@ internal sealed class UserAdminService(
 
         if (!isActive)
         {
-            await authService.RevokeAllAsync(user.Id, cancellationToken);
+            await authService.ForceLogoutAsync(
+                user.Id, SessionEndReason.ForcedLogout, onlyIfHadSessions: false, cancellationToken);
         }
 
         return await authService.ToResponseAsync(user);
@@ -152,7 +158,7 @@ internal sealed class UserAdminService(
     /// Fast login: Super Admin lấy access token của tài khoản dưới cấp (không phải Super Admin).
     /// Không cấp refresh token để không ghi đè cookie phiên của chính admin; hết hạn thì gọi lại.
     /// </summary>
-    public async Task<AuthResponse> ImpersonateAsync(long actorUserId, long userId)
+    public async Task<AuthResponse> ImpersonateAsync(long actorUserId, long userId, CancellationToken cancellationToken)
     {
         var user = await userManager.FindByIdAsync(userId.ToString(CultureInfo.InvariantCulture))
             ?? throw AuthErrors.UserNotFound();
@@ -165,7 +171,11 @@ internal sealed class UserAdminService(
         AuthService.EnsureActive(user);
 
         // Policy users_admin đã bắt admin qua 2FA nên phiên vào hộ cũng mang amr=mfa.
-        var accessToken = tokenService.CreateAccessToken(user, roles, isMultiFactor: true, impersonatorId: actorUserId);
+        // Cùng phiên bản với tài khoản đích và không tăng nó: vào hộ không đá chính chủ, nhưng chính chủ đăng nhập lại
+        // hoặc bị buộc đăng xuất thì phiên vào hộ cũng hết hiệu lực.
+        var sessionVersion = await authService.GetSessionVersionAsync(user.Id, cancellationToken);
+        var accessToken = tokenService.CreateAccessToken(
+            user, roles, isMultiFactor: true, sessionVersion, impersonatorId: actorUserId);
         logger.LogWarning("User {ActorUserId} impersonated user {UserId}", actorUserId, user.Id);
 
         return new AuthResponse(
@@ -174,7 +184,8 @@ internal sealed class UserAdminService(
             accessToken.ExpiresInSeconds,
             await authService.ToResponseAsync(user),
             AuthClaimTypes.LoginViaAdmin,
-            actorUserId);
+            actorUserId,
+            sessionVersion);
     }
 
     private IQueryable<AppUser> UsersInRoles(IReadOnlyCollection<string> roleNames)
