@@ -36,6 +36,9 @@ internal abstract class CheckoutDetailsValidator<T> : AbstractValidator<T>
             .When(request => request.ShippingAddress is not null);
         RuleFor(request => request.PaymentMethod).IsInEnum();
         RuleFor(request => request.Note).MaximumLength(1000);
+        RuleFor(request => request.CouponCode).MaximumLength(40);
+        RuleFor(request => request.ExpectedTotal).GreaterThanOrEqualTo(0)
+            .When(request => request.ExpectedTotal is not null);
         When(request => request.InvoiceInfo is not null, () =>
         {
             RuleFor(request => request.InvoiceInfo!.CompanyName).NotEmpty().MaximumLength(255);
@@ -85,7 +88,37 @@ internal sealed class ChangeOrderStatusRequestValidator : AbstractValidator<Chan
 
 internal sealed class ShippingQuoteRequestValidator : AbstractValidator<ShippingQuoteRequest>
 {
-    public ShippingQuoteRequestValidator() => RuleFor(request => request.Subtotal).GreaterThanOrEqualTo(0);
+    private const int MaxItems = 50;
+
+    public ShippingQuoteRequestValidator()
+    {
+        RuleFor(request => request.Subtotal).GreaterThanOrEqualTo(0);
+        RuleFor(request => request.Province).MaximumLength(100);
+        RuleFor(request => request.Items).Must(items => items is null || items.Count <= MaxItems)
+            .WithMessage($"Tối đa {MaxItems} dòng");
+        RuleForEach(request => request.Items).ChildRules(item =>
+        {
+            item.RuleFor(line => line.SkuId).GreaterThan(0);
+            item.RuleFor(line => line.Quantity).GreaterThan(0);
+        });
+    }
+}
+
+internal sealed class CheckoutPreviewRequestValidator : AbstractValidator<CheckoutPreviewRequest>
+{
+    public CheckoutPreviewRequestValidator()
+    {
+        RuleFor(request => request.Source).IsInEnum();
+        RuleFor(request => request.Province).MaximumLength(100);
+        RuleFor(request => request.CouponCode).MaximumLength(40);
+        RuleFor(request => request.Phone).Matches(OrderRules.PhonePattern).WithMessage("Số điện thoại không hợp lệ")
+            .When(request => !string.IsNullOrEmpty(request.Phone));
+        When(request => request.Source == CheckoutSource.BuyNow, () =>
+        {
+            RuleFor(request => request.SkuId).NotNull().GreaterThan(0);
+            RuleFor(request => request.Quantity).NotNull().GreaterThan(0);
+        });
+    }
 }
 
 internal sealed class AdminOrdersQueryValidator : PagedQueryValidator<AdminOrdersQuery>

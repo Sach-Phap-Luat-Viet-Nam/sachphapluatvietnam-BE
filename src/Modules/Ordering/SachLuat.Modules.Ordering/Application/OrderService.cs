@@ -7,6 +7,8 @@ using SachLuat.Modules.Catalog.Contracts;
 using SachLuat.Modules.Inventory.Contracts;
 using SachLuat.Modules.Ordering.Domain;
 using SachLuat.Modules.Ordering.Infrastructure.Persistence;
+using SachLuat.Modules.Promotion.Contracts;
+using SachLuat.Modules.Shipping.Contracts;
 using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.Errors;
 using SachLuat.SharedKernel.Persistence;
@@ -19,7 +21,9 @@ internal sealed class OrderService(
     OrderingDbContext dbContext,
     OrderCodeGenerator codeGenerator,
     OrderStatusService statusService,
-    ShippingFeeCalculator shippingFeeCalculator,
+    CheckoutPricingService pricingService,
+    IShippingQuoteService shippingQuoteService,
+    IPromotionService promotionService,
     ICurrentCart currentCart,
     ICatalogSkuReader skuReader,
     IInventoryService inventoryService,
@@ -159,8 +163,89 @@ internal sealed class OrderService(
         return order.ToResponse();
     }
 
-    public ShippingQuoteResponse QuoteShipping(ShippingQuoteRequest request) => new(
-        shippingFeeCalculator.Calculate(request.Subtotal), shippingFeeCalculator.FreeShippingThreshold);
+    /// <summary>Phí ship tạm tính. Chỉ có <c>Subtotal</c> thì dùng phí cố định như trước khi có vùng giao hàng.</summary>
+    public async Task<ShippingQuoteResponse> QuoteShippingAsync(
+        ShippingQuoteRequest request,
+        CancellationToken cancellationToken)
+    {
+        var items = new List<ShippingItem>();
+        if (request.Items is { Count: > 0 })
+        {
+            var skus = await skuReader.GetSkusAsync(
+                [.. request.Items.Select(item => item.SkuId).Distinct()], cancellationToken);
+            items.AddRange(request.Items
+                .Where(item => skus.ContainsKey(item.SkuId))
+                .Select(item => new ShippingItem(skus[item.SkuId].WeightGram, item.Quantity)));
+        }
+
+        var quote = await shippingQuoteService.QuoteAsync(request.Province, items, request.Subtotal, cancellationToken);
+        return ToResponse(quote);
+    }
+
+    /// <summary>
+    /// Xem trước tiền ở trang thanh toán (tạm tính, giảm giá, phí ship, tổng) cho giỏ hiện tại hoặc "Mua ngay".
+    /// Cùng cách tính với lúc tạo đơn nhưng không ghi gì, không trừ lượt dùng mã.
+    /// </summary>
+    public async Task<CheckoutPreviewResponse> PreviewAsync(
+        CheckoutPreviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<StockLine> lines;
+        Func<BusinessException> skuNotAvailable;
+        if (request.Source == CheckoutSource.Cart)
+        {
+            var cartLines = await currentCart.GetLinesAsync(cancellationToken);
+            if (cartLines.Count == 0)
+            {
+                throw OrderErrors.CartEmpty();
+            }
+
+            lines = [.. cartLines.Select(line => new StockLine(line.SkuId, line.Quantity))];
+            skuNotAvailable = OrderErrors.SkuNotAvailable;
+        }
+        else
+        {
+            lines = [new StockLine(request.SkuId.GetValueOrDefault(), request.Quantity.GetValueOrDefault())];
+            skuNotAvailable = OrderErrors.BuyNowSkuNotAvailable;
+        }
+
+        var pricing = await pricingService.PriceAsync(
+            lines,
+            request.Province,
+            request.CouponCode,
+            new PromotionCustomer(currentUser.UserId, request.Phone),
+            skuNotAvailable,
+            cancellationToken);
+        return new CheckoutPreviewResponse(
+            [.. pricing.Lines.Select(line => new PricedItemResponse(
+                line.Sku.SkuId,
+                line.Sku.SkuCode,
+                line.Sku.BookTitle,
+                line.Sku.EditionName,
+                line.Sku.CoverType,
+                line.Sku.SalePrice,
+                line.Quantity,
+                line.LineTotal,
+                line.Discount))],
+            pricing.Subtotal,
+            pricing.Discount,
+            pricing.Shipping.Fee,
+            pricing.ShippingDiscount,
+            pricing.Total,
+            [.. pricing.ToCharges().AppliedPromotions.Select(promotion => new AppliedPromotionResponse(
+                promotion.PromotionId, promotion.Name, promotion.Kind, promotion.CouponCode, promotion.Amount))],
+            pricing.CouponApplied,
+            pricing.Shipping.FreeShippingThreshold,
+            pricing.Shipping.AmountToFreeShipping,
+            ToEta(pricing.Shipping),
+            pricing.Shipping.ZoneName);
+    }
+
+    private static ShippingQuoteResponse ToResponse(ShippingQuote quote) => new(
+        quote.Fee, quote.FreeShippingThreshold, quote.AmountToFreeShipping, ToEta(quote), quote.ZoneName);
+
+    private static EtaResponse? ToEta(ShippingQuote quote) =>
+        quote is { EtaMinDays: { } min, EtaMaxDays: { } max } ? new EtaResponse(min, max) : null;
 
     /// <summary>
     /// Kiểm tra chung trước khi đặt hàng; trả đơn đã tạo nếu <paramref name="idempotencyKey"/> đã được dùng.
@@ -203,27 +288,27 @@ internal sealed class OrderService(
         Func<BusinessException> skuNotAvailable,
         CancellationToken cancellationToken)
     {
-        if (lines.Any(line => line.Quantity > _options.MaxQuantityPerSku))
+        var customer = new PromotionCustomer(currentUser.UserId, details.Phone);
+        var pricing = await pricingService.PriceAsync(
+            lines, details.ShippingAddress.Province, details.CouponCode, customer, skuNotAvailable, cancellationToken);
+
+        // Khách chỉ trả đúng số tiền đã thấy: giá, chương trình hay mã đổi giữa chừng thì báo để họ xem lại.
+        if (details.ExpectedTotal is { } expectedTotal && expectedTotal != pricing.Total)
         {
-            throw OrderErrors.MaxQuantityExceeded(_options.MaxQuantityPerSku);
+            throw OrderErrors.CheckoutTotalChanged();
         }
 
-        var skus = await skuReader.GetSkusAsync(lines.Select(line => line.SkuId).ToList(), cancellationToken);
-        if (lines.Any(line => !skus.TryGetValue(line.SkuId, out var sku) || !sku.IsSellable))
+        var items = pricing.Lines.Select(line =>
         {
-            throw skuNotAvailable();
-        }
-
-        var items = lines.Select(line =>
-        {
-            var sku = skus[line.SkuId];
-            return new OrderItem(
+            var sku = line.Sku;
+            var item = new OrderItem(
                 sku.SkuId, sku.SkuCode, sku.BookTitle, sku.EditionName, sku.Isbn, sku.CoverType, sku.SalePrice,
                 line.Quantity);
+            item.ApplyDiscount(line.Discount);
+            return item;
         }).ToList();
 
         var orderCode = await codeGenerator.NextAsync(cancellationToken);
-        var subtotal = items.Sum(item => item.LineTotal);
         var order = Order.Create(
             orderCode,
             currentUser.UserId,
@@ -241,12 +326,24 @@ internal sealed class OrderService(
             string.IsNullOrWhiteSpace(details.Note) ? null : details.Note.Trim(),
             string.IsNullOrEmpty(idempotencyKey) ? null : idempotencyKey,
             items,
-            shippingFeeCalculator.Calculate(subtotal),
+            pricing.ToCharges(),
             timeProvider.GetUtcNow().UtcDateTime,
             TimeSpan.FromMinutes(_options.PaymentTimeoutMinutes));
 
         // BR-11: tạm giữ tồn trước; thiếu hàng thì dừng ở đây (OUT_OF_STOCK), chưa có đơn nào được tạo.
         await inventoryService.ReserveAsync(orderCode, lines, cancellationToken);
+
+        // Hết lượt dùng mã giữa lúc khách đặt hàng: trả tồn đã giữ rồi báo lỗi rõ, không giảm sai.
+        try
+        {
+            await promotionService.RedeemAsync(orderCode, pricing.Promotions, customer, cancellationToken);
+        }
+        catch (BusinessException)
+        {
+            await inventoryService.ReleaseAsync(orderCode, CancellationToken.None);
+            throw;
+        }
+
         try
         {
             dbContext.Orders.Add(order);
@@ -254,8 +351,10 @@ internal sealed class OrderService(
         }
         catch (DbUpdateException exception)
         {
-            // Lưu đơn thất bại: trả lại tồn đã giữ (không dùng token của request để việc hoàn tồn luôn chạy xong).
+            // Lưu đơn thất bại: trả lại tồn và lượt dùng mã đã giữ (không dùng token của request để việc hoàn
+            // trả luôn chạy xong).
             await inventoryService.ReleaseAsync(orderCode, CancellationToken.None);
+            await promotionService.ReleaseAsync(orderCode, CancellationToken.None);
             if (exception.IsUniqueViolation("ix_orders_idempotency_key"))
             {
                 throw OrderErrors.IdempotencyKeyReused();

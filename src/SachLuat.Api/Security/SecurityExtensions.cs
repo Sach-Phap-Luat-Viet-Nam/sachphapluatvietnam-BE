@@ -32,6 +32,13 @@ internal static class SecurityExtensions
                     PermitLimit = rateLimiting.AuthPermitPerMinute,
                     Window = TimeSpan.FromMinutes(1),
                 }));
+            options.AddPolicy(RateLimitPolicies.Checkout, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = rateLimiting.CheckoutPermitPerMinute,
+                    Window = TimeSpan.FromMinutes(1),
+                }));
         });
 
         var cors = configuration.GetSection(ApiCorsOptions.SectionName).Get<ApiCorsOptions>() ?? new ApiCorsOptions();

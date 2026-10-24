@@ -23,7 +23,10 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
         modelBuilder.Entity<Order>(order =>
         {
             order.ToTable("orders", table => table.HasCheckConstraint(
-                "ck_orders_amounts", "subtotal >= 0 AND discount >= 0 AND shipping_fee >= 0 AND total >= 0"));
+                "ck_orders_amounts",
+                "subtotal >= 0 AND discount >= 0 AND discount <= subtotal AND shipping_fee >= 0 "
+                + "AND shipping_base_fee >= shipping_fee AND shipping_discount >= 0 "
+                + "AND shipping_discount <= shipping_fee AND total >= 0"));
             order.Property(o => o.OrderCode).HasMaxLength(20);
             order.HasIndex(o => o.OrderCode).IsUnique();
             order.Property(o => o.CustomerName).HasMaxLength(255);
@@ -35,6 +38,8 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
             order.Property(o => o.Subtotal).HasPrecision(12, 0);
             order.Property(o => o.Discount).HasPrecision(12, 0);
             order.Property(o => o.ShippingFee).HasPrecision(12, 0);
+            order.Property(o => o.ShippingBaseFee).HasPrecision(12, 0);
+            order.Property(o => o.ShippingDiscount).HasPrecision(12, 0);
             order.Property(o => o.Total).HasPrecision(12, 0);
             order.HasIndex(o => new { o.UserId, o.CreatedAt });
             order.HasIndex(o => new { o.Status, o.CreatedAt });
@@ -42,6 +47,7 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
 
             order.OwnsOne(o => o.ShippingAddress, address => address.ToJson("shipping_address"));
             order.OwnsOne(o => o.InvoiceInfo, invoice => invoice.ToJson("invoice_info"));
+            order.OwnsMany(o => o.AppliedPromotions, promotion => promotion.ToJson("applied_promotions"));
 
             order.HasMany(o => o.Items).WithOne().HasForeignKey(item => item.OrderId);
             order.HasMany(o => o.StatusLogs).WithOne().HasForeignKey(log => log.OrderId);
@@ -49,7 +55,12 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
 
         modelBuilder.Entity<OrderItem>(item =>
         {
-            item.ToTable("order_items", table => table.HasCheckConstraint("ck_order_items_quantity", "quantity > 0"));
+            item.ToTable("order_items", table =>
+            {
+                table.HasCheckConstraint("ck_order_items_quantity", "quantity > 0");
+                table.HasCheckConstraint(
+                    "ck_order_items_discount", "discount_amount >= 0 AND discount_amount <= line_total");
+            });
             item.Property(i => i.SkuCode).HasMaxLength(50);
             item.Property(i => i.BookTitle).HasMaxLength(255);
             item.Property(i => i.EditionName).HasMaxLength(100);
@@ -57,6 +68,7 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
             item.Property(i => i.CoverType).HasMaxLength(30);
             item.Property(i => i.UnitPrice).HasPrecision(12, 0);
             item.Property(i => i.LineTotal).HasPrecision(12, 0);
+            item.Property(i => i.DiscountAmount).HasPrecision(12, 0);
             item.Property(i => i.CostPrice).HasPrecision(12, 0);
         });
 

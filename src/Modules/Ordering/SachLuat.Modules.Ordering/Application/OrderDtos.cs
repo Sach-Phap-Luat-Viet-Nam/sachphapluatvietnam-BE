@@ -23,6 +23,15 @@ internal interface ICheckoutDetails
     InvoiceInfoDto? InvoiceInfo { get; }
 
     string? Note { get; }
+
+    /// <summary>Mã giảm giá khách nhập (không phân biệt hoa thường).</summary>
+    string? CouponCode { get; }
+
+    /// <summary>
+    /// Tổng tiền khách đã thấy ở bước xem trước. Khác tổng tính lại lúc đặt (chương trình hết hạn, giá đổi, ...)
+    /// thì trả 409 <c>CHECKOUT_TOTAL_CHANGED</c> thay vì thu số tiền khách chưa đồng ý.
+    /// </summary>
+    decimal? ExpectedTotal { get; }
 }
 
 /// <summary>Tạo đơn từ giỏ hàng hiện tại (FR-33: không bắt buộc đăng nhập).</summary>
@@ -33,7 +42,9 @@ internal sealed record CreateOrderRequest(
     ShippingAddressDto ShippingAddress,
     PaymentMethod PaymentMethod,
     InvoiceInfoDto? InvoiceInfo,
-    string? Note) : ICheckoutDetails;
+    string? Note,
+    string? CouponCode = null,
+    decimal? ExpectedTotal = null) : ICheckoutDetails;
 
 /// <summary>"Mua ngay": đặt thẳng một SKU, không đọc và không xóa giỏ hàng.</summary>
 internal sealed record BuyNowOrderRequest(
@@ -45,7 +56,9 @@ internal sealed record BuyNowOrderRequest(
     ShippingAddressDto ShippingAddress,
     PaymentMethod PaymentMethod,
     InvoiceInfoDto? InvoiceInfo,
-    string? Note) : ICheckoutDetails;
+    string? Note,
+    string? CouponCode = null,
+    decimal? ExpectedTotal = null) : ICheckoutDetails;
 
 internal sealed record LookupOrderRequest(string OrderCode, string Phone);
 
@@ -53,9 +66,78 @@ internal sealed record CancelOrderRequest(string? Reason);
 
 internal sealed record ChangeOrderStatusRequest(OrderStatus Status, string? Note);
 
-internal sealed record ShippingQuoteRequest(decimal Subtotal);
+/// <param name="Subtotal">Tạm tính trước giảm giá, dùng so với ngưỡng miễn phí.</param>
+/// <param name="Province">Bỏ trống thì dùng phí cố định (hành vi cũ khi chưa có địa chỉ).</param>
+/// <param name="Items">Dùng tính trọng lượng; bỏ trống thì chỉ tính bao bì.</param>
+internal sealed record ShippingQuoteRequest(
+    decimal Subtotal,
+    string? Province = null,
+    IReadOnlyList<QuoteItem>? Items = null);
 
-internal sealed record ShippingQuoteResponse(decimal ShippingFee, decimal FreeShippingThreshold);
+internal sealed record QuoteItem(long SkuId, int Quantity);
+
+/// <param name="FreeShippingThreshold">null: không miễn phí ship theo ngưỡng.</param>
+internal sealed record ShippingQuoteResponse(
+    decimal ShippingFee,
+    decimal? FreeShippingThreshold,
+    decimal AmountToFreeShipping,
+    EtaResponse? Eta,
+    string? ZoneName);
+
+internal sealed record EtaResponse(int MinDays, int MaxDays);
+
+internal enum CheckoutSource
+{
+    Cart,
+    BuyNow,
+}
+
+/// <param name="SkuId">Chỉ dùng với <c>buy_now</c>.</param>
+/// <param name="Province">Bỏ trống thì dùng phí ship cố định.</param>
+/// <param name="Phone">Tùy chọn; để kiểm tra giới hạn lượt dùng mã theo số điện thoại với khách vãng lai.</param>
+internal sealed record CheckoutPreviewRequest(
+    CheckoutSource Source,
+    long? SkuId,
+    int? Quantity,
+    string? Province,
+    string? CouponCode,
+    string? Phone);
+
+internal sealed record PricedItemResponse(
+    long SkuId,
+    string SkuCode,
+    string BookTitle,
+    string? EditionName,
+    string CoverType,
+    decimal UnitPrice,
+    int Quantity,
+    decimal LineTotal,
+    decimal DiscountAmount);
+
+internal sealed record AppliedPromotionResponse(
+    long PromotionId,
+    string Name,
+    string Kind,
+    string? CouponCode,
+    decimal Amount);
+
+/// <summary>Tính tiền xem trước ở trang thanh toán; cùng cách tính với lúc tạo đơn.</summary>
+/// <param name="ShippingFee">Phí ship sau miễn phí theo ngưỡng, trước giảm giá ship.</param>
+/// <param name="CouponApplied">null khi khách không nhập mã; false khi mã hợp lệ nhưng có ưu đãi khác lợi hơn.</param>
+/// <param name="AmountToFreeShipping">Còn thiếu bao nhiêu để được miễn phí ship; 0 khi đã đạt hoặc không có ngưỡng.</param>
+internal sealed record CheckoutPreviewResponse(
+    IReadOnlyList<PricedItemResponse> Items,
+    decimal Subtotal,
+    decimal Discount,
+    decimal ShippingFee,
+    decimal ShippingDiscount,
+    decimal Total,
+    IReadOnlyList<AppliedPromotionResponse> AppliedPromotions,
+    bool? CouponApplied,
+    decimal? FreeShippingThreshold,
+    decimal AmountToFreeShipping,
+    EtaResponse? Eta,
+    string? ZoneName);
 
 internal sealed class AdminOrdersQuery : PagedQuery
 {
@@ -83,7 +165,8 @@ internal sealed record OrderItemResponse(
     string CoverType,
     decimal UnitPrice,
     int Quantity,
-    decimal LineTotal);
+    decimal LineTotal,
+    decimal DiscountAmount);
 
 internal sealed record OrderStatusLogResponse(
     OrderStatus? FromStatus,
@@ -104,7 +187,9 @@ internal sealed record OrderResponse(
     decimal Subtotal,
     decimal Discount,
     decimal ShippingFee,
+    decimal ShippingDiscount,
     decimal Total,
+    IReadOnlyList<AppliedPromotionResponse> AppliedPromotions,
     bool InvoiceRequired,
     InvoiceInfoDto? InvoiceInfo,
     string? Note,

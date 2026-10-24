@@ -57,9 +57,27 @@ internal sealed class OrdersController(OrderService orderService) : ControllerBa
 [Route(ApiRoutes.V1 + "/shipping")]
 internal sealed class ShippingController(OrderService orderService) : ControllerBase
 {
-    /// <summary>Phí ship tạm tính: phí cố định, miễn phí từ ngưỡng BR-14.</summary>
+    /// <summary>
+    /// Phí ship tạm tính theo tỉnh và trọng lượng, miễn phí từ ngưỡng BR-14; thiếu <c>province</c> thì dùng phí cố định.
+    /// </summary>
     [HttpPost("quote")]
-    public ShippingQuoteResponse Quote(ShippingQuoteRequest request) => orderService.QuoteShipping(request);
+    public Task<ShippingQuoteResponse> Quote(ShippingQuoteRequest request, CancellationToken cancellationToken) =>
+        orderService.QuoteShippingAsync(request, cancellationToken);
+}
+
+[ApiController]
+[Route(ApiRoutes.V1 + "/checkout")]
+internal sealed class CheckoutController(OrderService orderService) : ControllerBase
+{
+    /// <summary>
+    /// Xem trước tổng tiền (tạm tính, giảm giá, phí ship) cho giỏ hoặc "Mua ngay"; kèm thử mã giảm giá.
+    /// Không ghi gì nên không trừ lượt dùng mã.
+    /// </summary>
+    [EnableRateLimiting(RateLimitPolicies.Checkout)]
+    [HttpPost("preview")]
+    public Task<CheckoutPreviewResponse> Preview(
+        CheckoutPreviewRequest request,
+        CancellationToken cancellationToken) => orderService.PreviewAsync(request, cancellationToken);
 }
 
 [ApiController]

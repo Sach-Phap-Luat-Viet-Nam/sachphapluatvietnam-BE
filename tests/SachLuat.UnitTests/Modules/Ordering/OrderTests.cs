@@ -110,22 +110,95 @@ public sealed class OrderTests
         order.Items.Single(item => item.SkuId == 2).CostPrice.Should().BeNull();
     }
 
-    private static Order CreateOrder(PaymentMethod paymentMethod) => Order.Create(
-        "SLVN2610230001",
-        userId: null,
-        "Nguyễn Văn A",
-        "0901234567",
-        email: null,
-        new ShippingAddress("Hà Nội", "Phường Cầu Giấy", "1 Xuân Thủy"),
-        paymentMethod,
-        invoiceInfo: null,
-        note: null,
-        idempotencyKey: null,
-        [
+    [Fact]
+    public void Create_WithPromotions_SubtractsDiscountAndShippingDiscount()
+    {
+        // 450.000 - 90.000 (20% tổng đơn, chia theo dòng) + 30.000 phí ship - 30.000 miễn phí ship = 360.000.
+        var order = CreateOrder(
+            PaymentMethod.Cod,
+            new OrderCharges(
+                90_000m,
+                ShippingFee: 30_000m,
+                ShippingBaseFee: 30_000m,
+                ShippingDiscount: 30_000m,
+                [new AppliedPromotionSnapshot(1, "Giảm 20%", "order_discount", null, 90_000m)]),
+            itemDiscounts: [60_000m, 30_000m]);
+
+        order.Subtotal.Should().Be(450_000m);
+        order.Discount.Should().Be(90_000m);
+        order.ShippingDiscount.Should().Be(30_000m);
+        order.Total.Should().Be(360_000m);
+        order.Items.Select(item => item.DiscountAmount).Should().Equal(60_000m, 30_000m);
+        order.AppliedPromotions.Should().ContainSingle(promotion => promotion.Amount == 90_000m);
+    }
+
+    [Fact]
+    public void Create_FreeShippingByThreshold_KeepsBaseFeeForReporting()
+    {
+        var order = CreateOrder(
+            PaymentMethod.Cod, new OrderCharges(0m, ShippingFee: 0m, ShippingBaseFee: 30_000m, 0m, []));
+
+        order.ShippingFee.Should().Be(0m);
+        order.ShippingBaseFee.Should().Be(30_000m);
+        order.Total.Should().Be(450_000m);
+    }
+
+    [Fact]
+    public void Create_DiscountNotMatchingItemDiscounts_Throws()
+    {
+        var act = () => CreateOrder(
+            PaymentMethod.Cod, new OrderCharges(90_000m, 30_000m, 30_000m, 0m, []), itemDiscounts: [60_000m, 0m]);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Create_ShippingDiscountAboveShippingFee_Throws()
+    {
+        var act = () => CreateOrder(PaymentMethod.Cod, new OrderCharges(0m, 30_000m, 30_000m, 40_000m, []));
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void ApplyDiscount_AboveLineTotal_Throws()
+    {
+        var item = new OrderItem(1, "SLVN-A-BM", "Bộ luật Dân sự", null, "9780306406157", "paperback", 150_000m, 1);
+
+        var act = () => item.ApplyDiscount(150_001m);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    private static Order CreateOrder(
+        PaymentMethod paymentMethod,
+        OrderCharges? charges = null,
+        decimal[]? itemDiscounts = null)
+    {
+        var items = new[]
+        {
             new OrderItem(1, "SLVN-A-BM", "Bộ luật Dân sự", null, "9780306406157", "paperback", 150_000m, 2),
             new OrderItem(2, "SLVN-B-BM", "Luật Đất đai", null, "9786041234567", "paperback", 150_000m, 1),
-        ],
-        shippingFee: 30_000m,
-        Now,
-        TimeSpan.FromMinutes(30));
+        };
+        for (var index = 0; index < (itemDiscounts?.Length ?? 0); index++)
+        {
+            items[index].ApplyDiscount(itemDiscounts![index]);
+        }
+
+        return Order.Create(
+            "SLVN2610230001",
+            userId: null,
+            "Nguyễn Văn A",
+            "0901234567",
+            email: null,
+            new ShippingAddress("Hà Nội", "Phường Cầu Giấy", "1 Xuân Thủy"),
+            paymentMethod,
+            invoiceInfo: null,
+            note: null,
+            idempotencyKey: null,
+            items,
+            charges ?? OrderCharges.Shipping(30_000m),
+            Now,
+            TimeSpan.FromMinutes(30));
+    }
 }

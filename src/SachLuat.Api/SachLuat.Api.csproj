@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Modules\Ordering\SachLuat.Modules.Ordering\SachLuat.Modules.Ordering.csproj" />
     <ProjectReference Include="..\Modules\Content\SachLuat.Modules.Content\SachLuat.Modules.Content.csproj" />
     <ProjectReference Include="..\Modules\Shipping\SachLuat.Modules.Shipping\SachLuat.Modules.Shipping.csproj" />
+    <ProjectReference Include="..\Modules\Promotion\SachLuat.Modules.Promotion\SachLuat.Modules.Promotion.csproj" />
   </ItemGroup>
 
   <ItemGroup>

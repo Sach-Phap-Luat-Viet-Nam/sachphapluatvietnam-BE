@@ -5,6 +5,7 @@ namespace SachLuat.Modules.Ordering.Domain;
 internal sealed class Order : AuditableEntity
 {
     private readonly List<OrderItem> _items = [];
+    private readonly List<AppliedPromotionSnapshot> _appliedPromotions = [];
     private readonly List<OrderStatusLog> _statusLogs = [];
 
     private Order(
@@ -59,6 +60,12 @@ internal sealed class Order : AuditableEntity
 
     public decimal ShippingFee { get; private set; }
 
+    /// <summary>Phí theo biểu giá trước khi miễn phí theo ngưỡng; <c>ShippingBaseFee - ShippingFee</c> là phần doanh nghiệp bù.</summary>
+    public decimal ShippingBaseFee { get; private set; }
+
+    /// <summary>Giảm trên phí ship từ chương trình khuyến mãi; khách trả <c>ShippingFee - ShippingDiscount</c>.</summary>
+    public decimal ShippingDiscount { get; private set; }
+
     public decimal Total { get; private set; }
 
     public PaymentMethod PaymentMethod { get; private set; }
@@ -82,6 +89,8 @@ internal sealed class Order : AuditableEntity
 
     public IReadOnlyCollection<OrderItem> Items => _items;
 
+    public IReadOnlyCollection<AppliedPromotionSnapshot> AppliedPromotions => _appliedPromotions;
+
     public IReadOnlyCollection<OrderStatusLog> StatusLogs => _statusLogs;
 
     /// <summary>
@@ -99,7 +108,7 @@ internal sealed class Order : AuditableEntity
         string? note,
         string? idempotencyKey,
         IReadOnlyCollection<OrderItem> items,
-        decimal shippingFee,
+        OrderCharges charges,
         DateTime now,
         TimeSpan paymentTimeout)
     {
@@ -108,8 +117,22 @@ internal sealed class Order : AuditableEntity
             idempotencyKey);
         order._items.AddRange(items);
         order.Subtotal = items.Sum(item => item.LineTotal);
-        order.ShippingFee = shippingFee;
-        order.Total = order.Subtotal - order.Discount + shippingFee;
+
+        // Tổng tiền là nguồn sự thật của khoản khách trả, nên bất biến sai là lỗi lập trình, không phải lỗi người dùng.
+        if (charges.Discount != items.Sum(item => item.DiscountAmount)
+            || charges.Discount > order.Subtotal
+            || charges.ShippingDiscount > charges.ShippingFee
+            || charges.ShippingBaseFee < charges.ShippingFee)
+        {
+            throw new ArgumentException("Các khoản giảm giá và phí ship của đơn không nhất quán", nameof(charges));
+        }
+
+        order.Discount = charges.Discount;
+        order.ShippingFee = charges.ShippingFee;
+        order.ShippingBaseFee = charges.ShippingBaseFee;
+        order.ShippingDiscount = charges.ShippingDiscount;
+        order._appliedPromotions.AddRange(charges.AppliedPromotions);
+        order.Total = order.Subtotal - order.Discount + order.ShippingFee - order.ShippingDiscount;
 
         if (paymentMethod == PaymentMethod.Cod)
         {

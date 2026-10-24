@@ -46,3 +46,48 @@ internal sealed class InvoiceInfo
 
     public string Email { get; private set; } = string.Empty;
 }
+
+/// <summary>Chương trình khuyến mãi đã áp cho đơn (snapshot tên, mã, số tiền), lưu JSONB.</summary>
+internal sealed class AppliedPromotionSnapshot
+{
+    public AppliedPromotionSnapshot(long promotionId, string name, string kind, string? couponCode, decimal amount)
+    {
+        PromotionId = promotionId;
+        Name = name;
+        Kind = kind;
+        CouponCode = couponCode;
+        Amount = amount;
+    }
+
+    // EF Core
+    private AppliedPromotionSnapshot()
+    {
+    }
+
+    public long PromotionId { get; private set; }
+
+    public string Name { get; private set; } = string.Empty;
+
+    /// <summary><c>order_discount</c> hoặc <c>free_shipping</c>.</summary>
+    public string Kind { get; private set; } = string.Empty;
+
+    public string? CouponCode { get; private set; }
+
+    /// <summary>Số tiền giảm trên đơn hoặc trên phí ship, tùy <see cref="Kind"/>.</summary>
+    public decimal Amount { get; private set; }
+}
+
+/// <summary>Các khoản giảm giá và phí ship của đơn, tính sẵn lúc đặt hàng.</summary>
+/// <param name="Discount">Tổng giảm trên đơn; bằng tổng <c>discount_amount</c> các dòng.</param>
+/// <param name="ShippingFee">Phí ship khách phải trả theo biểu giá, sau miễn phí theo ngưỡng, trước giảm giá ship.</param>
+/// <param name="ShippingBaseFee">Phí theo biểu giá trước khi miễn phí theo ngưỡng (báo cáo phần doanh nghiệp bù).</param>
+/// <param name="ShippingDiscount">Giảm trên phí ship từ chương trình khuyến mãi.</param>
+internal sealed record OrderCharges(
+    decimal Discount,
+    decimal ShippingFee,
+    decimal ShippingBaseFee,
+    decimal ShippingDiscount,
+    IReadOnlyList<AppliedPromotionSnapshot> AppliedPromotions)
+{
+    public static OrderCharges Shipping(decimal shippingFee) => new(0m, shippingFee, shippingFee, 0m, []);
+}

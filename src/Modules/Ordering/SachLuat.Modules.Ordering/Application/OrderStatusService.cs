@@ -3,12 +3,13 @@ using Microsoft.Extensions.Logging;
 using SachLuat.Modules.Inventory.Contracts;
 using SachLuat.Modules.Ordering.Domain;
 using SachLuat.Modules.Ordering.Infrastructure.Persistence;
+using SachLuat.Modules.Promotion.Contracts;
 
 namespace SachLuat.Modules.Ordering.Application;
 
 /// <summary>
-/// Đổi trạng thái đơn kèm tác động tồn kho (BR-11): đóng gói → trừ tồn FIFO, hủy → hoàn tạm giữ,
-/// hoàn hàng → nhập lại kho.
+/// Đổi trạng thái đơn kèm tác động tồn kho (BR-11): đóng gói → trừ tồn FIFO, hủy → hoàn tạm giữ và trả lượt dùng
+/// khuyến mãi, hoàn hàng → nhập lại kho.
 /// </summary>
 /// <remarks>
 /// Đơn và tồn kho nằm ở hai DbContext nên không chung transaction. Dòng đơn bị khóa (FOR UPDATE) suốt
@@ -18,6 +19,7 @@ namespace SachLuat.Modules.Ordering.Application;
 internal sealed class OrderStatusService(
     OrderingDbContext dbContext,
     IInventoryService inventoryService,
+    IPromotionService promotionService,
     TimeProvider timeProvider,
     ILogger<OrderStatusService> logger)
 {
@@ -50,6 +52,7 @@ internal sealed class OrderStatusService(
                 break;
             case OrderStatus.Cancelled:
                 await inventoryService.ReleaseAsync(order.OrderCode, cancellationToken);
+                await promotionService.ReleaseAsync(order.OrderCode, cancellationToken);
                 break;
             case OrderStatus.Returned when OrderStatusMachine.IsStockDeducted(previous):
                 await inventoryService.RestockAsync(order.OrderCode, cancellationToken);

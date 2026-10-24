@@ -23,11 +23,15 @@ internal static class OrderMapping
             item.CoverType,
             item.UnitPrice,
             item.Quantity,
-            item.LineTotal)).ToList(),
+            item.LineTotal,
+            item.DiscountAmount)).ToList(),
         order.Subtotal,
         order.Discount,
         order.ShippingFee,
+        order.ShippingDiscount,
         order.Total,
+        order.AppliedPromotions.Select(promotion => new AppliedPromotionResponse(
+            promotion.PromotionId, promotion.Name, promotion.Kind, promotion.CouponCode, promotion.Amount)).ToList(),
         order.InvoiceRequired,
         order.InvoiceInfo is { } invoice
             ? new InvoiceInfoDto(invoice.CompanyName, invoice.TaxCode, invoice.Address, invoice.Email)

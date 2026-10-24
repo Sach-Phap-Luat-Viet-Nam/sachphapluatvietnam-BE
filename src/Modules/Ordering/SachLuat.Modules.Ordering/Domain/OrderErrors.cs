@@ -13,6 +13,7 @@ internal static class OrderErrors
     public const string PaymentMethodNotSupportedCode = "PAYMENT_METHOD_NOT_SUPPORTED";
     public const string IdempotencyKeyReusedCode = "IDEMPOTENCY_KEY_REUSED";
     public const string OrderNotPaidCode = "ORDER_NOT_PAID";
+    public const string CheckoutTotalChangedCode = "CHECKOUT_TOTAL_CHANGED";
 
     public static BusinessException InvalidTransition(OrderStatus from, OrderStatus to) => new(
         InvalidTransitionCode,
@@ -41,6 +42,11 @@ internal static class OrderErrors
 
     public static BusinessException OrderNotPaid() =>
         new(OrderNotPaidCode, "Đơn chưa thanh toán nên không thể hoàn tiền");
+
+    public static BusinessException CheckoutTotalChanged() => new(
+        CheckoutTotalChangedCode,
+        "Giá hoặc ưu đãi của đơn hàng đã thay đổi, vui lòng kiểm tra lại tổng tiền trước khi đặt hàng",
+        StatusCodes.Status409Conflict);
 
     public static BusinessException NotFound() =>
         new(ErrorCodes.NotFound, "Không tìm thấy đơn hàng", StatusCodes.Status404NotFound);

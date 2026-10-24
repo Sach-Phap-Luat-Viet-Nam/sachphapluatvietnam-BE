@@ -51,10 +51,23 @@ internal sealed class OrderItem
 
     public decimal LineTotal { get; private set; }
 
+    /// <summary>Phần giảm trên đơn phân bổ cho dòng này (0 nếu không có khuyến mãi).</summary>
+    public decimal DiscountAmount { get; private set; }
+
     /// <summary>Giá vốn bình quân mỗi cuốn theo các lô đã xuất (FIFO), có sau khi đóng gói.</summary>
     public decimal? CostPrice { get; private set; }
 
     public void SetCostPrice(decimal costPrice) => CostPrice = costPrice;
+
+    public void ApplyDiscount(decimal discountAmount)
+    {
+        if (discountAmount < 0 || discountAmount > LineTotal)
+        {
+            throw new ArgumentOutOfRangeException(nameof(discountAmount), "Giảm giá dòng phải trong khoảng 0..LineTotal");
+        }
+
+        DiscountAmount = discountAmount;
+    }
 }
 
 internal sealed class OrderStatusLog
