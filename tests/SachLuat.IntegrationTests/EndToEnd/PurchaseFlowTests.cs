@@ -10,7 +10,8 @@ namespace SachLuat.IntegrationTests.EndToEnd;
 
 /// <summary>
 /// Luồng nghiệp vụ chính chạy trên CSDL + Redis thật: Admin bật 2FA → nhập Catalog → phiếu nhập kho được duyệt
-/// → khách mua hàng → đóng gói trừ kho FIFO → hủy đơn hoàn kho → tự hủy đơn quá hạn thanh toán → mua ngay.
+/// → khách mua hàng → đóng gói trừ kho FIFO → hủy đơn hoàn kho → tự hủy đơn quá hạn thanh toán → mua ngay
+/// → khách vãng lai xem/hủy đơn qua link bí mật → chống bom hàng COD theo số điện thoại.
 /// </summary>
 [Collection(EndToEndCollection.Name)]
 public sealed class PurchaseFlowTests(EndToEndFactory factory)
@@ -291,6 +292,68 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         (await guest.PostAsync("/api/v1/orders/buy-now", BuyNow(skuId, quantity: 0), HttpStatusCode.BadRequest))
             .GetProperty("code").GetString().Should().Be("VALIDATION_ERROR");
         (await StockAsync(keeper, skuId)).GetProperty("available").GetInt32().Should().Be(6);
+
+        // 12. Khách vãng lai: SĐT +84 được chuẩn hóa; link bí mật để xem và tự hủy đơn (BR-12) không cần đăng nhập.
+        var guestToken = order.GetProperty("guestAccessToken").GetString();
+        guestToken.Should().NotBeNullOrEmpty();
+        memberOrder.GetProperty("guestAccessToken").ValueKind.Should().Be(JsonValueKind.Null);
+        (await guest.PostAsync("/api/v1/orders/lookup", new { orderCode, phone = "+84901234567" }))
+            .GetProperty("status").GetString().Should().Be("packing");
+        (await guest.GetAsync($"/api/v1/orders/guest/{guestToken}"))
+            .GetProperty("orderCode").GetString().Should().Be(orderCode);
+        (await guest.PostAsync($"/api/v1/orders/guest/{guestToken}/cancel", new { }, (HttpStatusCode)422))
+            .GetProperty("code").GetString().Should().Be("ORDER_NOT_CANCELLABLE");
+        (await guest.GetAsync("/api/v1/orders/guest/khong-ton-tai", HttpStatusCode.NotFound))
+            .GetProperty("code").GetString().Should().Be("NOT_FOUND");
+        var mistaken = await guest.PostAsync(
+            "/api/v1/orders/buy-now", BuyNow(skuId, quantity: 1, phone: "+84912345678"), HttpStatusCode.Created);
+        mistaken.GetProperty("phone").GetString().Should().Be("0912345678");
+        (await StockAsync(keeper, skuId)).GetProperty("available").GetInt32().Should().Be(5);
+        (await guest.PostAsync(
+                $"/api/v1/orders/guest/{mistaken.GetProperty("guestAccessToken").GetString()}/cancel",
+                new { reason = "Đặt nhầm" }))
+            .GetProperty("status").GetString().Should().Be("cancelled");
+        (await StockAsync(keeper, skuId)).GetProperty("available").GetInt32().Should().Be(6);
+
+        // 13. Chống bom hàng COD theo SĐT: tối đa 3 đơn COD đang mở; 2 đơn giao thất bại thì chỉ được chuyển khoản.
+        const string riskyPhone = "0933333333";
+        var codCodes = new List<string>();
+        for (var i = 0; i < 3; i++)
+        {
+            codCodes.Add((await guest.PostAsync(
+                    "/api/v1/orders/buy-now", BuyNow(skuId, quantity: 1, phone: riskyPhone), HttpStatusCode.Created))
+                .GetProperty("orderCode").GetString()!);
+        }
+
+        (await guest.PostAsync(
+                "/api/v1/orders/buy-now", BuyNow(skuId, quantity: 1, phone: riskyPhone), (HttpStatusCode)422))
+            .GetProperty("code").GetString().Should().Be("TOO_MANY_OPEN_ORDERS");
+        (await guest.PostAsync(
+                "/api/v1/checkout/preview", new { source = "buy_now", skuId, quantity = 1, phone = riskyPhone }))
+            .GetProperty("codAllowed").GetBoolean().Should().BeFalse();
+        foreach (var code in codCodes.Take(2))
+        {
+            foreach (var status in new[] { "confirmed", "packing", "ready_to_ship", "shipping", "returning" })
+            {
+                await admin.PostAsync($"/api/v1/admin/orders/{code}/status", new { status });
+            }
+        }
+
+        (await guest.PostAsync(
+                "/api/v1/orders/buy-now", BuyNow(skuId, quantity: 1, phone: riskyPhone), (HttpStatusCode)422))
+            .GetProperty("code").GetString().Should().Be("COD_NOT_ALLOWED");
+        (await guest.PostAsync(
+                "/api/v1/orders/buy-now",
+                BuyNow(skuId, quantity: 1, phone: riskyPhone, paymentMethod: "bank_transfer"),
+                HttpStatusCode.Created))
+            .GetProperty("status").GetString().Should().Be("pending_payment");
+        var risk = (await admin.GetAsync($"/api/v1/admin/orders/{codCodes[2]}")).GetProperty("customerRisk");
+        risk.GetProperty("totalOrders").GetInt32().Should().Be(4);
+        risk.GetProperty("failedCodCount").GetInt32().Should().Be(2);
+        risk.GetProperty("openCodCount").GetInt32().Should().Be(1);
+        risk.GetProperty("codBlocked").GetBoolean().Should().BeTrue();
+        (await guest.PostAsync("/api/v1/checkout/preview", new { source = "buy_now", skuId, quantity = 1 }))
+            .GetProperty("codAllowed").GetBoolean().Should().BeTrue("chưa biết SĐT thì chưa chặn COD");
     }
 
     private static Task<JsonElement> StockAsync(ApiClient client, long skuId) =>
@@ -304,13 +367,17 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         paymentMethod,
     };
 
-    private static object BuyNow(long skuId, int quantity) => new
-    {
-        skuId,
-        quantity,
-        customerName = "Nguyễn Văn A",
-        phone = CustomerPhone,
-        shippingAddress = new { province = "Hà Nội", ward = "Phường Cầu Giấy", streetAddress = "1 Xuân Thủy" },
-        paymentMethod = "cod",
-    };
+    private static object BuyNow(
+        long skuId,
+        int quantity,
+        string phone = CustomerPhone,
+        string paymentMethod = "cod") => new
+        {
+            skuId,
+            quantity,
+            customerName = "Nguyễn Văn A",
+            phone,
+            shippingAddress = new { province = "Hà Nội", ward = "Phường Cầu Giấy", streetAddress = "1 Xuân Thủy" },
+            paymentMethod,
+        };
 }

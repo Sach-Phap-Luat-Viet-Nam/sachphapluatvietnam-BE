@@ -51,6 +51,20 @@ internal sealed class OrdersController(OrderService orderService) : ControllerBa
     [HttpPost("{code}/cancel")]
     public Task<OrderResponse> Cancel(string code, CancelOrderRequest request, CancellationToken cancellationToken) =>
         orderService.CancelMineAsync(code, request, cancellationToken);
+
+    /// <summary>Khách vãng lai xem đơn qua link bí mật (<c>guestAccessToken</c> nhận lúc đặt hàng).</summary>
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
+    [HttpGet("guest/{token}")]
+    public Task<OrderResponse> GetGuest(string token, CancellationToken cancellationToken) =>
+        orderService.GetGuestAsync(token, cancellationToken);
+
+    /// <summary>Khách vãng lai tự hủy đơn qua link bí mật (BR-12).</summary>
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
+    [HttpPost("guest/{token}/cancel")]
+    public Task<OrderResponse> CancelGuest(
+        string token,
+        CancelOrderRequest request,
+        CancellationToken cancellationToken) => orderService.CancelGuestAsync(token, request, cancellationToken);
 }
 
 [ApiController]

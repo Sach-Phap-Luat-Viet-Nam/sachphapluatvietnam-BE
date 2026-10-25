@@ -2,12 +2,16 @@ using Microsoft.EntityFrameworkCore;
 using SachLuat.Modules.Ordering.Domain;
 using SachLuat.Modules.Ordering.Infrastructure.Persistence;
 using SachLuat.SharedKernel.Api;
+using SachLuat.SharedKernel.Domain;
 using SachLuat.SharedKernel.Persistence;
 
 namespace SachLuat.Modules.Ordering.Application;
 
 /// <summary>Quản lý đơn hàng trên Admin (FR-70).</summary>
-internal sealed class OrderAdminService(OrderingDbContext dbContext, OrderStatusService statusService)
+internal sealed class OrderAdminService(
+    OrderingDbContext dbContext,
+    OrderStatusService statusService,
+    CustomerRiskService riskService)
 {
     private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
 
@@ -41,7 +45,8 @@ internal sealed class OrderAdminService(OrderingDbContext dbContext, OrderStatus
         if (!string.IsNullOrWhiteSpace(query.Q))
         {
             var term = query.Q.Trim();
-            orders = orders.Where(order => order.OrderCode == term || order.Phone == term);
+            var phone = PhoneNumbers.Normalize(term);
+            orders = orders.Where(order => order.OrderCode == term || order.Phone == phone);
         }
 
         var total = await orders.CountAsync(cancellationToken);
@@ -72,7 +77,7 @@ internal sealed class OrderAdminService(OrderingDbContext dbContext, OrderStatus
             .AsSplitQuery()
             .SingleOrDefaultAsync(o => o.OrderCode == orderCode, cancellationToken)
             ?? throw OrderErrors.NotFound();
-        return order.ToAdminResponse();
+        return order.ToAdminResponse(await riskService.GetAsync(order.Phone, cancellationToken));
     }
 
     public async Task<AdminOrderResponse> ChangeStatusAsync(
@@ -89,7 +94,7 @@ internal sealed class OrderAdminService(OrderingDbContext dbContext, OrderStatus
 
         var order = await statusService.ChangeAsync(
             orderId, request.Status, staffUserId, request.Note?.Trim(), guard: null, cancellationToken);
-        return order.ToAdminResponse();
+        return order.ToAdminResponse(await riskService.GetAsync(order.Phone, cancellationToken));
     }
 
     private static DateTime StartOfVietnamDayUtc(DateOnly day) =>

@@ -1,3 +1,5 @@
+using System.Buffers.Text;
+using System.Security.Cryptography;
 using SachLuat.SharedKernel.Domain;
 
 namespace SachLuat.Modules.Ordering.Domain;
@@ -23,7 +25,7 @@ internal sealed class Order : AuditableEntity
         OrderCode = orderCode;
         UserId = userId;
         CustomerName = customerName;
-        Phone = phone;
+        Phone = PhoneNumbers.Normalize(phone);
         Email = email;
         ShippingAddress = shippingAddress;
         PaymentMethod = paymentMethod;
@@ -33,6 +35,7 @@ internal sealed class Order : AuditableEntity
         InvoiceInfo = invoiceInfo;
         Note = note;
         IdempotencyKey = idempotencyKey;
+        GuestAccessToken = userId is null ? NewGuestAccessToken() : null;
     }
 
     // EF Core
@@ -83,6 +86,12 @@ internal sealed class Order : AuditableEntity
     public string? Note { get; private set; }
 
     public string? IdempotencyKey { get; private set; }
+
+    /// <summary>
+    /// Chỉ đơn khách vãng lai có: chuỗi ngẫu nhiên 128 bit trong link xem và hủy đơn không cần đăng nhập.
+    /// Mã đơn tuần tự + SĐT dễ dò nên không dùng làm khóa truy cập.
+    /// </summary>
+    public string? GuestAccessToken { get; private set; }
 
     /// <summary>Hạn thanh toán online; quá hạn thì job tự hủy và hoàn tồn tạm giữ (BR-10 bước 4).</summary>
     public DateTime? PaymentExpiresAt { get; private set; }
@@ -190,4 +199,6 @@ internal sealed class Order : AuditableEntity
             }
         }
     }
+
+    private static string NewGuestAccessToken() => Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
 }

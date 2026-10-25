@@ -125,6 +125,7 @@ internal sealed record AppliedPromotionResponse(
 /// <param name="ShippingFee">Phí ship sau miễn phí theo ngưỡng, trước giảm giá ship.</param>
 /// <param name="CouponApplied">null khi khách không nhập mã; false khi mã hợp lệ nhưng có ưu đãi khác lợi hơn.</param>
 /// <param name="AmountToFreeShipping">Còn thiếu bao nhiêu để được miễn phí ship; 0 khi đã đạt hoặc không có ngưỡng.</param>
+/// <param name="CodAllowed">false khi số điện thoại gửi kèm đang bị khóa COD hoặc đủ số đơn COD đang mở; FE ẩn COD.</param>
 internal sealed record CheckoutPreviewResponse(
     IReadOnlyList<PricedItemResponse> Items,
     decimal Subtotal,
@@ -137,7 +138,8 @@ internal sealed record CheckoutPreviewResponse(
     decimal? FreeShippingThreshold,
     decimal AmountToFreeShipping,
     EtaResponse? Eta,
-    string? ZoneName);
+    string? ZoneName,
+    bool CodAllowed);
 
 internal sealed class AdminOrdersQuery : PagedQuery
 {
@@ -174,6 +176,9 @@ internal sealed record OrderStatusLogResponse(
     string? Note,
     DateTime CreatedAt);
 
+/// <param name="GuestAccessToken">
+/// Chỉ có khi khách vãng lai vừa đặt đơn (kể cả gửi lại cùng <c>Idempotency-Key</c>): FE dựng link xem và hủy đơn.
+/// </param>
 internal sealed record OrderResponse(
     string OrderCode,
     OrderStatus Status,
@@ -196,7 +201,8 @@ internal sealed record OrderResponse(
     DateTime? PaymentExpiresAt,
     bool CanCancel,
     DateTime CreatedAt,
-    IReadOnlyList<OrderStatusLogResponse> History);
+    IReadOnlyList<OrderStatusLogResponse> History,
+    string? GuestAccessToken);
 
 internal sealed record OrderSummaryResponse(
     string OrderCode,
@@ -210,8 +216,27 @@ internal sealed record OrderSummaryResponse(
     DateTime CreatedAt);
 
 /// <param name="CostOfGoods">Tổng giá vốn (có sau khi đóng gói), dùng cho báo cáo lợi nhuận gộp (FR-95).</param>
+/// <param name="CustomerRisk">Lịch sử đơn theo số điện thoại của đơn, để CSKH cân nhắc khi gọi xác nhận.</param>
 internal sealed record AdminOrderResponse(
     OrderResponse Order,
     long? UserId,
     IReadOnlyList<OrderStatus> NextStatuses,
-    decimal? CostOfGoods);
+    decimal? CostOfGoods,
+    CustomerRiskResponse CustomerRisk);
+
+/// <summary>Số liệu theo số điện thoại (mọi đơn, kể cả đơn hiện tại).</summary>
+/// <param name="FailedCodCount">Đơn COD giao thất bại (từng sang <c>returning</c>).</param>
+/// <param name="OpenCodCount">Đơn COD chưa giao xong (từ <c>pending_confirm</c> đến <c>shipping</c>).</param>
+/// <param name="CodBlocked">Đạt ngưỡng giao thất bại: chỉ được chuyển khoản.</param>
+/// <param name="OpenCodLimitReached">Đủ số đơn COD đang mở: không đặt thêm COD cho tới khi có đơn giao xong.</param>
+internal sealed record CustomerRiskResponse(
+    int TotalOrders,
+    int DeliveredCount,
+    int CancelledCount,
+    int FailedCodCount,
+    int OpenCodCount,
+    bool CodBlocked,
+    bool OpenCodLimitReached)
+{
+    public bool CodAllowed => !CodBlocked && !OpenCodLimitReached;
+}

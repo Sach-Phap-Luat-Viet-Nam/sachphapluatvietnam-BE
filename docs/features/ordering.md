@@ -8,7 +8,9 @@
 ## Luồng xử lý
 
 1. `POST /orders` đọc giỏ hiện tại, kiểm tra SKU còn bán và ≤ 20 cuốn/SKU, chụp snapshot tên sách, ấn bản, ISBN,
-   giá, địa chỉ (mục 10.3).
+   giá, địa chỉ (mục 10.3). Đơn COD được kiểm tra **chống bom hàng** theo số điện thoại trước (xem bên dưới).
+   Số điện thoại lưu dạng chuẩn `0xxxxxxxxx` (`+84…` được đổi về `0…`) nên tra cứu, Admin tìm kiếm và giới hạn theo
+   số điện thoại khớp dù khách gõ dạng nào.
 2. **Tính tiền** (`CheckoutPricingService`, dùng chung với xem trước nên hai nơi không thể lệch nhau):
    `subtotal` (giá hiện hành × số lượng) → **phí ship** theo tỉnh và trọng lượng, miễn phí khi `subtotal` ≥ ngưỡng
    (tính trên tạm tính **trước** giảm giá, BR-14; xem `docs/features/shipping.md`) → **khuyến mãi** (giảm trên đơn,
@@ -24,6 +26,24 @@
    hoàn tồn và lượt dùng đã giữ.
 6. Trạng thái đầu: COD → `pending_confirm`; chuyển khoản → `pending_payment`, hạn thanh toán 30 phút.
 7. Xóa giỏ, trả đơn. Header `Idempotency-Key` gửi lại → trả đúng đơn đã tạo (chống bấm nhiều lần).
+
+**Link xem/hủy đơn cho khách vãng lai**: đơn không đăng nhập có `guestAccessToken` (ngẫu nhiên 128 bit, 22 ký tự
+base64url), chỉ trả trong response tạo đơn (`POST /orders`, `POST /orders/buy-now`, kể cả khi gửi lại cùng
+`Idempotency-Key`). FE dựng trang ví dụ `/don-hang/{token}` ở bước "đặt hàng thành công"; khách mở link để xem
+(`GET /orders/guest/{token}`) và tự hủy (`POST /orders/guest/{token}/cancel`, BR-12, cùng điều kiện như thành viên).
+Token sai trả `NOT_FOUND`. Tra cứu bằng mã đơn + SĐT vẫn còn nhưng không trả token, nên không hủy được bằng cách đó.
+
+**Chống đặt nhầm / bom hàng COD** (`CustomerRiskService`), tính theo số điện thoại đã chuẩn hóa trên mọi đơn (cả
+thành viên):
+
+- Đơn COD **đang mở** (`pending_confirm`, `confirmed`, `packing`, `ready_to_ship`, `shipping`) đạt
+  `Ordering:MaxOpenCodOrdersPerPhone` → không đặt thêm COD (`TOO_MANY_OPEN_ORDERS`).
+- Đơn COD **giao thất bại** (từng chuyển `shipping → returning`) đạt `Ordering:CodFailedDeliveryLimit` → số đó chỉ
+  được chuyển khoản (`COD_NOT_ALLOWED`). Đổi trả sau khi đã nhận (`return_requested → returned`) không tính.
+- Chuyển khoản luôn đặt được. `POST /checkout/preview` có `phone` thì trả `codAllowed` để FE ẩn COD trước khi khách
+  bấm đặt hàng; không có `phone` thì `codAllowed = true`.
+- Admin xem `customerRisk` trong chi tiết đơn (tổng đơn, đã nhận, đã hủy, giao thất bại, COD đang mở, có bị khóa
+  COD không) để CSKH cân nhắc khi gọi xác nhận đơn `pending_confirm`.
 
 **Xem trước thanh toán** (`POST /checkout/preview`): cùng cách tính ở bước 2 cho giỏ hiện tại (`source = cart`) hoặc
 một SKU (`source = buy_now`), kèm thử mã giảm giá. Không ghi gì, không trừ lượt dùng mã. Trả từng dòng, `subtotal`,
@@ -62,23 +82,31 @@ Tiền tố `/api/v1`.
 | POST | `/checkout/preview` | Tùy chọn | `{source: cart\|buy_now, skuId?, quantity?, province?, couponCode?, phone?}` → `CheckoutPreviewResponse` (`skuId`, `quantity` bắt buộc với `buy_now`) |
 | GET | `/orders` | Bearer | Đơn của tôi (phân trang) |
 | GET | `/orders/{code}` | Bearer | Chi tiết đơn của tôi kèm lịch sử trạng thái |
-| POST | `/orders/lookup` | Không | `{orderCode, phone}` (giới hạn tần suất) |
+| POST | `/orders/lookup` | Không | `{orderCode, phone}` (giới hạn tần suất); `phone` dạng `0…` hay `+84…` đều khớp |
 | POST | `/orders/{code}/cancel` | Bearer | `{reason?}` |
+| GET | `/orders/guest/{token}` | Không | Khách vãng lai xem đơn qua link (giới hạn tần suất) → `OrderResponse` |
+| POST | `/orders/guest/{token}/cancel` | Không | `{reason?}` → `OrderResponse` (giới hạn tần suất) |
 | POST | `/shipping/quote` | Không | `{subtotal, province?, items?: [{skuId, quantity}]}` → `{shippingFee, freeShippingThreshold, amountToFreeShipping, eta: {minDays, maxDays}?, zoneName?}`. Chỉ gửi `subtotal` (không `province`) thì dùng phí cố định như trước. `freeShippingThreshold` là `null` khi Admin tắt miễn ship theo ngưỡng |
 | GET | `/admin/orders?status=&paymentMethod=&from=&to=&q=` | orders_read | Lọc theo trạng thái, phương thức, ngày (giờ VN), mã đơn/SĐT |
-| GET | `/admin/orders/{code}` | orders_read | `{order, userId, nextStatuses[], costOfGoods}` |
+| GET | `/admin/orders/{code}` | orders_read | `{order, userId, nextStatuses[], costOfGoods, customerRisk}` |
 | POST | `/admin/orders/{code}/status` | orders_manage | `{status, note?}` |
 
 `OrderResponse`: mã đơn, trạng thái, phương thức/tình trạng thanh toán, thông tin khách, địa chỉ, `items[]`,
 `subtotal, discount, shippingFee, shippingDiscount, total`, `appliedPromotions[]` (snapshot tên, mã, số tiền),
 hóa đơn, `paymentExpiresAt`, `canCancel`, `history[]`. Mỗi dòng đơn có thêm `discountAmount`.
 `shippingFee` là phí khách phải trả theo biểu giá sau miễn phí theo ngưỡng; khách thực trả
-`shippingFee − shippingDiscount`.
+`shippingFee − shippingDiscount`. `guestAccessToken` chỉ có giá trị ở response tạo đơn của khách vãng lai, còn lại
+`null`.
+
+`CheckoutPreviewResponse` có thêm `codAllowed`. `customerRisk` (Admin, `POST /admin/orders/{code}/status` cũng trả):
+`{totalOrders, deliveredCount, cancelledCount, failedCodCount, openCodCount, codBlocked, openCodLimitReached,
+codAllowed}`.
 
 Mã lỗi: `CART_EMPTY` (422, chỉ đặt từ giỏ), `SKU_NOT_AVAILABLE` (422), `MAX_QTY_EXCEEDED` (422), `OUT_OF_STOCK` (409),
 `PAYMENT_METHOD_NOT_SUPPORTED` (422), `IDEMPOTENCY_KEY_REUSED` (409), `ORDER_NOT_CANCELLABLE` (422),
 `ORDER_INVALID_TRANSITION` (409), `ORDER_NOT_PAID` (422), `NOT_FOUND` (404), `CHECKOUT_TOTAL_CHANGED` (409),
-`ADDRESS_NOT_SUPPORTED` (422, tỉnh nằm ngoài vùng giao hàng), cùng các mã mã giảm giá `COUPON_INVALID`,
+`ADDRESS_NOT_SUPPORTED` (422, tỉnh nằm ngoài vùng giao hàng), `TOO_MANY_OPEN_ORDERS` (422),
+`COD_NOT_ALLOWED` (422), cùng các mã mã giảm giá `COUPON_INVALID`,
 `COUPON_EXPIRED`, `COUPON_MIN_ORDER`, `COUPON_NOT_APPLICABLE`, `COUPON_LOGIN_REQUIRED`, `PROMOTION_UNAVAILABLE`
 (xem `docs/features/promotion.md`).
 
@@ -89,6 +117,9 @@ Mã lỗi: `CART_EMPTY` (422, chỉ đặt từ giỏ), `SKU_NOT_AVAILABLE` (422
 | `Ordering:PaymentTimeoutMinutes` | 30 |
 | `Ordering:MaxQuantityPerSku` | 20 |
 | `Ordering:EnableExpiredPaymentSweep`, `Ordering:ExpiredPaymentSweepSeconds` | true, 60 |
+| `Ordering:MaxOpenCodOrdersPerPhone` | 3 (0 = không giới hạn) |
+| `Ordering:CodFailedDeliveryLimit` | 2 (0 = không khóa COD) |
+| `RateLimiting:AuthPermitPerMinute` | 10 (dùng chung cho `/orders/lookup` và `/orders/guest/*`) |
 | `RateLimiting:CheckoutPermitPerMinute` | 60 (số request `POST /checkout/preview` mỗi phút mỗi IP) |
 
 `Ordering:ShippingFlatFee` và `Ordering:FreeShippingThreshold` **đã bỏ**: phí cố định và ngưỡng miễn ship nay do
@@ -109,6 +140,11 @@ ngưỡng, để báo cáo phần doanh nghiệp bù), `shipping_discount`, `app
 miễn ship theo ngưỡng sẽ có phí biểu giá bằng 0 (không khôi phục được). Production tắt
 `Database:ApplyMigrationsOnStartup`, cần áp migration này ở bước deploy.
 
+`AddGuestAccessTokenAndNormalizePhone`: `orders` thêm `guest_access_token` (`varchar(32)`, unique khi khác null),
+index `ix_orders_phone`; câu `UPDATE` đổi `phone` dạng `+84xxxxxxxxx` của đơn cũ về `0xxxxxxxxx` (Down không đổi
+ngược). Đơn vãng lai tạo trước migration không có token, khách vẫn tra cứu bằng mã đơn + SĐT. Production cần áp
+migration ở bước deploy như trên.
+
 ## Hạn chế / việc còn lại
 
 - Mua ngay chỉ đặt một SKU mỗi lần.
@@ -123,3 +159,8 @@ miễn ship theo ngưỡng sẽ có phí biểu giá bằng 0 (không khôi ph�
 - Kế toán chưa có quyền đổi `paid` (chỉ `orders_manage`); tạo đơn thủ công (FR-72) chưa làm.
 - Đơn và tồn kho nằm ở hai DbContext, đồng bộ bằng khóa dòng đơn + thao tác kho idempotent, không phải
   transaction chung.
+- Chống bom hàng tính theo số điện thoại: khách đổi số là lách được. Hai request COD song song có thể cùng vượt
+  qua kiểm tra số đơn đang mở (không khóa theo số điện thoại); CSKH vẫn gọi xác nhận đơn `pending_confirm`.
+  Chưa có danh sách đen thủ công trên Admin.
+- Token nằm trong URL nên có thể lọt vào lịch sử trình duyệt hoặc log proxy; ai có link xem và hủy được đơn.
+  Chưa thu hồi hoặc cấp lại token; chưa gửi link qua email/ZNS (khách cần lưu link ở trang đặt hàng thành công).

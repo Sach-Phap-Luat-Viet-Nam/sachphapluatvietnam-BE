@@ -10,6 +10,7 @@ using SachLuat.Modules.Ordering.Infrastructure.Persistence;
 using SachLuat.Modules.Promotion.Contracts;
 using SachLuat.Modules.Shipping.Contracts;
 using SachLuat.SharedKernel.Api;
+using SachLuat.SharedKernel.Domain;
 using SachLuat.SharedKernel.Errors;
 using SachLuat.SharedKernel.Persistence;
 using SachLuat.SharedKernel.Security;
@@ -22,6 +23,7 @@ internal sealed class OrderService(
     OrderCodeGenerator codeGenerator,
     OrderStatusService statusService,
     CheckoutPricingService pricingService,
+    CustomerRiskService riskService,
     IShippingQuoteService shippingQuoteService,
     IPromotionService promotionService,
     ICurrentCart currentCart,
@@ -65,7 +67,7 @@ internal sealed class OrderService(
         logger.LogInformation(
             "Created order {OrderCode} from cart with {ItemCount} items, payment {PaymentMethod}",
             order.OrderCode, order.Items.Count, order.PaymentMethod);
-        return order.ToResponse();
+        return order.ToResponse(includeGuestAccessToken: true);
     }
 
     /// <summary>"Mua ngay": đặt thẳng một SKU; giỏ hàng của khách giữ nguyên.</summary>
@@ -88,7 +90,7 @@ internal sealed class OrderService(
         logger.LogInformation(
             "Created buy-now order {OrderCode} for SKU {SkuId} x{Quantity}, payment {PaymentMethod}",
             order.OrderCode, request.SkuId, request.Quantity, order.PaymentMethod);
-        return order.ToResponse();
+        return order.ToResponse(includeGuestAccessToken: true);
     }
 
     public async Task<PagedResponse<OrderSummaryResponse>> ListMineAsync(
@@ -127,10 +129,18 @@ internal sealed class OrderService(
     /// <summary>FR-40: tra cứu đơn không cần đăng nhập bằng mã đơn + số điện thoại.</summary>
     public async Task<OrderResponse> LookupAsync(LookupOrderRequest request, CancellationToken cancellationToken)
     {
+        var phone = PhoneNumbers.Normalize(request.Phone);
         var order = await LoadAsync(
-                dbContext.Orders.Where(o => o.OrderCode == request.OrderCode.Trim() && o.Phone == request.Phone),
+                dbContext.Orders.Where(o => o.OrderCode == request.OrderCode.Trim() && o.Phone == phone),
                 cancellationToken)
             ?? throw OrderErrors.NotFound();
+        return order.ToResponse();
+    }
+
+    /// <summary>Khách vãng lai xem đơn qua link bí mật nhận lúc đặt hàng.</summary>
+    public async Task<OrderResponse> GetGuestAsync(string token, CancellationToken cancellationToken)
+    {
+        var order = await LoadAsync(GuestOrder(token), cancellationToken) ?? throw OrderErrors.NotFound();
         return order.ToResponse();
     }
 
@@ -141,25 +151,23 @@ internal sealed class OrderService(
         CancellationToken cancellationToken)
     {
         var userId = currentUser.RequireUserId();
-        var orderId = await dbContext.Orders.AsNoTracking()
-            .Where(order => order.OrderCode == orderCode && order.UserId == userId)
-            .Select(order => (long?)order.Id)
-            .SingleOrDefaultAsync(cancellationToken)
-            ?? throw OrderErrors.NotFound();
-
-        var order = await statusService.ChangeAsync(
-            orderId,
-            OrderStatus.Cancelled,
+        var order = await CancelAsync(
+            dbContext.Orders.Where(o => o.OrderCode == orderCode && o.UserId == userId),
             userId,
-            string.IsNullOrWhiteSpace(request.Reason) ? "Khách hủy đơn" : request.Reason.Trim(),
-            guard: o =>
-            {
-                if (!o.CanTransitionTo(OrderStatus.Cancelled))
-                {
-                    throw OrderErrors.NotCancellable();
-                }
-            },
+            request.Reason,
+            "Khách hủy đơn",
             cancellationToken);
+        return order.ToResponse();
+    }
+
+    /// <summary>BR-12 cho khách vãng lai, xác thực bằng link bí mật thay cho đăng nhập.</summary>
+    public async Task<OrderResponse> CancelGuestAsync(
+        string token,
+        CancelOrderRequest request,
+        CancellationToken cancellationToken)
+    {
+        var order = await CancelAsync(
+            GuestOrder(token), changedBy: null, request.Reason, "Khách vãng lai tự hủy", cancellationToken);
         return order.ToResponse();
     }
 
@@ -238,7 +246,9 @@ internal sealed class OrderService(
             pricing.Shipping.FreeShippingThreshold,
             pricing.Shipping.AmountToFreeShipping,
             ToEta(pricing.Shipping),
-            pricing.Shipping.ZoneName);
+            pricing.Shipping.ZoneName,
+            string.IsNullOrWhiteSpace(request.Phone)
+                || (await riskService.GetAsync(request.Phone, cancellationToken)).CodAllowed);
     }
 
     private static ShippingQuoteResponse ToResponse(ShippingQuote quote) => new(
@@ -267,8 +277,8 @@ internal sealed class OrderService(
             is { } existing)
         {
             // Khách bấm đặt hàng nhiều lần: trả lại đơn đã tạo thay vì tạo đơn trùng (mục 11.1).
-            return existing.UserId == currentUser.UserId && existing.Phone == details.Phone
-                ? existing.ToResponse()
+            return existing.UserId == currentUser.UserId && existing.Phone == PhoneNumbers.Normalize(details.Phone)
+                ? existing.ToResponse(includeGuestAccessToken: true)
                 : throw OrderErrors.IdempotencyKeyReused();
         }
 
@@ -277,8 +287,45 @@ internal sealed class OrderService(
             throw OrderErrors.PaymentMethodNotSupported();
         }
 
+        if (details.PaymentMethod == PaymentMethod.Cod)
+        {
+            await riskService.EnsureCodAllowedAsync(details.Phone, cancellationToken);
+        }
+
         return null;
     }
+
+    /// <summary>Hủy đơn phía khách; <paramref name="orders"/> đã lọc đúng đơn của người gọi.</summary>
+    private async Task<Order> CancelAsync(
+        IQueryable<Order> orders,
+        long? changedBy,
+        string? reason,
+        string defaultNote,
+        CancellationToken cancellationToken)
+    {
+        var orderId = await orders.AsNoTracking()
+            .Select(order => (long?)order.Id)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw OrderErrors.NotFound();
+
+        return await statusService.ChangeAsync(
+            orderId,
+            OrderStatus.Cancelled,
+            changedBy,
+            string.IsNullOrWhiteSpace(reason) ? defaultNote : reason.Trim(),
+            guard: o =>
+            {
+                if (!o.CanTransitionTo(OrderStatus.Cancelled))
+                {
+                    throw OrderErrors.NotCancellable();
+                }
+            },
+            cancellationToken);
+    }
+
+    // Token chỉ sinh cho đơn khách vãng lai nên không cần lọc thêm user_id.
+    private IQueryable<Order> GuestOrder(string token) =>
+        dbContext.Orders.Where(order => order.GuestAccessToken == token);
 
     /// <summary>Kiểm tra SKU, chụp snapshot, tạm giữ tồn và lưu đơn (mục 10.3, BR-11).</summary>
     private async Task<Order> PlaceAsync(

@@ -1,4 +1,5 @@
 using SachLuat.Modules.Promotion.Contracts;
+using SachLuat.SharedKernel.Domain;
 
 namespace SachLuat.Modules.Promotion.Domain;
 
@@ -75,16 +76,7 @@ internal static class PromotionCustomerKey
             return $"u:{userId}";
         }
 
-        var phone = NormalizePhone(customer.Phone);
+        var phone = PhoneNumbers.Normalize(customer.Phone);
         return phone.Length == 0 ? null : $"p:{phone}";
-    }
-
-    // 0901234567, +84901234567 và 84901234567 là cùng một số.
-    public static string NormalizePhone(string? phone)
-    {
-        var digits = new string((phone ?? string.Empty).Where(char.IsDigit).ToArray());
-        return digits.StartsWith("84", StringComparison.Ordinal) && digits.Length == 11
-            ? "0" + digits[2..]
-            : digits;
     }
 }

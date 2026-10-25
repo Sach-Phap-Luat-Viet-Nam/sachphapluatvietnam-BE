@@ -52,6 +52,11 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
+                    b.Property<string>("GuestAccessToken")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("guest_access_token");
+
                     b.Property<string>("IdempotencyKey")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -142,6 +147,11 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_orders");
 
+                    b.HasIndex("GuestAccessToken")
+                        .IsUnique()
+                        .HasDatabaseName("ix_orders_guest_access_token")
+                        .HasFilter("guest_access_token IS NOT NULL");
+
                     b.HasIndex("IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("ix_orders_idempotency_key");
@@ -153,6 +163,9 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                     b.HasIndex("PaymentExpiresAt")
                         .HasDatabaseName("ix_orders_payment_expires_at")
                         .HasFilter("payment_expires_at IS NOT NULL");
+
+                    b.HasIndex("Phone")
+                        .HasDatabaseName("ix_orders_phone");
 
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_orders_status_created_at");

@@ -14,6 +14,8 @@ internal static class OrderErrors
     public const string IdempotencyKeyReusedCode = "IDEMPOTENCY_KEY_REUSED";
     public const string OrderNotPaidCode = "ORDER_NOT_PAID";
     public const string CheckoutTotalChangedCode = "CHECKOUT_TOTAL_CHANGED";
+    public const string TooManyOpenOrdersCode = "TOO_MANY_OPEN_ORDERS";
+    public const string CodNotAllowedCode = "COD_NOT_ALLOWED";
 
     public static BusinessException InvalidTransition(OrderStatus from, OrderStatus to) => new(
         InvalidTransitionCode,
@@ -47,6 +49,15 @@ internal static class OrderErrors
         CheckoutTotalChangedCode,
         "Giá hoặc ưu đãi của đơn hàng đã thay đổi, vui lòng kiểm tra lại tổng tiền trước khi đặt hàng",
         StatusCodes.Status409Conflict);
+
+    public static BusinessException TooManyOpenOrders(int max) => new(
+        TooManyOpenOrdersCode,
+        $"Số điện thoại này đang có {max} đơn thanh toán khi nhận hàng chưa giao xong, vui lòng chờ nhận hàng "
+        + "hoặc chọn chuyển khoản");
+
+    public static BusinessException CodNotAllowed() => new(
+        CodNotAllowedCode,
+        "Số điện thoại này hiện không dùng được thanh toán khi nhận hàng, vui lòng chọn chuyển khoản");
 
     public static BusinessException NotFound() =>
         new(ErrorCodes.NotFound, "Không tìm thấy đơn hàng", StatusCodes.Status404NotFound);

@@ -170,10 +170,29 @@ public sealed class OrderTests
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
+    [Fact]
+    public void Create_Guest_GetsRandomAccessTokenAndNormalizedPhone()
+    {
+        var first = CreateOrder(PaymentMethod.Cod, phone: "+84901234567");
+        var second = CreateOrder(PaymentMethod.Cod);
+
+        first.Phone.Should().Be("0901234567");
+        first.GuestAccessToken.Should().MatchRegex("^[A-Za-z0-9_-]{22}$");
+        second.GuestAccessToken.Should().NotBe(first.GuestAccessToken);
+    }
+
+    [Fact]
+    public void Create_Member_HasNoGuestAccessToken()
+    {
+        CreateOrder(PaymentMethod.Cod, userId: 7).GuestAccessToken.Should().BeNull();
+    }
+
     private static Order CreateOrder(
         PaymentMethod paymentMethod,
         OrderCharges? charges = null,
-        decimal[]? itemDiscounts = null)
+        decimal[]? itemDiscounts = null,
+        long? userId = null,
+        string phone = "0901234567")
     {
         var items = new[]
         {
@@ -187,9 +206,9 @@ public sealed class OrderTests
 
         return Order.Create(
             "SLVN2610230001",
-            userId: null,
+            userId,
             "Nguyễn Văn A",
-            "0901234567",
+            phone,
             email: null,
             new ShippingAddress("Hà Nội", "Phường Cầu Giấy", "1 Xuân Thủy"),
             paymentMethod,

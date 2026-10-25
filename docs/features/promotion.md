@@ -59,7 +59,8 @@ nhanh toàn quốc" chỉ là nội dung mô tả; hiển thị bằng popup/ban
 - `ReleaseAsync` khi hủy đơn (khách hủy hoặc job tự hủy quá hạn thanh toán) hoặc khi lưu đơn lỗi: đổi lượt sang
   `released`, giảm bộ đếm; gọi lại không giảm hai lần. Lượt đã trả dùng lại được cho đơn khác.
 - Giới hạn mỗi khách: thành viên tính theo tài khoản, khách vãng lai theo số điện thoại đã chuẩn hóa (`0901234567`,
-  `+84901234567`, `84901234567` là một). Đổi số điện thoại là lách được giới hạn; chấp nhận ở giai đoạn này.
+  `+84901234567`, `84901234567` là một; dùng chung `PhoneNumbers.Normalize` ở SharedKernel với Ordering). Đổi số
+  điện thoại là lách được giới hạn; chấp nhận ở giai đoạn này.
 
 **Mã giảm giá** (`coupons`): thuộc chương trình `mode = coupon`. Mã lưu chữ in hoa, 4–40 ký tự `A–Z 0–9 _ -`, duy nhất
 toàn hệ thống, khách nhập không phân biệt hoa thường. Một mã dùng chung (ví dụ `MUATHI2026`, `usageLimit` trống) hoặc

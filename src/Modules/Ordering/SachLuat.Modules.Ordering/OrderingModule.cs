@@ -37,6 +37,7 @@ public sealed class OrderingModule : IModule
         services.AddScoped<OrderService>();
         services.AddScoped<OrderAdminService>();
         services.AddScoped<CheckoutPricingService>();
+        services.AddScoped<CustomerRiskService>();
         services.AddHostedService<ExpiredPaymentCancellationService>();
         services.AddValidatorsFromAssembly(typeof(OrderingModule).Assembly, includeInternalTypes: true);
 

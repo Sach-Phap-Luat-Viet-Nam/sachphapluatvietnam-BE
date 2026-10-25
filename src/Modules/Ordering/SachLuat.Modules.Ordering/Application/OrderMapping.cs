@@ -4,7 +4,10 @@ namespace SachLuat.Modules.Ordering.Application;
 
 internal static class OrderMapping
 {
-    public static OrderResponse ToResponse(this Order order) => new(
+    /// <param name="includeGuestAccessToken">
+    /// Chỉ bật cho người vừa đặt đơn; tra cứu bằng mã + SĐT không được lấy link.
+    /// </param>
+    public static OrderResponse ToResponse(this Order order, bool includeGuestAccessToken = false) => new(
         order.OrderCode,
         order.Status,
         order.PaymentMethod,
@@ -43,13 +46,15 @@ internal static class OrderMapping
         order.StatusLogs
             .OrderBy(log => log.CreatedAt).ThenBy(log => log.Id)
             .Select(log => new OrderStatusLogResponse(log.FromStatus, log.ToStatus, log.Note, log.CreatedAt))
-            .ToList());
+            .ToList(),
+        includeGuestAccessToken ? order.GuestAccessToken : null);
 
-    public static AdminOrderResponse ToAdminResponse(this Order order) => new(
+    public static AdminOrderResponse ToAdminResponse(this Order order, CustomerRiskResponse customerRisk) => new(
         order.ToResponse(),
         order.UserId,
         OrderStatusMachine.NextStatuses(order.Status),
         order.Items.All(item => item.CostPrice is not null)
             ? order.Items.Sum(item => item.CostPrice.GetValueOrDefault() * item.Quantity)
-            : null);
+            : null,
+        customerRisk);
 }

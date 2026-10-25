@@ -19,4 +19,12 @@ internal sealed class OrderingOptions
 
     [Range(5, 3600)]
     public int ExpiredPaymentSweepSeconds { get; set; } = 60;
+
+    /// <summary>Tối đa số đơn COD chưa giao xong của một số điện thoại (chống đặt trùng); 0 = không giới hạn.</summary>
+    [Range(0, 100)]
+    public int MaxOpenCodOrdersPerPhone { get; set; } = 3;
+
+    /// <summary>Số đơn COD giao thất bại ("bom hàng") để số điện thoại chỉ được chuyển khoản; 0 = không khóa.</summary>
+    [Range(0, 100)]
+    public int CodFailedDeliveryLimit { get; set; } = 2;
 }

@@ -31,10 +31,13 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
             order.HasIndex(o => o.OrderCode).IsUnique();
             order.Property(o => o.CustomerName).HasMaxLength(255);
             order.Property(o => o.Phone).HasMaxLength(20);
+            order.HasIndex(o => o.Phone);
             order.Property(o => o.Email).HasMaxLength(256);
             order.Property(o => o.Note).HasMaxLength(1000);
             order.Property(o => o.IdempotencyKey).HasMaxLength(64);
             order.HasIndex(o => o.IdempotencyKey).IsUnique();
+            order.Property(o => o.GuestAccessToken).HasMaxLength(32);
+            order.HasIndex(o => o.GuestAccessToken).IsUnique().HasFilter("guest_access_token IS NOT NULL");
             order.Property(o => o.Subtotal).HasPrecision(12, 0);
             order.Property(o => o.Discount).HasPrecision(12, 0);
             order.Property(o => o.ShippingFee).HasPrecision(12, 0);
