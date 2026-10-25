@@ -15,6 +15,8 @@ internal sealed class AuthDbContext(DbContextOptions<AuthDbContext> options)
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    public DbSet<TrustedDevice> TrustedDevices => Set<TrustedDevice>();
+
     public DbSet<UserAddress> UserAddresses => Set<UserAddress>();
 
     public DbSet<UserInvoiceInfo> UserInvoiceInfos => Set<UserInvoiceInfo>();
@@ -58,6 +60,15 @@ internal sealed class AuthDbContext(DbContextOptions<AuthDbContext> options)
             token.HasIndex(t => t.TokenHash).IsUnique();
             token.HasIndex(t => t.UserId);
             token.HasOne<AppUser>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<TrustedDevice>(device =>
+        {
+            device.ToTable("trusted_devices");
+            device.Property(d => d.TokenHash).HasMaxLength(64).IsFixedLength();
+            device.HasIndex(d => d.TokenHash).IsUnique();
+            device.HasIndex(d => d.UserId);
+            device.HasOne<AppUser>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<UserAddress>(address =>

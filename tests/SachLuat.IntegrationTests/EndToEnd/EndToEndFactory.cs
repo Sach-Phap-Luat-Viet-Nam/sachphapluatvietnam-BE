@@ -20,6 +20,9 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
     public const string AdminEmail = "admin@e2e.test";
     public const string AdminPassword = "e2e-admin-password";
 
+    /// <summary>Super Admin duy nhất được nhớ thiết bị (<c>Auth:TrustedDeviceSuperAdminEmails</c>).</summary>
+    public const string TrustedSuperAdminEmail = "root-duoc-nho@e2e.test";
+
     // Hằng số (không lấy từ input) nên ghép thẳng vào câu DROP/CREATE DATABASE an toàn.
     private const string DatabaseName = "sachluat_e2e";
 
@@ -69,6 +72,7 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
         builder.UseSetting("Ordering:EnableExpiredPaymentSweep", "false");
         builder.UseSetting("RateLimiting:AuthPermitPerMinute", "1000");
         builder.UseSetting("Cart:KeyPrefix", $"e2e:{Guid.NewGuid():N}:cart:");
+        builder.UseSetting("Auth:TrustedDeviceSuperAdminEmails:0", TrustedSuperAdminEmail);
         builder.UseSetting("Auth:BootstrapAdmin:Email", AdminEmail);
         builder.UseSetting("Auth:BootstrapAdmin:Password", AdminPassword);
         // Luôn coi như chưa cấu hình Cloudinary (kể cả khi user-secrets của máy dev có), để test lưu được link ảnh bất kỳ.

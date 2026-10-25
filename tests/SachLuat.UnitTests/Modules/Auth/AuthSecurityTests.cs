@@ -100,6 +100,27 @@ public sealed class AuthSecurityTests
     }
 
     [Fact]
+    public void TrustedDevice_IsActiveOnlyBeforeExpiry()
+    {
+        var created = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var device = new TrustedDevice(userId: 42, tokenHash: "hash", created, created.AddDays(30));
+
+        device.IsActive(created.AddDays(29)).Should().BeTrue();
+        device.IsActive(created.AddDays(30)).Should().BeFalse();
+        device.IsActive(created.AddDays(31)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TwoFactorLoginRequestValidator_AcceptsTrustDeviceFlag()
+    {
+        var validator = new TwoFactorLoginRequestValidator();
+
+        validator.Validate(new TwoFactorLoginRequest("ticket", "123456", TrustDevice: true)).IsValid
+            .Should().BeTrue();
+        validator.Validate(new TwoFactorLoginRequest("ticket", "12345")).IsValid.Should().BeFalse();
+    }
+
+    [Fact]
     public void RefreshToken_HashIsDeterministicAndDiffersFromToken()
     {
         var (token, hash) = TokenService.CreateRefreshToken();

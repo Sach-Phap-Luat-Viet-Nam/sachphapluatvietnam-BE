@@ -70,13 +70,14 @@ internal sealed class ApiClient : IDisposable
 
     /// <summary>
     /// Đăng nhập ở <paramref name="portal"/> (<c>storefront</c>/<c>admin</c>); nếu tài khoản đã bật 2FA thì nhập mã
-    /// TOTP từ <paramref name="totpKey"/>.
+    /// TOTP từ <paramref name="totpKey"/>; <paramref name="trustDevice"/> tick "tin cậy thiết bị này" ở bước đó.
     /// </summary>
     public async Task<JsonElement> LoginAsync(
         string email,
         string password,
         string? totpKey = null,
-        string portal = "storefront")
+        string portal = "storefront",
+        bool trustDevice = false)
     {
         var login = await PostAsync("/api/v1/auth/login", new { email, password, portal });
         var session = login.GetProperty("requiresTwoFactor").GetBoolean()
@@ -84,6 +85,7 @@ internal sealed class ApiClient : IDisposable
             {
                 twoFactorToken = login.GetProperty("twoFactorToken").GetString(),
                 code = Totp.Compute(totpKey ?? throw new InvalidOperationException("TOTP key required")),
+                trustDevice,
             })
             : login.GetProperty("session");
         AccessToken = session.GetProperty("accessToken").GetString();

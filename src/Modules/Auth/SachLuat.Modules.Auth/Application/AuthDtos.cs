@@ -19,7 +19,11 @@ internal enum LoginPortal
     Admin,
 }
 
-internal sealed record TwoFactorLoginRequest(string TwoFactorToken, string Code);
+/// <param name="TrustDevice">
+/// true: nhớ thiết bị này (cookie <c>sl_2fa_trust</c>) để các lần đăng nhập sau không phải nhập mã trong
+/// <c>Auth:TrustedDeviceDays</c> ngày. Bỏ qua với Super Admin.
+/// </param>
+internal sealed record TwoFactorLoginRequest(string TwoFactorToken, string Code, bool TrustDevice = false);
 
 internal sealed record TwoFactorCodeRequest(string Code);
 
@@ -150,3 +154,9 @@ internal sealed record TwoFactorSetupResponse(string SharedKey, string Authentic
 internal sealed record IssuedRefreshToken(string Token, DateTime ExpiresAt, bool IsPersistent);
 
 internal sealed record AuthResult(AuthResponse Response, IssuedRefreshToken RefreshToken);
+
+/// <summary>Token thiết bị tin cậy cấp mới để controller ghi vào cookie HttpOnly.</summary>
+internal sealed record IssuedTrustedDevice(string Token, DateTime ExpiresAt);
+
+/// <param name="TrustedDevice">null khi người dùng không chọn nhớ thiết bị hoặc tài khoản không được nhớ.</param>
+internal sealed record TwoFactorLoginResult(AuthResult Session, IssuedTrustedDevice? TrustedDevice);

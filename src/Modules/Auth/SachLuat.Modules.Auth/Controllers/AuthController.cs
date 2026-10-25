@@ -15,6 +15,9 @@ internal sealed class AuthController(AuthService authService, ICurrentUser curre
 {
     // Cookie chỉ gửi kèm các request /api/v1/auth, JavaScript không đọc được (chống XSS lấy token).
     internal const string RefreshCookieName = "sl_refresh";
+
+    // Thiết bị đã qua 2FA: cùng thuộc tính bảo mật với cookie refresh, sống tới hạn của thiết bị tin cậy.
+    internal const string TrustedDeviceCookieName = "sl_2fa_trust";
     private const string RefreshCookiePath = "/" + ApiRoutes.V1 + "/auth";
 
     [HttpPost("register")]
@@ -28,7 +31,8 @@ internal sealed class AuthController(AuthService authService, ICurrentUser curre
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        var (response, refreshToken) = await authService.LoginAsync(request, cancellationToken);
+        var (response, refreshToken) = await authService.LoginAsync(
+            request, Request.Cookies[TrustedDeviceCookieName], cancellationToken);
         if (refreshToken is not null)
         {
             SetRefreshCookie(refreshToken);
@@ -43,8 +47,14 @@ internal sealed class AuthController(AuthService authService, ICurrentUser curre
         CancellationToken cancellationToken)
     {
         var result = await authService.LoginTwoFactorAsync(request, cancellationToken);
-        SetRefreshCookie(result.RefreshToken);
-        return result.Response;
+        SetRefreshCookie(result.Session.RefreshToken);
+        if (result.TrustedDevice is { } trustedDevice)
+        {
+            Response.Cookies.Append(
+                TrustedDeviceCookieName, trustedDevice.Token, CreateCookieOptions(trustedDevice.ExpiresAt));
+        }
+
+        return result.Session.Response;
     }
 
     [HttpPost("refresh")]
@@ -69,6 +79,7 @@ internal sealed class AuthController(AuthService authService, ICurrentUser curre
     {
         await authService.ChangePasswordAsync(currentUser.RequireUserId(), request, cancellationToken);
         Response.Cookies.Delete(RefreshCookieName, CreateCookieOptions(expires: null));
+        Response.Cookies.Delete(TrustedDeviceCookieName, CreateCookieOptions(expires: null));
         return NoContent();
     }
 

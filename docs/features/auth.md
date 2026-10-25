@@ -27,6 +27,20 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
   3. `POST /auth/2fa/enable` với mã 6 số → token mới có `amr=mfa`, các phiên cũ bị thu hồi.
   4. Các lần sau: `/auth/login` trả `requiresTwoFactor = true` + `twoFactorToken` (hạn 5 phút) →
      `POST /auth/login/2fa` với mã 6 số.
+- **Nhớ thiết bị 30 ngày (thiết bị tin cậy)**: nhập mã 2FA một lần mỗi tháng trên mỗi thiết bị thay vì mỗi lần đăng nhập.
+  - `POST /auth/login/2fa` nhận thêm `trustDevice` (mặc định `false`; FE hiện ô "Tin cậy thiết bị này 30 ngày"). Mã đúng
+    và `trustDevice = true` thì server tạo token ngẫu nhiên 256 bit, ghi bản băm SHA-256 vào `auth.trusted_devices` và đặt
+    cookie `sl_2fa_trust` (HttpOnly, Secure, SameSite=Strict, path `/api/v1/auth`) hạn `Auth:TrustedDeviceDays`.
+  - `/auth/login` gửi kèm cookie hợp lệ (đúng user, chưa hết hạn) và đúng mật khẩu thì **không** trả `requiresTwoFactor`:
+    cấp luôn phiên mang `amr=mfa` (refresh token cũng `IsMultiFactor`), nên vẫn qua được policy Admin. Sai mật khẩu vẫn
+    bị từ chối, đăng nhập vẫn đá phiên cũ như bình thường (không thu hồi thiết bị tin cậy).
+  - Hạn **cố định** kể từ lần nhập mã, không gia hạn khi dùng: hết 30 ngày là hỏi mã lại.
+  - **Super Admin mặc định không được nhớ**: `trustDevice = true` bị bỏ qua (không cấp cookie, không lỗi). Chỉ Super Admin
+    có email trong `Auth:TrustedDeviceSuperAdminEmails` (không phân biệt hoa thường) mới được nhớ như nhân viên khác.
+    Quyền này kiểm tra cả lúc cấp lẫn lúc dùng: gỡ email khỏi cấu hình, hoặc tài khoản được nâng lên Super Admin sau khi
+    đã có bản ghi, thì lần đăng nhập kế tiếp lại bị hỏi mã.
+  - Thu hồi (xóa mọi thiết bị tin cậy của user): đổi mật khẩu (`/auth/password/change`, đồng thời xóa cookie), Super Admin
+    đăng xuất hộ, đặt mật khẩu mới, vô hiệu hóa tài khoản. Hết hạn thì bản ghi bị dọn khi user đó tin cậy thiết bị mới.
 - **Phân quyền**: claim `role` theo bảng 4.2. Policy Admin = đúng vai trò + `amr=mfa`:
 
 | Policy | Vai trò | Dùng cho |
@@ -104,8 +118,8 @@ Tiền tố `/api/v1`.
 | Method | Route | Xác thực | Request → Response |
 | --- | --- | --- | --- |
 | POST | `/auth/register` | Không | `{email, password, fullName, phoneNumber?}` → 201 `AuthResponse` + cookie |
-| POST | `/auth/login` | Không | `{email, password, rememberMe, portal?}` → `{requiresTwoFactor, twoFactorToken?, session?}` |
-| POST | `/auth/login/2fa` | Không | `{twoFactorToken, code}` → `AuthResponse` + cookie |
+| POST | `/auth/login` | Cookie `sl_2fa_trust` (nếu có) | `{email, password, rememberMe, portal?}` → `{requiresTwoFactor, twoFactorToken?, session?}`; thiết bị tin cậy thì `requiresTwoFactor = false` kèm `session` |
+| POST | `/auth/login/2fa` | Không | `{twoFactorToken, code, trustDevice?}` → `AuthResponse` + cookie (`sl_2fa_trust` khi `trustDevice` được chấp nhận) |
 | POST | `/auth/refresh` | Cookie | → `AuthResponse` + cookie mới |
 | POST | `/auth/logout` | Cookie | → 204, xóa cookie |
 | POST | `/auth/password/change` | Bearer | `{currentPassword, newPassword}` → 204, thu hồi mọi phiên |
@@ -230,6 +244,8 @@ Mã lỗi: `INVALID_CREDENTIALS` (401), `ACCOUNT_LOCKED` (423), `EMAIL_TAKEN` (4
 | `Jwt:SigningKey` | **Bí mật**, ≥ 32 ký tự, user-secrets / secret manager |
 | `Jwt:Issuer`, `Jwt:Audience`, `Jwt:AccessTokenMinutes` | `appsettings.json` |
 | `Auth:RefreshTokenDays`, `Auth:SessionRefreshTokenHours`, `Auth:TotpIssuer` | Mặc định 30 ngày / 12 giờ |
+| `Auth:TrustedDeviceDays` | Số ngày nhớ thiết bị sau khi nhập mã 2FA, 1–90, mặc định 30 |
+| `Auth:TrustedDeviceSuperAdminEmails` | Danh sách email Super Admin được nhớ thiết bị, mặc định rỗng. **Không commit email thật**: đặt qua biến môi trường (Render: `Auth__TrustedDeviceSuperAdminEmails__0`) hoặc user-secrets |
 | `Auth:BootstrapAdmin:Email`, `Auth:BootstrapAdmin:Password` | **Bí mật**, chỉ cần lần đầu |
 | `RateLimiting:AuthPermitPerMinute` | Mặc định 10 |
 | `Pusher:AppId`, `Pusher:Key`, `Pusher:Secret`, `Pusher:Cluster` | Tùy chọn; thiếu bất kỳ khóa nào thì tắt realtime. `Secret` là **bí mật** (Render: `Pusher__Secret`). FE cần `NEXT_PUBLIC_PUSHER_KEY` và `NEXT_PUBLIC_PUSHER_CLUSTER` |
@@ -257,12 +273,19 @@ Chỉ thêm bảng, không đổi dữ liệu cũ.
 
 `AddUserIsActive`: cột `users.is_active` (boolean, not null, mặc định `true` cho tài khoản có sẵn).
 
+`AddTrustedDevices`: bảng `trusted_devices` (`user_id`, `token_hash` char(64) unique, `created_at`, `expires_at`, index
+`user_id`), cascade khi xóa user. Chỉ thêm bảng, không đổi dữ liệu cũ. **Phải chạy migration lên CSDL production trước
+khi deploy bản này** (thiếu bảng thì `/auth/login` của tài khoản bật 2FA có gửi cookie `sl_2fa_trust` bị lỗi).
+
 ## Hạn chế / việc còn lại
 
 - Chưa xác thực email/OTP SMS–Zalo, quên mật khẩu (FR-01, FR-04): chờ module Notification.
 - Chưa có đăng nhập mạng xã hội (FR-02), tài khoản tổ chức (FR-09), xóa tài khoản (FR-08).
 - Tỉnh/thành, phường/xã nhập dạng chữ tự do, chưa có danh mục hành chính để chọn (FR-06); đơn hàng cũng vậy.
 - Mỗi user chỉ lưu một bộ thông tin hóa đơn.
+- Thiết bị tin cậy: chưa có danh sách thiết bị hay nút thu hồi từng thiết bị cho người dùng; chưa giới hạn số thiết bị mỗi
+  user; dùng lại refresh token đã thu hồi (nghi bị đánh cắp) chỉ thu hồi phiên, không xóa thiết bị tin cậy. Cookie bị lộ
+  cùng mật khẩu thì vào được tới hết hạn hoặc tới khi bị thu hồi như trên.
 - Chưa có mã khôi phục 2FA; mã TOTP vừa dùng chưa bị chặn dùng lại trong cùng 30 giây.
 - Mỗi request có token tốn thêm một truy vấn theo khóa chính (`session_version`); chưa cache.
 - Hai tab cùng refresh một lúc có thể bị coi là dùng lại token và bị đăng xuất.

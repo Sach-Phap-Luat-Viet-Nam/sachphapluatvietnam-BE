@@ -424,6 +424,47 @@ namespace SachLuat.Modules.Auth.Infrastructure.Persistence.Migrations
                     b.ToTable("refresh_tokens", "auth");
                 });
 
+            modelBuilder.Entity("SachLuat.Modules.Auth.Domain.TrustedDevice", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("token_hash")
+                        .IsFixedLength();
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_trusted_devices");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_trusted_devices_token_hash");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_trusted_devices_user_id");
+
+                    b.ToTable("trusted_devices", "auth");
+                });
+
             modelBuilder.Entity("SachLuat.Modules.Auth.Domain.UserAddress", b =>
                 {
                     b.Property<long>("Id")
@@ -597,6 +638,16 @@ namespace SachLuat.Modules.Auth.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_refresh_tokens_users_user_id");
+                });
+
+            modelBuilder.Entity("SachLuat.Modules.Auth.Domain.TrustedDevice", b =>
+                {
+                    b.HasOne("SachLuat.Modules.Auth.Domain.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_trusted_devices_users_user_id");
                 });
 
             modelBuilder.Entity("SachLuat.Modules.Auth.Domain.UserAddress", b =>

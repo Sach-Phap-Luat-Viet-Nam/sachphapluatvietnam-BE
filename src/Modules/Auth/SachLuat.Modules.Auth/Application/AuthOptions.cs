@@ -32,6 +32,16 @@ internal sealed class AuthOptions
     [Range(1, 72)]
     public int SessionRefreshTokenHours { get; set; } = 12;
 
+    /// <summary>Số ngày một thiết bị được nhớ sau khi nhập mã 2FA (không phải nhập lại mã trong thời gian này).</summary>
+    [Range(1, 90)]
+    public int TrustedDeviceDays { get; set; } = 30;
+
+    /// <summary>
+    /// Email các Super Admin được nhớ thiết bị (mặc định Super Admin không được nhớ). Đặt qua biến môi trường
+    /// (<c>Auth__TrustedDeviceSuperAdminEmails__0</c>) hoặc user-secrets, không commit email thật.
+    /// </summary>
+    public List<string> TrustedDeviceSuperAdminEmails { get; set; } = [];
+
     /// <summary>Tên hiển thị trong ứng dụng authenticator (Google Authenticator, ...).</summary>
     public string TotpIssuer { get; set; } = "Sach Luat Viet Nam";
 

@@ -48,8 +48,10 @@ internal sealed class AuthService(
         return await IssueSessionAsync(user, isPersistent: false, isMultiFactor: false, cancellationToken);
     }
 
+    /// <param name="trustedDeviceToken">Giá trị cookie <c>sl_2fa_trust</c> của thiết bị, null khi không có.</param>
     public async Task<(LoginResponse Response, IssuedRefreshToken? RefreshToken)> LoginAsync(
         LoginRequest request,
+        string? trustedDeviceToken,
         CancellationToken cancellationToken)
     {
         var user = await userManager.FindByEmailAsync(request.Email);
@@ -77,18 +79,22 @@ internal sealed class AuthService(
             throw AuthErrors.SuperAdminPortalForbidden();
         }
 
-        if (user.TwoFactorEnabled)
+        var skipTwoFactor = user.TwoFactorEnabled
+            && await IsTrustedDeviceAsync(user, trustedDeviceToken, cancellationToken);
+        if (user.TwoFactorEnabled && !skipTwoFactor)
         {
             var ticket = tokenService.CreateTwoFactorTicket(user.Id, request.RememberMe);
             return (new LoginResponse(RequiresTwoFactor: true, ticket, Session: null), null);
         }
 
         await EndOtherSessionsAsync(user.Id, cancellationToken);
-        var session = await IssueSessionAsync(user, request.RememberMe, isMultiFactor: false, cancellationToken);
+        var session = await IssueSessionAsync(user, request.RememberMe, isMultiFactor: skipTwoFactor, cancellationToken);
         return (new LoginResponse(RequiresTwoFactor: false, TwoFactorToken: null, session.Response), session.RefreshToken);
     }
 
-    public async Task<AuthResult> LoginTwoFactorAsync(TwoFactorLoginRequest request, CancellationToken cancellationToken)
+    public async Task<TwoFactorLoginResult> LoginTwoFactorAsync(
+        TwoFactorLoginRequest request,
+        CancellationToken cancellationToken)
     {
         var ticket = await tokenService.ValidateTwoFactorTicketAsync(request.TwoFactorToken)
             ?? throw AuthErrors.TwoFactorTokenInvalid();
@@ -99,7 +105,11 @@ internal sealed class AuthService(
         EnsureActive(user);
 
         await EndOtherSessionsAsync(user.Id, cancellationToken);
-        return await IssueSessionAsync(user, ticket.RememberMe, isMultiFactor: true, cancellationToken);
+        var session = await IssueSessionAsync(user, ticket.RememberMe, isMultiFactor: true, cancellationToken);
+        var trustedDevice = request.TrustDevice && await CanTrustDeviceAsync(user)
+            ? await IssueTrustedDeviceAsync(user.Id, cancellationToken)
+            : null;
+        return new TwoFactorLoginResult(session, trustedDevice);
     }
 
     public async Task<AuthResult> RefreshAsync(string? refreshToken, CancellationToken cancellationToken)
@@ -161,6 +171,7 @@ internal sealed class AuthService(
 
         EnsureSucceeded(result);
         await RevokeAllAsync(userId, cancellationToken);
+        await RevokeTrustedDevicesAsync(userId, cancellationToken);
     }
 
     public async Task<TwoFactorSetupResponse> SetupTwoFactorAsync(long userId)
@@ -276,6 +287,47 @@ internal sealed class AuthService(
         return new AuthResult(response, new IssuedRefreshToken(refreshToken, expiresAt, isPersistent));
     }
 
+    // Super Admin chỉ được nhớ thiết bị khi email nằm trong cấu hình. Kiểm tra ở cả lúc cấp lẫn lúc dùng: tài khoản được
+    // nâng lên Super Admin sau đó, hoặc bị gỡ khỏi cấu hình, thì không còn được bỏ qua 2FA.
+    private async Task<bool> CanTrustDeviceAsync(AppUser user) =>
+        !await userManager.IsInRoleAsync(user, Roles.SuperAdmin)
+        || (user.Email is { } email
+            && _options.TrustedDeviceSuperAdminEmails.Contains(email, StringComparer.OrdinalIgnoreCase));
+
+    private async Task<bool> IsTrustedDeviceAsync(AppUser user, string? token, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var hash = TokenService.HashRefreshToken(token);
+        var isTrusted = await dbContext.TrustedDevices.AsNoTracking().AnyAsync(
+            device => device.TokenHash == hash && device.UserId == user.Id && device.ExpiresAt > now,
+            cancellationToken);
+        return isTrusted && await CanTrustDeviceAsync(user);
+    }
+
+    private async Task<IssuedTrustedDevice> IssueTrustedDeviceAsync(long userId, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        await dbContext.TrustedDevices
+            .Where(device => device.UserId == userId && device.ExpiresAt <= now)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        // Cùng cách sinh token ngẫu nhiên 256 bit với refresh token.
+        var (token, hash) = TokenService.CreateRefreshToken();
+        var expiresAt = now.AddDays(_options.TrustedDeviceDays);
+        dbContext.TrustedDevices.Add(new TrustedDevice(userId, hash, now, expiresAt));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Trusted device registered for user {UserId} until {ExpiresAt}", userId, expiresAt);
+        return new IssuedTrustedDevice(token, expiresAt);
+    }
+
+    private Task<int> RevokeTrustedDevicesAsync(long userId, CancellationToken cancellationToken) =>
+        dbContext.TrustedDevices.Where(device => device.UserId == userId).ExecuteDeleteAsync(cancellationToken);
+
     private async Task VerifyAuthenticatorCodeAsync(AppUser user, string code)
     {
         var isValid = await userManager.VerifyTwoFactorTokenAsync(
@@ -335,6 +387,13 @@ internal sealed class AuthService(
         CancellationToken cancellationToken)
     {
         var (revoked, version) = await EndSessionsAsync(userId, cancellationToken);
+        if (reason == SessionEndReason.ForcedLogout)
+        {
+            // Đăng nhập nơi khác (SignedInElsewhere) không được xóa: nếu không thì thiết bị tin cậy hết tác dụng ngay lần
+            // đăng nhập kế tiếp. Chỉ buộc đăng xuất, đặt lại mật khẩu, vô hiệu hóa mới thu hồi.
+            await RevokeTrustedDevicesAsync(userId, cancellationToken);
+        }
+
         if (!onlyIfHadSessions || revoked > 0)
         {
             await sessionNotifier.NotifySessionEndedAsync(userId, version, reason, cancellationToken);
