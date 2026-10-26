@@ -17,7 +17,8 @@ internal sealed class UpsertPromotionRequestValidator : AbstractValidator<Upsert
         RuleFor(request => request.Name).NotEmpty().MaximumLength(PromotionCampaign.NameMaxLength);
         RuleFor(request => request.Title).NotEmpty().MaximumLength(PromotionCampaign.NameMaxLength);
         RuleFor(request => request.Description).MaximumLength(PromotionCampaign.DescriptionMaxLength);
-        RuleFor(request => request.Kind).IsInEnum();
+        RuleFor(request => request.Kind).IsInEnum().NotEqual(PromotionKind.Combo)
+            .WithMessage("Combo được quản lý ở mục combo, không tạo như chương trình khuyến mãi");
         RuleFor(request => request.Mode).IsInEnum();
         RuleFor(request => request.DiscountType).IsInEnum();
         RuleFor(request => request.ScopeType).IsInEnum();

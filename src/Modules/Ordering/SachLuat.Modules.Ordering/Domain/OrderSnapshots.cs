@@ -68,7 +68,7 @@ internal sealed class AppliedPromotionSnapshot
 
     public string Name { get; private set; } = string.Empty;
 
-    /// <summary><c>order_discount</c> hoặc <c>free_shipping</c>.</summary>
+    /// <summary><c>order_discount</c>, <c>free_shipping</c> hoặc <c>combo</c> (khi đó <see cref="PromotionId"/> là id combo).</summary>
     public string Kind { get; private set; } = string.Empty;
 
     public string? CouponCode { get; private set; }

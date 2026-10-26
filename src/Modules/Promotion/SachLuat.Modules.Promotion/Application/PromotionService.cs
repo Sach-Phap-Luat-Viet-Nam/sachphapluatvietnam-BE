@@ -38,7 +38,8 @@ internal sealed class PromotionService(
         }
 
         var usage = await CustomerUsageAsync(candidates, request.Customer, cancellationToken);
-        return PromotionEvaluator.Evaluate(candidates, request, usage, now);
+        var combos = await RunningCombosAsync(request.Lines, now, cancellationToken);
+        return PromotionEvaluator.Evaluate(candidates, request, usage, now, combos);
     }
 
     public async Task RedeemAsync(
@@ -47,7 +48,12 @@ internal sealed class PromotionService(
         PromotionCustomer customer,
         CancellationToken cancellationToken)
     {
-        if (evaluation.Applied.Count == 0)
+        // Combo chưa có giới hạn lượt và PromotionId của nó là id combo (không phải chương trình) nên không ghi nhận.
+        var redeemable = evaluation.Applied
+            .Where(item => item.Kind != PromotionKind.Combo)
+            .OrderBy(item => item.PromotionId)
+            .ToList();
+        if (redeemable.Count == 0)
         {
             return;
         }
@@ -56,7 +62,7 @@ internal sealed class PromotionService(
         var customerKey = PromotionCustomerKey.From(customer);
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        foreach (var applied in evaluation.Applied.OrderBy(item => item.PromotionId))
+        foreach (var applied in redeemable)
         {
             await LockAsync(applied.PromotionId, cancellationToken);
 
@@ -102,7 +108,7 @@ internal sealed class PromotionService(
 
         await transaction.CommitAsync(cancellationToken);
         logger.LogInformation(
-            "Redeemed {PromotionCount} promotions for order {OrderCode}", evaluation.Applied.Count, reference);
+            "Redeemed {PromotionCount} promotions for order {OrderCode}", redeemable.Count, reference);
     }
 
     public async Task ReleaseAsync(string reference, CancellationToken cancellationToken)
@@ -154,6 +160,20 @@ internal sealed class PromotionService(
 
         await transaction.CommitAsync(cancellationToken);
         logger.LogInformation("Released promotions of order {OrderCode}", reference);
+    }
+
+    // Chỉ nạp combo có ít nhất một sách trong giỏ; Include lấy đủ các dòng của combo để biết giỏ có đủ bộ không.
+    private async Task<List<Combo>> RunningCombosAsync(
+        IReadOnlyList<PromotionLine> lines,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var skuIds = lines.Select(line => line.SkuId).ToList();
+        return await dbContext.Combos.AsNoTracking()
+            .Include(combo => combo.Items)
+            .Where(Combo.RunningAt(now))
+            .Where(combo => combo.Items.Any(item => skuIds.Contains(item.SkuId)))
+            .ToListAsync(cancellationToken);
     }
 
     private async Task<PromotionCandidate> FindCouponCandidateAsync(string rawCode, CancellationToken cancellationToken)

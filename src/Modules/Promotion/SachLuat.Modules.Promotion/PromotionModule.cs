@@ -37,6 +37,8 @@ public sealed class PromotionModule : IModule
         services.AddScoped<IPromotionService>(provider => provider.GetRequiredService<PromotionService>());
         services.AddScoped<PromotionAdminService>();
         services.AddScoped<PromotionStorefrontService>();
+        services.AddScoped<ComboAdminService>();
+        services.AddScoped<ComboStorefrontService>();
         services.AddValidatorsFromAssembly(typeof(PromotionModule).Assembly, includeInternalTypes: true);
 
         services.AddHealthChecks()

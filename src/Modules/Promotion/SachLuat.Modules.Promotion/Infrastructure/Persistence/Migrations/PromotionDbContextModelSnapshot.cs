@@ -23,6 +23,122 @@ namespace SachLuat.Modules.Promotion.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("SachLuat.Modules.Promotion.Domain.Combo", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("ComboPrice")
+                        .HasPrecision(12)
+                        .HasColumnType("numeric(12,0)")
+                        .HasColumnName("combo_price");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("image_url");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("slug");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_combos");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasDatabaseName("ux_combos_slug")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.HasIndex("IsActive", "StartsAt")
+                        .HasDatabaseName("ix_combos_is_active_starts_at");
+
+                    b.ToTable("combos", "promotion", t =>
+                        {
+                            t.HasCheckConstraint("ck_combos_price", "combo_price > 0");
+
+                            t.HasCheckConstraint("ck_combos_schedule", "ends_at IS NULL OR ends_at > starts_at");
+                        });
+                });
+
+            modelBuilder.Entity("SachLuat.Modules.Promotion.Domain.ComboItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ComboId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("combo_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<long>("SkuId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sku_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_combo_items");
+
+                    b.HasIndex("SkuId")
+                        .HasDatabaseName("ix_combo_items_sku_id");
+
+                    b.HasIndex("ComboId", "SkuId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_combo_items_combo_id_sku_id");
+
+                    b.ToTable("combo_items", "promotion", t =>
+                        {
+                            t.HasCheckConstraint("ck_combo_items_quantity", "quantity > 0");
+                        });
+                });
+
             modelBuilder.Entity("SachLuat.Modules.Promotion.Domain.Coupon", b =>
                 {
                     b.Property<long>("Id")
@@ -313,6 +429,16 @@ namespace SachLuat.Modules.Promotion.Infrastructure.Persistence.Migrations
                     b.ToTable("promotion_targets", "promotion");
                 });
 
+            modelBuilder.Entity("SachLuat.Modules.Promotion.Domain.ComboItem", b =>
+                {
+                    b.HasOne("SachLuat.Modules.Promotion.Domain.Combo", null)
+                        .WithMany("Items")
+                        .HasForeignKey("ComboId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_combo_items_combos_combo_id");
+                });
+
             modelBuilder.Entity("SachLuat.Modules.Promotion.Domain.Coupon", b =>
                 {
                     b.HasOne("SachLuat.Modules.Promotion.Domain.PromotionCampaign", null)
@@ -347,6 +473,11 @@ namespace SachLuat.Modules.Promotion.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_promotion_targets_promotions_promotion_id");
+                });
+
+            modelBuilder.Entity("SachLuat.Modules.Promotion.Domain.Combo", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("SachLuat.Modules.Promotion.Domain.PromotionCampaign", b =>

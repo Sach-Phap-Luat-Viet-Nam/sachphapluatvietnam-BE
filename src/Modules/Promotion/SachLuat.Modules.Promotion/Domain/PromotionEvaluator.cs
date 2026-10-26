@@ -14,11 +14,16 @@ internal static class PromotionEvaluator
 {
     /// <param name="candidates">Chương trình tự áp đang chạy, cộng thêm chương trình của mã khách nhập (nếu có).</param>
     /// <param name="customerUsage">Số lượt khách này đã dùng theo mã chương trình (chỉ cần với chương trình có giới hạn).</param>
+    /// <param name="combos">
+    /// Combo đang chạy có sách trong giỏ. Combo không cộng dồn với chương trình giảm trên đơn: bên nào giảm nhiều
+    /// hơn thì thắng, hòa thì giữ chương trình (nên mã khách nhập vẫn được dùng). Giảm phí ship áp độc lập.
+    /// </param>
     public static PromotionEvaluation Evaluate(
         IReadOnlyCollection<PromotionCandidate> candidates,
         PromotionRequest request,
         IReadOnlyDictionary<long, int> customerUsage,
-        DateTime now)
+        DateTime now,
+        IReadOnlyCollection<Combo>? combos = null)
     {
         var outcomes = new List<Outcome>();
         foreach (var candidate in candidates)
@@ -39,19 +44,34 @@ internal static class PromotionEvaluator
 
         var order = Best(outcomes, PromotionKind.OrderDiscount);
         var shipping = Best(outcomes, PromotionKind.FreeShipping);
+
+        var bundle = ComboEvaluator.Evaluate(combos ?? [], request.Lines, now);
+        if (bundle.Amount > (order?.Amount ?? 0m))
+        {
+            order = null;
+        }
+        else
+        {
+            bundle = ComboEvaluation.None;
+        }
+
         var applied = new[] { order, shipping }.OfType<Outcome>().ToList();
 
         return new PromotionEvaluation(
-            order?.Amount ?? 0m,
+            order?.Amount ?? bundle.Amount,
             shipping?.Amount ?? 0m,
-            order?.LineDiscounts ?? new Dictionary<long, decimal>(),
-            [.. applied.Select(outcome => new AppliedPromotion(
-                outcome.Promotion.Id,
-                outcome.Promotion.Name,
-                outcome.Promotion.Kind,
-                outcome.Coupon?.Id,
-                outcome.Coupon?.Code,
-                outcome.Amount))],
+            order?.LineDiscounts ?? bundle.LineDiscounts,
+            [
+                .. bundle.Matches.Select(match => new AppliedPromotion(
+                    match.Combo.Id, match.Combo.Name, PromotionKind.Combo, null, null, match.Amount)),
+                .. applied.Select(outcome => new AppliedPromotion(
+                    outcome.Promotion.Id,
+                    outcome.Promotion.Name,
+                    outcome.Promotion.Kind,
+                    outcome.Coupon?.Id,
+                    outcome.Coupon?.Code,
+                    outcome.Amount)),
+            ],
             applied.Any(outcome => outcome.Coupon is not null));
     }
 

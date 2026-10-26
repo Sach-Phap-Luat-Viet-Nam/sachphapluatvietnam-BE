@@ -87,3 +87,45 @@ internal sealed class PromotionRedemptionConfiguration : IEntityTypeConfiguratio
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+internal sealed class ComboConfiguration : IEntityTypeConfiguration<Combo>
+{
+    public void Configure(EntityTypeBuilder<Combo> builder)
+    {
+        builder.ToTable("combos", table =>
+        {
+            table.HasCheckConstraint("ck_combos_price", "combo_price > 0");
+            table.HasCheckConstraint("ck_combos_schedule", "ends_at IS NULL OR ends_at > starts_at");
+        });
+
+        builder.Property(combo => combo.Name).HasMaxLength(Combo.NameMaxLength);
+        builder.Property(combo => combo.Slug).HasMaxLength(ComboSlug.MaxLength);
+        builder.Property(combo => combo.Description).HasMaxLength(Combo.DescriptionMaxLength);
+        builder.Property(combo => combo.ImageUrl).HasMaxLength(Combo.ImageUrlMaxLength);
+        builder.Property(combo => combo.ComboPrice).HasPrecision(12, 0);
+
+        // Slug chỉ duy nhất giữa các combo chưa xóa để dùng lại được slug của combo đã xóa mềm.
+        builder.HasIndex(combo => combo.Slug).IsUnique().HasFilter("deleted_at IS NULL")
+            .HasDatabaseName("ux_combos_slug");
+        builder.HasIndex(combo => new { combo.IsActive, combo.StartsAt });
+
+        builder.HasMany(combo => combo.Items).WithOne().HasForeignKey(item => item.ComboId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(combo => combo.Items).HasField("_items");
+
+        builder.HasQueryFilter(combo => combo.DeletedAt == null);
+    }
+}
+
+internal sealed class ComboItemConfiguration : IEntityTypeConfiguration<ComboItem>
+{
+    public void Configure(EntityTypeBuilder<ComboItem> builder)
+    {
+        builder.ToTable("combo_items", table => table.HasCheckConstraint("ck_combo_items_quantity", "quantity > 0"));
+
+        builder.HasIndex(item => new { item.ComboId, item.SkuId }).IsUnique();
+
+        // Nạp nhanh các combo có chứa SKU trong giỏ.
+        builder.HasIndex(item => item.SkuId);
+    }
+}

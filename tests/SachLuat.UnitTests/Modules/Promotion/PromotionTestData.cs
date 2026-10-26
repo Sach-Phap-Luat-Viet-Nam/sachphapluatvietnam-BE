@@ -61,6 +61,30 @@ internal static class PromotionTestData
         return campaign;
     }
 
+    /// <summary>Mặc định là combo "SKU 1 + SKU 2" giá 70.000đ, đang chạy.</summary>
+    public static Combo NewCombo(
+        long id = 1,
+        decimal price = 70_000m,
+        (long SkuId, int Quantity)[]? items = null,
+        DateTime? startsAt = null,
+        DateTime? endsAt = null,
+        bool isActive = true)
+    {
+        var combo = new Combo(
+            new ComboDetails(
+                $"Combo {id}",
+                $"combo-{id}",
+                Description: null,
+                ImageUrl: null,
+                price,
+                startsAt ?? Now.AddDays(-1),
+                endsAt,
+                isActive),
+            (items ?? [(1, 1), (2, 1)]).Select(item => new ComboItemSpec(item.SkuId, item.Quantity)));
+        SetId(combo, id);
+        return combo;
+    }
+
     public static Coupon NewCoupon(long id = 10, long promotionId = 1, string code = "MUATHI2026", int? usageLimit = null)
     {
         var coupon = new Coupon(promotionId, code, usageLimit);
@@ -86,8 +110,10 @@ internal static class PromotionTestData
     public static PromotionEvaluation Evaluate(
         PromotionRequest request,
         IEnumerable<PromotionCandidate> candidates,
-        IReadOnlyDictionary<long, int>? customerUsage = null) =>
-        PromotionEvaluator.Evaluate([.. candidates], request, customerUsage ?? new Dictionary<long, int>(), Now);
+        IReadOnlyDictionary<long, int>? customerUsage = null,
+        IEnumerable<Combo>? combos = null) =>
+        PromotionEvaluator.Evaluate(
+            [.. candidates], request, customerUsage ?? new Dictionary<long, int>(), Now, [.. combos ?? []]);
 
     public static PromotionCandidate Auto(PromotionCampaign campaign) => new(campaign, null);
 
