@@ -24,6 +24,7 @@ internal sealed class OrderService(
     OrderStatusService statusService,
     CheckoutPricingService pricingService,
     CustomerRiskService riskService,
+    SepayPaymentService sepayService,
     IShippingQuoteService shippingQuoteService,
     IPromotionService promotionService,
     ICurrentCart currentCart,
@@ -36,7 +37,7 @@ internal sealed class OrderService(
 {
     public const int IdempotencyKeyMaxLength = 64;
 
-    // Giai đoạn 1 chỉ có COD và chuyển khoản đối soát tay; cổng thanh toán online làm ở giai đoạn tích hợp.
+    // COD và chuyển khoản (đối soát tự động qua webhook SePay); ví điện tử/cổng thanh toán khác chưa làm.
     private static readonly PaymentMethod[] SupportedPaymentMethods = [PaymentMethod.Cod, PaymentMethod.BankTransfer];
 
     private readonly OrderingOptions _options = options.Value;
@@ -67,7 +68,7 @@ internal sealed class OrderService(
         logger.LogInformation(
             "Created order {OrderCode} from cart with {ItemCount} items, payment {PaymentMethod}",
             order.OrderCode, order.Items.Count, order.PaymentMethod);
-        return order.ToResponse(includeGuestAccessToken: true);
+        return ToOrderResponse(order, includeGuestAccessToken: true);
     }
 
     /// <summary>"Mua ngay": đặt thẳng một SKU; giỏ hàng của khách giữ nguyên.</summary>
@@ -90,7 +91,7 @@ internal sealed class OrderService(
         logger.LogInformation(
             "Created buy-now order {OrderCode} for SKU {SkuId} x{Quantity}, payment {PaymentMethod}",
             order.OrderCode, request.SkuId, request.Quantity, order.PaymentMethod);
-        return order.ToResponse(includeGuestAccessToken: true);
+        return ToOrderResponse(order, includeGuestAccessToken: true);
     }
 
     public async Task<PagedResponse<OrderSummaryResponse>> ListMineAsync(
@@ -123,7 +124,7 @@ internal sealed class OrderService(
         var userId = currentUser.RequireUserId();
         var order = await LoadAsync(dbContext.Orders.Where(o => o.OrderCode == orderCode && o.UserId == userId), cancellationToken)
             ?? throw OrderErrors.NotFound();
-        return order.ToResponse();
+        return ToOrderResponse(order);
     }
 
     /// <summary>FR-40: tra cứu đơn không cần đăng nhập bằng mã đơn + số điện thoại.</summary>
@@ -134,14 +135,14 @@ internal sealed class OrderService(
                 dbContext.Orders.Where(o => o.OrderCode == request.OrderCode.Trim() && o.Phone == phone),
                 cancellationToken)
             ?? throw OrderErrors.NotFound();
-        return order.ToResponse();
+        return ToOrderResponse(order);
     }
 
     /// <summary>Khách vãng lai xem đơn qua link bí mật nhận lúc đặt hàng.</summary>
     public async Task<OrderResponse> GetGuestAsync(string token, CancellationToken cancellationToken)
     {
         var order = await LoadAsync(GuestOrder(token), cancellationToken) ?? throw OrderErrors.NotFound();
-        return order.ToResponse();
+        return ToOrderResponse(order);
     }
 
     /// <summary>BR-12: khách tự hủy khi đơn chưa đóng gói.</summary>
@@ -157,7 +158,7 @@ internal sealed class OrderService(
             request.Reason,
             "Khách hủy đơn",
             cancellationToken);
-        return order.ToResponse();
+        return ToOrderResponse(order);
     }
 
     /// <summary>BR-12 cho khách vãng lai, xác thực bằng link bí mật thay cho đăng nhập.</summary>
@@ -168,7 +169,7 @@ internal sealed class OrderService(
     {
         var order = await CancelAsync(
             GuestOrder(token), changedBy: null, request.Reason, "Khách vãng lai tự hủy", cancellationToken);
-        return order.ToResponse();
+        return ToOrderResponse(order);
     }
 
     /// <summary>Phí ship tạm tính. Chỉ có <c>Subtotal</c> thì dùng phí cố định như trước khi có vùng giao hàng.</summary>
@@ -251,6 +252,9 @@ internal sealed class OrderService(
                 || (await riskService.GetAsync(request.Phone, cancellationToken)).CodAllowed);
     }
 
+    private OrderResponse ToOrderResponse(Order order, bool includeGuestAccessToken = false) =>
+        order.ToResponse(includeGuestAccessToken) with { PaymentInstructions = sepayService.BuildInstructions(order) };
+
     private static ShippingQuoteResponse ToResponse(ShippingQuote quote) => new(
         quote.Fee, quote.FreeShippingThreshold, quote.AmountToFreeShipping, ToEta(quote), quote.ZoneName);
 
@@ -278,7 +282,7 @@ internal sealed class OrderService(
         {
             // Khách bấm đặt hàng nhiều lần: trả lại đơn đã tạo thay vì tạo đơn trùng (mục 11.1).
             return existing.UserId == currentUser.UserId && existing.Phone == PhoneNumbers.Normalize(details.Phone)
-                ? existing.ToResponse(includeGuestAccessToken: true)
+                ? ToOrderResponse(existing, includeGuestAccessToken: true)
                 : throw OrderErrors.IdempotencyKeyReused();
         }
 

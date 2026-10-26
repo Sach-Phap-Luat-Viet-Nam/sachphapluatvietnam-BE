@@ -138,3 +138,14 @@ internal sealed class AdminOrdersQueryValidator : PagedQueryValidator<AdminOrder
         RuleFor(query => query.Q).MaximumLength(50);
     }
 }
+
+internal sealed class AdminSepayTransactionsQueryValidator : PagedQueryValidator<AdminSepayTransactionsQuery>
+{
+    public AdminSepayTransactionsQueryValidator()
+    {
+        RuleFor(query => query.Result)
+            .Must(value => SnakeCaseEnumConverter<SepayTransactionResult>.TryParse(value, out _))
+            .When(query => query.Result is not null)
+            .WithMessage("Kết quả đối soát không hợp lệ");
+    }
+}

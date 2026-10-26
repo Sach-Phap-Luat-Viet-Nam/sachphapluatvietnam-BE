@@ -14,6 +14,8 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
 
     public DbSet<Order> Orders => Set<Order>();
 
+    public DbSet<SepayTransaction> SepayTransactions => Set<SepayTransaction>();
+
     public DbSet<OrderCodeCounter> OrderCodeCounters => Set<OrderCodeCounter>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -81,6 +83,21 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
             log.Property(l => l.Note).HasMaxLength(1000);
         });
 
+        modelBuilder.Entity<SepayTransaction>(transaction =>
+        {
+            transaction.ToTable("sepay_transactions");
+            transaction.HasIndex(t => t.SepayId).IsUnique();
+            transaction.HasIndex(t => new { t.Result, t.ReceivedAt });
+            transaction.Property(t => t.Gateway).HasMaxLength(100);
+            transaction.Property(t => t.AccountNumber).HasMaxLength(50);
+            transaction.Property(t => t.Content).HasMaxLength(1000);
+            transaction.Property(t => t.Code).HasMaxLength(100);
+            transaction.Property(t => t.ReferenceCode).HasMaxLength(100);
+            transaction.Property(t => t.Amount).HasPrecision(14, 0);
+            transaction.Property(t => t.OrderCode).HasMaxLength(20);
+            transaction.Property(t => t.Note).HasMaxLength(1000);
+        });
+
         modelBuilder.Entity<OrderCodeCounter>(counter =>
         {
             counter.ToTable("order_code_counters");
@@ -94,6 +111,7 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
         MapEnum<PaymentMethod>(configurationBuilder);
         MapEnum<PaymentStatus>(configurationBuilder);
         MapEnum<OrderType>(configurationBuilder);
+        MapEnum<SepayTransactionResult>(configurationBuilder);
     }
 
     private static void MapEnum<TEnum>(ModelConfigurationBuilder configurationBuilder)

@@ -24,7 +24,8 @@
 5. Tạm giữ tồn (BR-11); thiếu hàng → `OUT_OF_STOCK`, không tạo đơn. Sau đó **ghi nhận lượt dùng khuyến mãi**;
    hết lượt giữa chừng → trả tồn đã giữ và báo `COUPON_EXPIRED` hoặc `PROMOTION_UNAVAILABLE`. Lưu đơn lỗi → tự
    hoàn tồn và lượt dùng đã giữ.
-6. Trạng thái đầu: COD → `pending_confirm`; chuyển khoản → `pending_payment`, hạn thanh toán 30 phút.
+6. Trạng thái đầu: COD → `pending_confirm`; chuyển khoản → `pending_payment`, hạn thanh toán 30 phút. Đơn chuyển
+   khoản được SePay tự đối soát và chuyển `paid` khi tiền về (xem `docs/features/sepay-payment.md`).
 7. Xóa giỏ, trả đơn. Header `Idempotency-Key` gửi lại → trả đúng đơn đã tạo (chống bấm nhiều lần).
 
 **Link xem/hủy đơn cho khách vãng lai**: đơn không đăng nhập có `guestAccessToken` (ngẫu nhiên 128 bit, 22 ký tự
@@ -93,7 +94,8 @@ Tiền tố `/api/v1`.
 
 `OrderResponse`: mã đơn, trạng thái, phương thức/tình trạng thanh toán, thông tin khách, địa chỉ, `items[]`,
 `subtotal, discount, shippingFee, shippingDiscount, total`, `appliedPromotions[]` (snapshot tên, mã, số tiền),
-hóa đơn, `paymentExpiresAt`, `canCancel`, `history[]`. Mỗi dòng đơn có thêm `discountAmount`.
+hóa đơn, `paymentExpiresAt`, `canCancel`, `history[]`, `paymentInstructions` (tài khoản, nội dung, QR cho đơn
+chuyển khoản còn `pending_payment`, ngược lại `null`; chỉ trả ở response đơn khách, không có trong `order` của Admin). Mỗi dòng đơn có thêm `discountAmount`.
 `shippingFee` là phí khách phải trả theo biểu giá sau miễn phí theo ngưỡng; khách thực trả
 `shippingFee − shippingDiscount`. `guestAccessToken` chỉ có giá trị ở response tạo đơn của khách vãng lai, còn lại
 `null`.
@@ -148,7 +150,8 @@ migration ở bước deploy như trên.
 ## Hạn chế / việc còn lại
 
 - Mua ngay chỉ đặt một SKU mỗi lần.
-- Chỉ hỗ trợ COD và chuyển khoản đối soát tay; VNPAY/MoMo/ZaloPay/VietQR và webhook (FR-35, mục 11.4) chưa làm.
+- Hỗ trợ COD và chuyển khoản đối soát tự động qua SePay (`docs/features/sepay-payment.md`); VNPAY/MoMo/ZaloPay
+  (FR-35) chưa làm.
 - Phí ship tính theo bảng giá tự quản lý, chưa gọi API đơn vị vận chuyển (FR-34); chưa tạo vận đơn (FR-71) nên
   chưa có phí thực trả đơn vị vận chuyển để đối chiếu với phí thu của khách.
 - Chưa có pre-order (FR-38), đổi trả (FR-42), hóa đơn điện tử, email/ZNS xác nhận đơn (FR-37).
