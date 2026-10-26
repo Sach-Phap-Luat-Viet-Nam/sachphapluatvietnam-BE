@@ -21,6 +21,28 @@ internal sealed record IssueStockRequest(long SkuId, int Quantity, IssueType Typ
 
 internal sealed record SetThresholdRequest(int LowStockThreshold);
 
+internal sealed class SkuSearchQuery
+{
+    public const int DefaultLimit = 8;
+    public const int MaxLimit = 20;
+
+    /// <summary>Một phần tên sách, mã SKU hoặc ISBN.</summary>
+    public string Q { get; set; } = string.Empty;
+
+    public int Limit { get; set; } = DefaultLimit;
+}
+
+/// <summary>Một SKU trong kết quả tìm để chọn nhanh khi lập phiếu nhập; <c>Available</c> là tồn khả dụng hiện tại.</summary>
+internal sealed record SkuSearchResponse(
+    long SkuId,
+    string SkuCode,
+    string BookTitle,
+    string? EditionName,
+    string CoverType,
+    string Isbn,
+    bool IsLatestEdition,
+    int Available);
+
 internal sealed class ReceiptsQuery : PagedQuery
 {
     /// <summary><c>draft</c>, <c>approved</c>, <c>rejected</c>.</summary>
@@ -31,6 +53,9 @@ internal sealed record ReceiptLineResponse(
     long Id,
     long SkuId,
     string? SkuCode,
+    string? BookTitle,
+    string? EditionName,
+    string? CoverType,
     string BatchCode,
     string? PrinterName,
     int Quantity,
@@ -43,8 +68,10 @@ internal sealed record ReceiptResponse(
     ReceiptStatus Status,
     string? Note,
     long CreatedBy,
+    string? CreatedByName,
     DateTime CreatedAt,
     long? DecidedBy,
+    string? DecidedByName,
     DateTime? DecidedAt,
     string? RejectReason,
     IReadOnlyList<ReceiptLineResponse> Lines);
@@ -65,6 +92,7 @@ internal sealed record TransactionResponse(
     long? PrintBatchId,
     string Reference,
     long? CreatedBy,
+    string? CreatedByName,
     string? Note,
     DateTime CreatedAt);
 
@@ -72,6 +100,9 @@ internal sealed record TransactionResponse(
 internal sealed record StockCardResponse(
     long SkuId,
     string? SkuCode,
+    string? BookTitle,
+    string? EditionName,
+    string? CoverType,
     int Available,
     int Reserved,
     int OnHand,
@@ -102,6 +133,15 @@ internal sealed class CreateReceiptRequestValidator : AbstractValidator<CreateRe
             line.RuleFor(l => l.UnitCost).GreaterThanOrEqualTo(0).LessThanOrEqualTo(999_999_999_999m)
                 .Must(cost => decimal.Truncate(cost) == cost).WithMessage("Giá vốn phải là số nguyên VNĐ");
         });
+    }
+}
+
+internal sealed class SkuSearchQueryValidator : AbstractValidator<SkuSearchQuery>
+{
+    public SkuSearchQueryValidator()
+    {
+        RuleFor(query => query.Q).NotEmpty().MaximumLength(100);
+        RuleFor(query => query.Limit).InclusiveBetween(1, SkuSearchQuery.MaxLimit);
     }
 }
 

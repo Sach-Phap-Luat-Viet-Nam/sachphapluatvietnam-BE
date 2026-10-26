@@ -75,6 +75,7 @@ public sealed class AuthModule : IModule
         services.AddScoped<AuthService>();
         services.AddScoped<ProfileService>();
         services.AddScoped<UserAdminService>();
+        services.AddScoped<IUserNameReader, UserNameReader>();
         services.AddValidatorsFromAssembly(typeof(AuthModule).Assembly, includeInternalTypes: true);
         services.AddHostedService<BootstrapAdminService>();
 

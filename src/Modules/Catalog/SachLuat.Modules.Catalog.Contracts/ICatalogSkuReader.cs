@@ -6,6 +6,12 @@ public interface ICatalogSkuReader
     Task<IReadOnlyDictionary<long, SkuInfo>> GetSkusAsync(
         IReadOnlyCollection<long> skuIds,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Tìm SKU để chọn nhanh (nhập kho): khớp một phần tên sách, mã SKU hoặc ISBN, không phân biệt hoa thường. Sắp theo
+    /// tên sách rồi mã SKU, tối đa <paramref name="limit"/> kết quả.
+    /// </summary>
+    Task<IReadOnlyList<SkuInfo>> SearchSkusAsync(string query, int limit, CancellationToken cancellationToken);
 }
 
 /// <param name="CoverType">Giá trị snake_case: <c>paperback</c>, <c>hardcover</c>.</param>

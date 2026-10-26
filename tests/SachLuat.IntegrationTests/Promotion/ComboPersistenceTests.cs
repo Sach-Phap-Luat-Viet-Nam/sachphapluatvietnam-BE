@@ -354,5 +354,9 @@ public sealed class ComboPersistenceTests(PromotionDatabaseFixture fixture)
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<long, SkuInfo>>(
                 skus.Where(sku => skuIds.Contains(sku.SkuId)).ToDictionary(sku => sku.SkuId));
+
+        public Task<IReadOnlyList<SkuInfo>> SearchSkusAsync(string query, int limit, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<SkuInfo>>(
+                skus.Where(sku => sku.BookTitle.Contains(query, StringComparison.OrdinalIgnoreCase)).Take(limit).ToList());
     }
 }

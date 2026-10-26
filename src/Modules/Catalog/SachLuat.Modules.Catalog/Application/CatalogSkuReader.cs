@@ -74,6 +74,33 @@ internal sealed class CatalogSkuReader(CatalogDbContext dbContext, TimeProvider 
                 && row.EditionStatus is EditionStatus.OnSale or EditionStatus.Clearance));
     }
 
+    public async Task<IReadOnlyList<SkuInfo>> SearchSkusAsync(
+        string query,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var term = query.Trim();
+        if (term.Length == 0 || limit <= 0)
+        {
+            return [];
+        }
+
+        var pattern = LikePatterns.Contains(term);
+        var ids = await (
+                from sku in dbContext.Skus.AsNoTracking()
+                join edition in dbContext.Editions.AsNoTracking() on sku.EditionId equals edition.Id
+                join book in dbContext.Books.AsNoTracking() on edition.BookId equals book.Id
+                where EF.Functions.ILike(book.Title, pattern, LikePatterns.EscapeCharacter)
+                    || EF.Functions.ILike(sku.SkuCode, pattern, LikePatterns.EscapeCharacter)
+                    || EF.Functions.ILike(edition.Isbn, pattern, LikePatterns.EscapeCharacter)
+                orderby book.Title, sku.SkuCode
+                select sku.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        var found = await GetSkusAsync(ids, cancellationToken);
+        return ids.Where(found.ContainsKey).Select(id => found[id]).ToList();
+    }
+
     // Mỗi lần nạp cả cây danh mục (vài chục dòng) rẻ hơn truy vấn đệ quy cho từng sách.
     private async Task<IReadOnlyDictionary<long, long?>> ParentMapAsync(bool needed, CancellationToken cancellationToken) =>
         needed

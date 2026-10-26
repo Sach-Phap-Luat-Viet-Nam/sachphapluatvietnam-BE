@@ -6,6 +6,7 @@ using SachLuat.Modules.Inventory.Domain;
 using SachLuat.Modules.Inventory.Infrastructure.Persistence;
 using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.Persistence;
+using SachLuat.SharedKernel.Security;
 
 namespace SachLuat.Modules.Inventory.Application;
 
@@ -14,6 +15,7 @@ internal sealed class InventoryAdminService(
     InventoryDbContext dbContext,
     InventoryService inventoryService,
     ICatalogSkuReader skuReader,
+    IUserNameReader userNames,
     TimeProvider timeProvider,
     ILogger<InventoryAdminService> logger)
 {
@@ -24,21 +26,74 @@ internal sealed class InventoryAdminService(
         CreateReceiptRequest request,
         CancellationToken cancellationToken)
     {
-        var skuIds = request.Lines.Select(line => line.SkuId).Distinct().ToList();
-        var skus = await skuReader.GetSkusAsync(skuIds, cancellationToken);
-        if (skus.Count != skuIds.Count)
-        {
-            throw InventoryErrors.SkuNotFound();
-        }
-
-        var receipt = new GoodsReceipt(userId, request.Note, request.Lines.Select(line => new GoodsReceiptLine(
-            line.SkuId, line.BatchCode, line.PrinterName, line.Quantity, line.UnitCost, line.ReceivedAt)));
+        await EnsureSkusExistAsync(request, cancellationToken);
+        var receipt = new GoodsReceipt(userId, request.Note, ToLines(request));
         await EnsureBatchCodesAvailableAsync(receipt, cancellationToken);
 
         dbContext.GoodsReceipts.Add(receipt);
         await dbContext.SaveChangesAsync(cancellationToken);
         logger.LogInformation("User {UserId} created goods receipt {ReceiptId}", userId, receipt.Id);
         return await GetReceiptAsync(receipt.Id, cancellationToken);
+    }
+
+    /// <summary>Sửa phiếu nháp (thay ghi chú và toàn bộ dòng); chỉ người lập hoặc Super Admin.</summary>
+    public async Task<ReceiptResponse> UpdateReceiptAsync(
+        long userId,
+        bool isSuperAdmin,
+        long receiptId,
+        CreateReceiptRequest request,
+        CancellationToken cancellationToken)
+    {
+        var receipt = await dbContext.GoodsReceipts.Include(r => r.Lines)
+            .SingleOrDefaultAsync(r => r.Id == receiptId, cancellationToken)
+            ?? throw InventoryErrors.NotFound("phiếu nhập");
+        EnsureCanModify(receipt, userId, isSuperAdmin);
+        await EnsureSkusExistAsync(request, cancellationToken);
+
+        receipt.Replace(request.Note, ToLines(request));
+        await EnsureBatchCodesAvailableAsync(receipt, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("User {UserId} updated draft goods receipt {ReceiptId}", userId, receiptId);
+        return await GetReceiptAsync(receiptId, cancellationToken);
+    }
+
+    /// <summary>Xóa phiếu nháp (chưa ảnh hưởng tồn kho); phiếu đã duyệt hoặc từ chối giữ lại làm chứng từ.</summary>
+    public async Task DeleteReceiptAsync(
+        long userId,
+        bool isSuperAdmin,
+        long receiptId,
+        CancellationToken cancellationToken)
+    {
+        var receipt = await dbContext.GoodsReceipts.Include(r => r.Lines)
+            .SingleOrDefaultAsync(r => r.Id == receiptId, cancellationToken)
+            ?? throw InventoryErrors.NotFound("phiếu nhập");
+        EnsureCanModify(receipt, userId, isSuperAdmin);
+        receipt.EnsureCanDelete();
+
+        dbContext.GoodsReceipts.Remove(receipt);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("User {UserId} deleted draft goods receipt {ReceiptId}", userId, receiptId);
+    }
+
+    /// <summary>Tìm SKU để chọn nhanh khi lập phiếu: một phần tên sách, mã SKU hoặc ISBN, kèm tồn khả dụng.</summary>
+    public async Task<IReadOnlyList<SkuSearchResponse>> SearchSkusAsync(
+        SkuSearchQuery query,
+        CancellationToken cancellationToken)
+    {
+        var skus = await skuReader.SearchSkusAsync(query.Q, query.Limit, cancellationToken);
+        var ids = skus.Select(sku => sku.SkuId).ToList();
+        var available = await dbContext.StockItems.AsNoTracking()
+            .Where(stock => ids.Contains(stock.SkuId))
+            .ToDictionaryAsync(stock => stock.SkuId, stock => stock.Available, cancellationToken);
+        return skus.Select(sku => new SkuSearchResponse(
+            sku.SkuId,
+            sku.SkuCode,
+            sku.BookTitle,
+            sku.EditionName,
+            sku.CoverType,
+            sku.Isbn,
+            sku.IsLatestEdition,
+            available.GetValueOrDefault(sku.SkuId))).ToList();
     }
 
     public async Task<PagedResponse<ReceiptResponse>> ListReceiptsAsync(
@@ -59,7 +114,9 @@ internal sealed class InventoryAdminService(
             .ToListAsync(cancellationToken);
         var skus = await skuReader.GetSkusAsync(
             page.SelectMany(r => r.Lines).Select(l => l.SkuId).Distinct().ToList(), cancellationToken);
-        return PagedResponse<ReceiptResponse>.Create(page.Select(r => ToResponse(r, skus)).ToList(), query, total);
+        var names = await ReceiptUserNamesAsync(page, cancellationToken);
+        return PagedResponse<ReceiptResponse>.Create(
+            page.Select(r => ToResponse(r, skus, names)).ToList(), query, total);
     }
 
     public async Task<ReceiptResponse> GetReceiptAsync(long receiptId, CancellationToken cancellationToken)
@@ -69,7 +126,7 @@ internal sealed class InventoryAdminService(
             .SingleOrDefaultAsync(r => r.Id == receiptId, cancellationToken)
             ?? throw InventoryErrors.NotFound("phiếu nhập");
         var skus = await skuReader.GetSkusAsync(receipt.Lines.Select(l => l.SkuId).Distinct().ToList(), cancellationToken);
-        return ToResponse(receipt, skus);
+        return ToResponse(receipt, skus, await ReceiptUserNamesAsync([receipt], cancellationToken));
     }
 
     /// <summary>Duyệt phiếu: tạo lô in, cộng tồn khả dụng, ghi thẻ kho (US-05).</summary>
@@ -146,19 +203,32 @@ internal sealed class InventoryAdminService(
             .Where(t => t.SkuId == skuId)
             .OrderByDescending(t => t.Id)
             .Take(RecentTransactionLimit)
-            .Select(t => new TransactionResponse(
-                t.Id, t.Type, t.Quantity, t.PrintBatchId, t.Reference, t.CreatedBy, t.Note, t.CreatedAt))
             .ToListAsync(cancellationToken);
+        var names = await userNames.GetNamesAsync(
+            transactions.Where(t => t.CreatedBy is not null).Select(t => t.CreatedBy.GetValueOrDefault()).Distinct().ToList(),
+            cancellationToken);
 
         return new StockCardResponse(
             skuId,
             sku.SkuCode,
+            sku.BookTitle,
+            sku.EditionName,
+            sku.CoverType,
             stock.Available,
             stock.Reserved,
             stock.Available + stock.Reserved,
             stock.LowStockThreshold,
             batches,
-            transactions);
+            transactions.Select(t => new TransactionResponse(
+                t.Id,
+                t.Type,
+                t.Quantity,
+                t.PrintBatchId,
+                t.Reference,
+                t.CreatedBy,
+                t.CreatedBy is { } creator ? names.GetValueOrDefault(creator) : null,
+                t.Note,
+                t.CreatedAt)).ToList());
     }
 
     /// <summary>SKU có tồn khả dụng ≤ ngưỡng (BR-50). Gửi email cảnh báo sẽ làm khi có module Notification.</summary>
@@ -272,19 +342,58 @@ internal sealed class InventoryAdminService(
         }
     }
 
-    private static ReceiptResponse ToResponse(GoodsReceipt receipt, IReadOnlyDictionary<long, SkuInfo> skus) => new(
+    private static void EnsureCanModify(GoodsReceipt receipt, long userId, bool isSuperAdmin)
+    {
+        if (receipt.CreatedBy != userId && !isSuperAdmin)
+        {
+            throw InventoryErrors.ReceiptForbidden();
+        }
+    }
+
+    private static IEnumerable<GoodsReceiptLine> ToLines(CreateReceiptRequest request) =>
+        request.Lines.Select(line => new GoodsReceiptLine(
+            line.SkuId, line.BatchCode, line.PrinterName, line.Quantity, line.UnitCost, line.ReceivedAt));
+
+    private async Task EnsureSkusExistAsync(CreateReceiptRequest request, CancellationToken cancellationToken)
+    {
+        var skuIds = request.Lines.Select(line => line.SkuId).Distinct().ToList();
+        var skus = await skuReader.GetSkusAsync(skuIds, cancellationToken);
+        if (skus.Count != skuIds.Count)
+        {
+            throw InventoryErrors.SkuNotFound();
+        }
+    }
+
+    private Task<IReadOnlyDictionary<long, string>> ReceiptUserNamesAsync(
+        IEnumerable<GoodsReceipt> receipts,
+        CancellationToken cancellationToken) => userNames.GetNamesAsync(
+            receipts.SelectMany(r => new long?[] { r.CreatedBy, r.DecidedBy })
+                .OfType<long>()
+                .Distinct()
+                .ToList(),
+            cancellationToken);
+
+    private static ReceiptResponse ToResponse(
+        GoodsReceipt receipt,
+        IReadOnlyDictionary<long, SkuInfo> skus,
+        IReadOnlyDictionary<long, string> names) => new(
         receipt.Id,
         receipt.Status,
         receipt.Note,
         receipt.CreatedBy,
+        names.GetValueOrDefault(receipt.CreatedBy),
         receipt.CreatedAt,
         receipt.DecidedBy,
+        receipt.DecidedBy is { } decidedBy ? names.GetValueOrDefault(decidedBy) : null,
         receipt.DecidedAt,
         receipt.RejectReason,
         receipt.Lines.OrderBy(line => line.Id).Select(line => new ReceiptLineResponse(
             line.Id,
             line.SkuId,
             skus.GetValueOrDefault(line.SkuId)?.SkuCode,
+            skus.GetValueOrDefault(line.SkuId)?.BookTitle,
+            skus.GetValueOrDefault(line.SkuId)?.EditionName,
+            skus.GetValueOrDefault(line.SkuId)?.CoverType,
             line.BatchCode,
             line.PrinterName,
             line.Quantity,

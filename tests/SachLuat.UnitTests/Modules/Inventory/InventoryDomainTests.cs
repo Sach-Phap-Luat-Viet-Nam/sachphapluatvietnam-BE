@@ -21,13 +21,50 @@ public sealed class InventoryDomainTests
     }
 
     [Fact]
-    public void Receipt_ApprovedByCreator_Throws()
+    public void Receipt_ApprovedByCreator_IsApproved()
     {
         var receipt = CreateReceipt(createdBy: 1);
 
-        var act = () => receipt.Approve(approverId: 1, Now);
+        receipt.Approve(approverId: 1, Now);
 
-        act.Should().Throw<BusinessException>().Which.Code.Should().Be(InventoryErrors.ReceiptSelfApprovalCode);
+        receipt.Status.Should().Be(ReceiptStatus.Approved);
+        receipt.DecidedBy.Should().Be(1);
+    }
+
+    [Fact]
+    public void Receipt_ReplaceDraft_SwapsNoteAndLines()
+    {
+        var receipt = CreateReceipt(createdBy: 1);
+
+        receipt.Replace("Sửa số lượng", [new GoodsReceiptLine(11, "lo-02", null, 80, 30_000m, new DateOnly(2026, 10, 21))]);
+
+        receipt.Note.Should().Be("Sửa số lượng");
+        receipt.Lines.Should().ContainSingle().Which.Should().Match<GoodsReceiptLine>(
+            line => line.SkuId == 11 && line.BatchCode == "LO-02" && line.Quantity == 80);
+    }
+
+    [Fact]
+    public void Receipt_ReplaceWithoutLines_Throws()
+    {
+        var receipt = CreateReceipt(createdBy: 1);
+
+        var act = () => receipt.Replace(null, []);
+
+        act.Should().Throw<BusinessException>().Which.Code.Should().Be(InventoryErrors.ReceiptEmptyCode);
+        receipt.Lines.Should().HaveCount(1, "phiếu giữ nguyên khi dữ liệu mới không hợp lệ");
+    }
+
+    [Fact]
+    public void Receipt_ReplaceOrDeleteAfterDecision_Throws()
+    {
+        var receipt = CreateReceipt(createdBy: 1);
+        receipt.Approve(approverId: 2, Now);
+
+        var replace = () => receipt.Replace(null, [new GoodsReceiptLine(10, "LO-9", null, 1, 1m, new DateOnly(2026, 10, 21))]);
+        var delete = receipt.EnsureCanDelete;
+
+        replace.Should().Throw<BusinessException>().Which.Code.Should().Be(InventoryErrors.ReceiptNotDraftCode);
+        delete.Should().Throw<BusinessException>().Which.Code.Should().Be(InventoryErrors.ReceiptNotDraftCode);
     }
 
     [Fact]

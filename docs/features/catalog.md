@@ -164,6 +164,7 @@ phải có migration cập nhật giá trị cũ.
 
 ## Hạn chế / việc còn lại
 
+- `ICatalogSkuReader.SearchSkusAsync` (cho kho): khớp một phần tên sách, mã SKU hoặc ISBN bằng `ILIKE`, sắp theo tên sách rồi mã SKU.
 - Tìm kiếm tạm dùng `ILIKE` theo tên sách, khớp nguyên ISBN/mã SKU; chưa tìm theo một phần mã SKU, chưa tìm không dấu, theo tác giả, gợi ý (FR-11): chờ Meilisearch.
 - Ảnh bìa đã upload được qua Cloudinary; chưa xóa ảnh cũ trên Cloudinary khi đổi ảnh (ảnh mồ côi).
 - Chưa có upload file đọc thử (chỉ lưu URL), watermark đọc thử (NFR-16).

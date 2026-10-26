@@ -3,7 +3,7 @@ using SachLuat.SharedKernel.Domain;
 namespace SachLuat.Modules.Inventory.Domain;
 
 /// <summary>
-/// Phiếu nhập kho theo lô in (US-05): lập ở trạng thái nháp, người khác duyệt thì tồn mới tăng.
+/// Phiếu nhập kho theo lô in (US-05): lập ở trạng thái nháp, Super Admin duyệt thì tồn mới tăng.
 /// </summary>
 internal sealed class GoodsReceipt : AuditableEntity
 {
@@ -14,19 +14,7 @@ internal sealed class GoodsReceipt : AuditableEntity
         CreatedBy = createdBy;
         Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         _lines.AddRange(lines);
-        if (_lines.Count == 0)
-        {
-            throw InventoryErrors.ReceiptEmpty();
-        }
-
-        var duplicate = _lines
-            .GroupBy(line => (line.SkuId, line.BatchCode))
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicate is not null)
-        {
-            throw InventoryErrors.BatchCodeDuplicate(duplicate.Key.BatchCode);
-        }
-
+        EnsureValidLines(_lines);
         Status = ReceiptStatus.Draft;
     }
 
@@ -51,7 +39,7 @@ internal sealed class GoodsReceipt : AuditableEntity
 
     public void Approve(long approverId, DateTime now)
     {
-        EnsureCanDecide(approverId);
+        EnsureDraft();
         Status = ReceiptStatus.Approved;
         DecidedBy = approverId;
         DecidedAt = now;
@@ -59,24 +47,49 @@ internal sealed class GoodsReceipt : AuditableEntity
 
     public void Reject(long approverId, string reason, DateTime now)
     {
-        EnsureCanDecide(approverId);
+        EnsureDraft();
         Status = ReceiptStatus.Rejected;
         DecidedBy = approverId;
         DecidedAt = now;
         RejectReason = reason.Trim();
     }
 
-    private void EnsureCanDecide(long approverId)
+    /// <summary>Sửa phiếu nháp: thay ghi chú và toàn bộ dòng. Phiếu đã duyệt hoặc từ chối thì không sửa được.</summary>
+    public void Replace(string? note, IEnumerable<GoodsReceiptLine> lines)
+    {
+        EnsureDraft();
+        var newLines = lines.ToList();
+        EnsureValidLines(newLines);
+        Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        _lines.Clear();
+        _lines.AddRange(newLines);
+    }
+
+    /// <summary>Chỉ phiếu nháp mới xóa được (chưa ảnh hưởng tồn kho).</summary>
+    public void EnsureCanDelete() => EnsureDraft();
+
+    // Super Admin duyệt được mọi phiếu kể cả phiếu mình lập (policy InventoryApprove chỉ cấp cho Super Admin).
+    private void EnsureDraft()
     {
         if (Status != ReceiptStatus.Draft)
         {
             throw InventoryErrors.ReceiptNotDraft();
         }
+    }
 
-        // Tách người lập và người duyệt để phiếu nhập có kiểm soát chéo.
-        if (approverId == CreatedBy)
+    private static void EnsureValidLines(IReadOnlyCollection<GoodsReceiptLine> lines)
+    {
+        if (lines.Count == 0)
         {
-            throw InventoryErrors.ReceiptSelfApproval();
+            throw InventoryErrors.ReceiptEmpty();
+        }
+
+        var duplicate = lines
+            .GroupBy(line => (line.SkuId, line.BatchCode))
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+        {
+            throw InventoryErrors.BatchCodeDuplicate(duplicate.Key.BatchCode);
         }
     }
 }
