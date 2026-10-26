@@ -106,6 +106,12 @@ internal sealed class PromotionCampaign : AuditableEntity, ISoftDeletable
             throw PromotionErrors.Invalid("Thời gian kết thúc phải sau thời gian bắt đầu");
         }
 
+        // Combo có bảng và API riêng; kind này chỉ dùng để báo cáo ưu đãi đã áp vào đơn.
+        if (details.Kind is not (PromotionKind.OrderDiscount or PromotionKind.FreeShipping))
+        {
+            throw PromotionErrors.Invalid("Loại chương trình không hợp lệ");
+        }
+
         ValidateDiscount(details);
 
         if (details.MinOrderAmount is < 0 or > MaxMoney)
