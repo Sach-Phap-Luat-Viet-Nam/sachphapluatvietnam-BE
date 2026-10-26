@@ -51,7 +51,7 @@ public sealed class PopupPersistenceTests(ContentDatabaseFixture fixture) : ICla
     }
 
     [Fact]
-    public async Task GetRunning_ReturnsAtMostThreeRunningPopupsByPriority()
+    public async Task GetRunning_ReturnsAllRunningPopupsByPriority()
     {
         await using var scope = await fixture.CreateCleanScopeAsync();
         var service = scope.ServiceProvider.GetRequiredService<PopupService>();
@@ -67,8 +67,8 @@ public sealed class PopupPersistenceTests(ContentDatabaseFixture fixture) : ICla
 
         var running = await service.GetRunningAsync(CancellationToken);
 
-        running.Select(popup => popup.Id).Should().Equal(first.Id, second.Id, third.Id);
-        running.Select(popup => popup.Id).Should().NotContain(low.Id);
+        // Không giới hạn số lượng: cả popup ưu tiên thấp cũng nằm trong danh sách, xếp cuối.
+        running.Select(popup => popup.Id).Should().Equal(first.Id, second.Id, third.Id, low.Id);
         // Phần tử đầu cũng là popup tự bật lúc vào web.
         (await service.GetActiveAsync(CancellationToken))!.Id.Should().Be(running[0].Id);
     }

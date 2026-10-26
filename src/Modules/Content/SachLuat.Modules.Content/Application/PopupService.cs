@@ -11,19 +11,16 @@ internal sealed class PopupService(
     TimeProvider timeProvider,
     ILogger<PopupService> logger)
 {
-    /// <summary>Số popup tối đa Storefront nhận khi xem lại ưu đãi (<see cref="GetRunningAsync"/>).</summary>
-    public const int MaxRunningPopups = 3;
-
     /// <summary>Popup Storefront hiển thị lúc này: bật, trong lịch, ưu tiên cao nhất; null nếu không có.</summary>
     public Task<PopupResponse?> GetActiveAsync(CancellationToken cancellationToken) =>
         RunningByPriority().FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>
     /// Các popup đang chạy theo thứ tự ưu tiên (cùng thứ tự với <see cref="GetActiveAsync"/>, nên phần tử đầu là popup
-    /// tự bật), tối đa <see cref="MaxRunningPopups"/>. Để khách xem lại ưu đãi lỡ tắt ở trang chủ.
+    /// tự bật), không giới hạn số lượng. Để khách xem lại ưu đãi lỡ tắt ở trang chủ.
     /// </summary>
     public async Task<IReadOnlyList<PopupResponse>> GetRunningAsync(CancellationToken cancellationToken) =>
-        await RunningByPriority().Take(MaxRunningPopups).ToListAsync(cancellationToken);
+        await RunningByPriority().ToListAsync(cancellationToken);
 
     private IQueryable<PopupResponse> RunningByPriority() =>
         dbContext.Popups.AsNoTracking()

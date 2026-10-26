@@ -16,10 +16,10 @@ Module `SachLuat.Modules.Content`, schema `content`. Module này cũng là chỗ
    - Popup được chọn: `isActive = true`, `startsAt <= now`, và `endsAt` trống hoặc `> now`.
    - Nhiều popup cùng chạy → lấy `priority` lớn nhất; bằng nhau thì `startsAt` mới hơn, rồi `id` lớn hơn.
    - Không có popup nào → `204 No Content`.
-   - `GET /popups/running` trả các popup đang chạy cùng điều kiện và thứ tự ưu tiên như trên, **tối đa 3**
-     (`PopupService.MaxRunningPopups`), mảng rỗng khi không có. Phần tử đầu chính là popup `active`. Dùng cho khu
-     "Ưu đãi đang chạy" ở trang chủ để khách xem lại popup lỡ tắt; khu này không áp tần suất. Chạy quá 3 popup thì chỉ
-     3 popup ưu tiên cao nhất hiện ở đó.
+   - `GET /popups/running` trả các popup đang chạy cùng điều kiện và thứ tự ưu tiên như trên, **không giới
+     hạn số lượng**, mảng rỗng khi không có. Phần tử đầu chính là popup `active`. Dùng cho khu "Chương trình đang diễn
+     ra" ở trang chủ để khách xem lại popup lỡ tắt; khu này không áp tần suất. Có bao nhiêu popup đang chạy thì hiện
+     bấy nhiêu (trước đây cắt ở 3 popup ưu tiên cao nhất).
 4. **Tần suất** do FE tự áp, lưu dấu "đã xem" ở trình duyệt với khóa `popup:{id}:{updatedAt}` (popup vừa sửa thì
    `updatedAt` đổi nên hiện lại):
 
@@ -42,7 +42,7 @@ Tiền tố `/api/v1`. API Admin dùng policy `content_admin` (`super_admin`, `m
 | Method | Route | Xác thực | Request → Response |
 | --- | --- | --- | --- |
 | GET | `/popups/active` | Không | → 200 `PopupResponse` hoặc 204 |
-| GET | `/popups/running` | Không | → 200 `PopupResponse[]` (tối đa 3, có thể rỗng) |
+| GET | `/popups/running` | Không | → 200 `PopupResponse[]` (không giới hạn số lượng, có thể rỗng) |
 | GET | `/admin/popups?page=&limit=` | content_admin | → `PagedResponse<AdminPopupResponse>`, sắp theo ưu tiên |
 | GET | `/admin/popups/{id}` | content_admin | → `AdminPopupResponse` |
 | POST | `/admin/popups` | content_admin | `UpsertPopupRequest` → 201 `AdminPopupResponse` |
