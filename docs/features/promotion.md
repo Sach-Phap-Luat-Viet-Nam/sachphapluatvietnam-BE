@@ -88,27 +88,36 @@ trên các SKU có sẵn nên Cart, Inventory và dòng đơn **không đổi**.
   thì giỏ đủ bộ tự được giá combo ở `POST /checkout/preview` và khi tạo đơn. Số bộ =
   `min(floor(số lượng SKU trong giỏ / số cuốn trong một bộ))`; phần dư không được giảm.
   Ví dụ A×2 + B×1 là một bộ, A×2 + B×2 là hai bộ.
-- **Mức giảm một bộ** = `tổng giá lẻ hiện hành − comboPrice` (giá hiện hành đã gồm lịch giá, xem `catalog.md`). Sách
-  đang sale khiến giá lẻ không cao hơn giá combo thì combo không áp.
+- **Điều kiện áp**: `comboPrice ≤ tổng giá hiện hành` của một bộ (giá hiện hành đã gồm lịch giá, xem `catalog.md`): khách
+  không bao giờ trả nhiều hơn mua lẻ. Sách đang sale mạnh khiến giá lẻ thấp hơn giá combo thì combo không áp.
+- **Mức giảm một bộ hiển thị** = `tổng giá niêm yết (giá bìa) − comboPrice` (ví dụ hai tập 550.000đ, combo 575.000đ:
+  giảm 525.000đ). Trong đó `tổng giá hiện hành − comboPrice` là giảm **thật** (ví dụ 580.000 − 575.000 = 5.000đ), phần còn
+  lại là **chênh lệch niêm yết** (`PromotionEvaluation.ListMarkups`, theo SKU) = `giá niêm yết − giá hiện hành`. Phần
+  chênh lệch chỉ tính cho cuốn được các bộ **phủ trọn** (không còn cuốn lẻ dư của SKU đó); cuốn dư lẻ giữ giá hiện hành.
+  Ordering cộng chênh lệch vào tiền dòng và tạm tính (dòng, `order_items.unit_price` theo giá niêm yết) và nó cũng nằm
+  trong `orderDiscount`/`lineDiscounts`, nên **số khách phải trả không đổi** so với tính theo giá hiện hành
+  (`1.100.000 − 525.000 − 25.000 = 580.000 − 5.000 − 25.000`). Không truyền `ListPrice` (null) thì không có chênh lệch
+  (hành vi cũ).
 - **Cộng dồn với chương trình giảm trên đơn**: combo tính trước, rồi chương trình giảm trên đơn (tự áp hoặc mã, vẫn
   chọn một chương trình giảm nhiều nhất) tính tiếp trên **số tiền còn lại của từng dòng sau khi trừ phần giảm của
   combo** (phần dòng thuộc phạm vi chương trình). `minOrderAmount` vẫn xét trên tạm tính trước giảm giá. Tổng giảm
   (`orderDiscount`) = giảm combo + giảm chương trình; phần chương trình phân bổ về dòng nên không dòng nào bị giảm quá
   tiền của dòng. Mã giảm giá hợp lệ vẫn dùng được cùng combo. Giảm phí ship áp độc lập như thường.
 - **Trần tổng mức giảm** `Promotion:MaxTotalDiscountPercent` (mặc định 50): với dòng thuộc combo, tổng giảm (combo +
-  chương trình) không vượt phần trăm này của **giá bán thường** (`PromotionLine.RegularPrice`, chưa tính lịch giá của
-  sách). Chỉ chặn phần giảm của chương trình (combo không bị cắt, vì combo đã có trần riêng lúc tạo/sửa); dòng không có
-  combo không bị chặn nên chương trình hoạt động như cũ. Lịch giá không bị tính vào trần. Hết chỗ giảm thì chương trình
-  tự áp bị bỏ qua êm, còn mã khách nhập báo `COUPON_NOT_APPLICABLE`. Ví dụ hai tập giá gốc 550.000đ, combo 575.000đ (giảm
-  47,7%) cộng thêm "Khai trương" 10% thì chương trình chỉ được thêm 25.000đ để tổng giảm đúng 50%. Trần này cùng lưu ý
-  pháp lý như `MaxDiscountPercent`: cần pháp chế xác nhận.
+  chương trình) không vượt phần trăm này của **giá hiện hành** (`PromotionLine.UnitPrice`, đã áp lịch giá). Phần giảm
+  combo trong trần là giảm **thật** theo giá hiện hành (không gồm chênh lệch niêm yết). Chỉ chặn phần giảm của chương
+  trình (combo không bị cắt, vì combo đã có trần riêng lúc tạo/sửa); dòng không có combo không bị chặn nên chương trình
+  hoạt động như cũ. Hết chỗ giảm thì chương trình tự áp bị bỏ qua êm, còn mã khách nhập báo `COUPON_NOT_APPLICABLE`.
+  Ví dụ hai tập hiện hành 290.000đ/cuốn, combo 575.000đ (giảm thật 5.000đ), mỗi cuốn còn được giảm thêm tối đa 142.500đ.
+  Trần này cùng lưu ý pháp lý như `MaxDiscountPercent`: cần pháp chế xác nhận.
 - Nhiều combo chung SKU: xét **tham lam**, combo giảm nhiều mỗi bộ lấy sách trước, hòa thì combo tạo sớm hơn.
 - Tiền giảm phân bổ về từng dòng bằng cùng hàm `Allocate` của chương trình, tính trên phần sách thuộc từng combo.
 - Kết quả: `AppliedPromotion` có `kind = combo`, `promotionId` là **id combo**, `couponId` null (mỗi combo một phần tử).
   Combo **không** ghi `promotion_redemptions`: `RedeemAsync` bỏ qua, `ReleaseAsync` không cần làm gì.
 - Khi tạo/sửa, `ComboAdminService` kiểm tra qua `ICatalogSkuReader` (Contracts của Catalog): SKU phải tồn tại
-  (`REFERENCE_NOT_FOUND`), `comboPrice` phải thấp hơn tổng **giá bán thường** (chưa tính lịch giá) và không giảm quá
-  `Promotion:MaxDiscountPercent` (cùng trần và cùng lưu ý pháp lý với chương trình giảm trên đơn).
+  (`REFERENCE_NOT_FOUND`), `comboPrice` **không được cao hơn tổng giá hiện hành** (sau giảm, đã áp lịch giá) của các
+  sách và không giảm quá `Promotion:MaxDiscountPercent` so với giá bán thường (cùng trần và cùng lưu ý pháp lý với
+  chương trình giảm trên đơn). Admin response có thêm `currentTotal` (mức tối đa của giá combo) và `currentPrice` từng dòng.
 - Trang khách: danh sách ẩn combo có sách ngừng bán; trang chi tiết vẫn mở kèm `isSellable = false` để FE tắt nút mua.
   Sách trong bộ không còn ở Catalog thì combo coi như không tồn tại.
 - Xóa là **xóa mềm** (`deleted_at`); slug của combo đã xóa dùng lại được.

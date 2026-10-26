@@ -100,6 +100,10 @@ chuyển khoản còn `pending_payment`, ngược lại `null`; chỉ trả ở 
 `shippingFee − shippingDiscount`. `guestAccessToken` chỉ có giá trị ở response tạo đơn của khách vãng lai, còn lại
 `null`.
 
+Sách được combo phủ trọn hiện và lưu theo **giá niêm yết** (`items[].unitPrice`, `subtotal`, `order_items.unit_price`), tiền
+giảm combo cũng tính theo giá niêm yết nên số khách phải trả không đổi; phí ship và ngưỡng miễn phí vẫn tính trên tạm
+tính theo giá hiện hành (xem `docs/features/promotion.md`, mục Combo).
+
 `appliedPromotions[].kind` là `order_discount`, `free_shipping` hoặc `combo`. Với `combo`, `promotionId` là **id combo**
 (không phải chương trình khuyến mãi), `couponCode` luôn `null`, `amount` là tổng giảm của các bộ combo đó; giá combo
 chỉ thể hiện qua `discount` và `discountAmount` từng dòng, dòng đơn vẫn là các SKU lẻ (xem `docs/features/promotion.md`,
