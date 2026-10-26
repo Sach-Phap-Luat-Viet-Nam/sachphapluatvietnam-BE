@@ -54,10 +54,17 @@ public enum PromotionKind
 {
     OrderDiscount,
     FreeShipping,
+
+    /// <summary>Giá combo bộ sách cố định; chỉ xuất hiện trong <see cref="AppliedPromotion"/>, không phải loại chương trình.</summary>
+    Combo,
 }
 
-/// <param name="CouponId">null với chương trình tự áp.</param>
-/// <param name="Amount">Số tiền giảm trên đơn (<c>OrderDiscount</c>) hoặc trên phí ship (<c>FreeShipping</c>).</param>
+/// <param name="PromotionId">Id chương trình; với <see cref="PromotionKind.Combo"/> là id combo.</param>
+/// <param name="CouponId">null với chương trình tự áp và với combo.</param>
+/// <param name="Amount">
+/// Số tiền giảm trên đơn (<c>OrderDiscount</c>, <c>Combo</c>) hoặc trên phí ship (<c>FreeShipping</c>).
+/// Mỗi combo được áp là một phần tử riêng, <c>Amount</c> là tổng giảm của tất cả các bộ của combo đó.
+/// </param>
 public sealed record AppliedPromotion(
     long PromotionId,
     string Name,
