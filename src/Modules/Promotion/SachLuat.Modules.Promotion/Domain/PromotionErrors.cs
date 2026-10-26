@@ -14,6 +14,8 @@ internal static class PromotionErrors
     public const string CouponCodeDuplicateCode = "COUPON_CODE_DUPLICATE";
     public const string PromotionNotCouponCode = "PROMOTION_NOT_COUPON";
     public const string PromotionUnavailableCode = "PROMOTION_UNAVAILABLE";
+    public const string ComboSlugDuplicateCode = "COMBO_SLUG_DUPLICATE";
+    public const string ReferenceNotFoundCode = "REFERENCE_NOT_FOUND";
 
     public static BusinessException Invalid(string message) =>
         new(ErrorCodes.ValidationError, message, StatusCodes.Status400BadRequest);
@@ -50,4 +52,13 @@ internal static class PromotionErrors
 
     public static BusinessException CouponNotFound() =>
         new(ErrorCodes.NotFound, "Không tìm thấy mã giảm giá", StatusCodes.Status404NotFound);
+
+    public static BusinessException ComboNotFound() =>
+        new(ErrorCodes.NotFound, "Không tìm thấy combo", StatusCodes.Status404NotFound);
+
+    public static BusinessException ComboSlugDuplicate(string slug) =>
+        new(ComboSlugDuplicateCode, $"Slug \"{slug}\" đã được dùng cho combo khác", StatusCodes.Status409Conflict);
+
+    /// <summary>SKU trong combo không tồn tại ở Catalog.</summary>
+    public static BusinessException ComboSkuNotFound() => new(ReferenceNotFoundCode, "Có SKU trong combo không tồn tại");
 }
