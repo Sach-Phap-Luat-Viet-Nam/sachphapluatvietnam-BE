@@ -52,6 +52,7 @@ internal sealed record BookSummaryResponse(
     string? CoverImageUrl,
     string? UpdatedToText,
     EditionStatus? EditionStatus,
+    string? SkuCode,
     decimal? SalePrice,
     decimal? ListPrice,
     int? DiscountPercent,

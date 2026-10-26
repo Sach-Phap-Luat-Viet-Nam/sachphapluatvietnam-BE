@@ -197,6 +197,7 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         list.GetProperty("meta").GetProperty("total").GetInt32().Should().Be(1);
         var summary = list.GetProperty("items")[0];
         summary.GetProperty("inStock").GetBoolean().Should().BeTrue();
+        summary.GetProperty("skuCode").GetString().Should().Be("SLVN-BLDS-2026-BM");
         summary.GetProperty("salePrice").GetDecimal().Should().Be(150_000m);
         summary.GetProperty("discountPercent").GetInt32().Should().Be(25);
         var detail = await guest.GetAsync("/api/v1/books/bo-luat-dan-su-2026");

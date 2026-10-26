@@ -60,7 +60,8 @@ Tiền tố `/api/v1`. Enum trong JSON và query string dạng snake_case (`on_s
 | GET | `/books/{slug}` | Chi tiết + ấn bản (mới nhất trước, `isLatest` cho cảnh báo BR-03) + SKU (`inStock`, `discountPercent`) + văn bản pháp luật |
 | GET | `/categories` | Cây danh mục |
 
-Danh sách trả `{items, meta: {page, limit, total}}`; mỗi item lấy giá SKU rẻ nhất của ấn bản mới nhất.
+Danh sách trả `{items, meta: {page, limit, total}}`; mỗi item lấy giá SKU rẻ nhất của ấn bản mới nhất, kèm `skuCode` của đúng SKU đó
+(`null` khi sách chưa có ấn bản mới nhất hoặc chưa có SKU).
 
 Giá trong response (danh sách, chi tiết, và `AdminBookResponse`):
 

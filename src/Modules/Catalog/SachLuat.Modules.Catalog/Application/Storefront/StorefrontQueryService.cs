@@ -46,6 +46,7 @@ internal sealed class StorefrontQueryService(
                         Skus = edition.Skus.Select(sku => new
                         {
                             sku.Id,
+                            sku.SkuCode,
                             sku.ListPrice,
                             sku.SalePrice,
                             Schedule = sku.PriceSchedules
@@ -67,6 +68,7 @@ internal sealed class StorefrontQueryService(
             var cheapest = book.Latest?.Skus
                 .Select(sku => new
                 {
+                    sku.SkuCode,
                     sku.ListPrice,
                     Price = sku.Schedule?.SalePrice ?? sku.SalePrice,
                     SaleEndsAt = sku.Schedule?.EndsAt,
@@ -82,6 +84,7 @@ internal sealed class StorefrontQueryService(
                 book.Latest?.CoverImageUrl,
                 book.Latest?.UpdatedToText,
                 book.Latest?.Status,
+                cheapest?.SkuCode,
                 cheapest?.Price,
                 cheapest?.ListPrice,
                 cheapest is null ? null : Pricing.DiscountPercent(cheapest.ListPrice, cheapest.Price),
