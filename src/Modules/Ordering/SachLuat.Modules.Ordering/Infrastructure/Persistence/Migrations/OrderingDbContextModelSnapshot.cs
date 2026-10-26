@@ -326,6 +326,86 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                     b.ToTable("order_status_logs", "ordering");
                 });
 
+            modelBuilder.Entity("SachLuat.Modules.Ordering.Domain.SepayTransaction", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AccountNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("account_number");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(14, 0)
+                        .HasColumnType("numeric(14,0)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Content")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("content");
+
+                    b.Property<string>("Gateway")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("gateway");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("OrderCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("order_code");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<string>("ReferenceCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("reference_code");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("result");
+
+                    b.Property<long>("SepayId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sepay_id");
+
+                    b.Property<DateTime?>("TransactionDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("transaction_date");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sepay_transactions");
+
+                    b.HasIndex("SepayId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sepay_transactions_sepay_id");
+
+                    b.HasIndex("Result", "ReceivedAt")
+                        .HasDatabaseName("ix_sepay_transactions_result_received_at");
+
+                    b.ToTable("sepay_transactions", "ordering");
+                });
+
             modelBuilder.Entity("SachLuat.Modules.Ordering.Domain.Order", b =>
                 {
                     b.OwnsMany("SachLuat.Modules.Ordering.Domain.AppliedPromotionSnapshot", "AppliedPromotions", b1 =>

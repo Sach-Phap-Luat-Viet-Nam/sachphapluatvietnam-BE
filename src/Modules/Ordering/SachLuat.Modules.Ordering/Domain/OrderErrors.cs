@@ -16,6 +16,7 @@ internal static class OrderErrors
     public const string CheckoutTotalChangedCode = "CHECKOUT_TOTAL_CHANGED";
     public const string TooManyOpenOrdersCode = "TOO_MANY_OPEN_ORDERS";
     public const string CodNotAllowedCode = "COD_NOT_ALLOWED";
+    public const string SepayUnauthorizedCode = "SEPAY_UNAUTHORIZED";
 
     public static BusinessException InvalidTransition(OrderStatus from, OrderStatus to) => new(
         InvalidTransitionCode,
@@ -58,6 +59,9 @@ internal static class OrderErrors
     public static BusinessException CodNotAllowed() => new(
         CodNotAllowedCode,
         "Số điện thoại này hiện không dùng được thanh toán khi nhận hàng, vui lòng chọn chuyển khoản");
+
+    public static BusinessException SepayUnauthorized() => new(
+        SepayUnauthorizedCode, "API key SePay không hợp lệ", StatusCodes.Status401Unauthorized);
 
     public static BusinessException NotFound() =>
         new(ErrorCodes.NotFound, "Không tìm thấy đơn hàng", StatusCodes.Status404NotFound);

@@ -202,7 +202,8 @@ internal sealed record OrderResponse(
     bool CanCancel,
     DateTime CreatedAt,
     IReadOnlyList<OrderStatusLogResponse> History,
-    string? GuestAccessToken);
+    string? GuestAccessToken,
+    PaymentInstructionsResponse? PaymentInstructions = null);
 
 internal sealed record OrderSummaryResponse(
     string OrderCode,

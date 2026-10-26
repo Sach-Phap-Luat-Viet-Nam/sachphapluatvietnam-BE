@@ -22,6 +22,11 @@ public sealed class OrderingModule : IModule
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        services.AddOptions<SepayOptions>()
+            .Bind(configuration.GetSection(SepayOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         var connectionString = configuration.GetRequiredConnectionString();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<AuditableEntityInterceptor>();
@@ -38,6 +43,7 @@ public sealed class OrderingModule : IModule
         services.AddScoped<OrderAdminService>();
         services.AddScoped<CheckoutPricingService>();
         services.AddScoped<CustomerRiskService>();
+        services.AddScoped<SepayPaymentService>();
         services.AddHostedService<ExpiredPaymentCancellationService>();
         services.AddValidatorsFromAssembly(typeof(OrderingModule).Assembly, includeInternalTypes: true);
 
