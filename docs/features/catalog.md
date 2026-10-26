@@ -72,13 +72,16 @@ Giá trong response (danh sách, chi tiết, và `AdminBookResponse`):
 | `regularSalePrice` | Giá bán thường (chỉ ở SKU). Admin dùng field này điền form `PUT /admin/skus/{id}` |
 | `discountPercent` | % giảm của `salePrice` so với `listPrice`, làm tròn xuống |
 | `saleEndsAt` | Thời điểm hết giá lịch (UTC), để hiện đếm ngược; `null` khi đang bán giá thường |
+
+`q` khớp tên sách (chứa chuỗi, không phân biệt hoa/thường), ISBN hoặc mã SKU (`skuCode`) của bất kỳ ấn bản nào
+(khớp nguyên mã; SKU không phân biệt hoa/thường).
 `category` gồm cả danh mục con; `legalDocument` khớp văn bản gắn với ấn bản hoặc nhãn "Cập nhật đến".
 
 **Admin** (policy `catalog_admin`: super_admin, product_manager, bắt buộc 2FA):
 
 | Method | Route | Mô tả |
 | --- | --- | --- |
-| GET | `/admin/books?q=&status=` | Danh sách mọi trạng thái |
+| GET | `/admin/books?q=&status=` | Danh sách mọi trạng thái; `q` như website, thêm khớp nguyên `slug` |
 | GET/PUT | `/admin/books/{id}` | Chi tiết (mọi ấn bản, tồn từng SKU) / sửa |
 | POST | `/admin/books` | Tạo: `{title, slug, bookType, status, description?, targetAudiences[], metaTitle?, metaDescription?, categoryIds[], authorIds[]}` |
 | POST | `/admin/books/{id}/editions` | Thêm ấn bản; ấn bản đầu tiên tự là mới nhất |
@@ -161,7 +164,7 @@ phải có migration cập nhật giá trị cũ.
 
 ## Hạn chế / việc còn lại
 
-- Tìm kiếm tạm dùng `ILIKE` theo tên sách/ISBN, chưa tìm không dấu, theo tác giả, gợi ý (FR-11): chờ Meilisearch.
+- Tìm kiếm tạm dùng `ILIKE` theo tên sách, khớp nguyên ISBN/mã SKU; chưa tìm theo một phần mã SKU, chưa tìm không dấu, theo tác giả, gợi ý (FR-11): chờ Meilisearch.
 - Ảnh bìa đã upload được qua Cloudinary; chưa xóa ảnh cũ trên Cloudinary khi đổi ảnh (ảnh mồ côi).
 - Chưa có upload file đọc thử (chỉ lưu URL), watermark đọc thử (NFR-16).
 - Chưa có concurrency token cho chỉnh sửa đồng thời trên Admin.

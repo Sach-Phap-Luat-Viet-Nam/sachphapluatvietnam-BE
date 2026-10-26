@@ -7,7 +7,6 @@ using SachLuat.Modules.Catalog.Domain;
 using SachLuat.Modules.Catalog.Domain.Books;
 using SachLuat.Modules.Catalog.Domain.Editions;
 using SachLuat.Modules.Catalog.Infrastructure.Persistence;
-using SachLuat.Modules.Inventory.Contracts;
 using Xunit;
 
 namespace SachLuat.IntegrationTests.Catalog;
@@ -112,28 +111,5 @@ public sealed class PriceSchedulePersistenceTests(CatalogDatabaseFixture fixture
     {
         var digits = "978" + Random.Shared.NextInt64(0, 1_000_000_000).ToString("D9");
         return digits + Isbn13.ComputeCheckDigit(digits);
-    }
-
-    private sealed class NoStock : IInventoryService
-    {
-        public Task<IReadOnlyDictionary<long, int>> GetAvailableQuantitiesAsync(
-            IReadOnlyCollection<long> skuIds,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyDictionary<long, int>>(new Dictionary<long, int>());
-
-        public Task ReserveAsync(
-            string reference,
-            IReadOnlyCollection<StockLine> lines,
-            CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task ReleaseAsync(string reference, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public Task<IReadOnlyDictionary<long, decimal>> DeductAsync(
-            string reference,
-            CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task RestockAsync(string reference, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
     }
 }
