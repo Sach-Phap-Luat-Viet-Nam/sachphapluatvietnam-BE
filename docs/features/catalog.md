@@ -169,7 +169,8 @@ phải có migration cập nhật giá trị cũ.
 - Chưa có upload file đọc thử (chỉ lưu URL), watermark đọc thử (NFR-16).
 - Chưa có concurrency token cho chỉnh sửa đồng thời trên Admin.
 - Thứ tự tác giả trong một đầu sách chưa lưu (`book_authors` chưa có `sort_order`).
-- Tag (FR-61), combo (FR-16), giá sỉ theo bậc (FR-63, chờ tài khoản tổ chức FR-09), import Excel (FR-65) chưa làm.
+- Combo (FR-16) làm ở module Promotion chứ không phải Catalog (xem `docs/features/promotion.md`, mục Combo).
+- Tag (FR-61), giá sỉ theo bậc (FR-63, chờ tài khoản tổ chức FR-09), import Excel (FR-65) chưa làm.
 - Lọc "còn hàng", sắp xếp "bán chạy", "đánh giá cao" (FR-12, FR-13) chưa làm.
 - Lịch giá đặt từng SKU, chưa có API đặt hàng loạt cho nhiều SKU một lần.
 - Chưa ghi nhật ký thay đổi giá ai/lúc nào/cũ → mới (FR-98); hiện chỉ ghi log ứng dụng.

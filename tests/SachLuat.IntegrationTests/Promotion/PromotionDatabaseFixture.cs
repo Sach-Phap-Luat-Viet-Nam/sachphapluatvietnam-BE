@@ -58,6 +58,9 @@ public sealed class PromotionDatabaseFixture : IAsyncLifetime
         await dbContext.Redemptions.ExecuteDeleteAsync(cancellationToken);
         await dbContext.Coupons.ExecuteDeleteAsync(cancellationToken);
         await dbContext.Promotions.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken);
+
+        // Các dòng combo_items tự xóa theo (khóa ngoại cascade ở CSDL).
+        await dbContext.Combos.IgnoreQueryFilters().ExecuteDeleteAsync(cancellationToken);
         return scope;
     }
 

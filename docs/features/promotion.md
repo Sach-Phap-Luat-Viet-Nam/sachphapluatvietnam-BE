@@ -4,8 +4,9 @@
 
 Marketing tạo và quản lý khuyến mãi (FR-90): giảm trên tổng hóa đơn, giảm hoặc miễn phí ship, tự áp hoặc dùng mã,
 có giới hạn thời gian, giá trị đơn, phạm vi sách, số lượt dùng. Khách xem ưu đãi đang chạy (FR-32) và thử mã ở bước
-thanh toán. Module `SachLuat.Modules.Promotion`, schema `promotion`; module Ordering gọi qua
-`SachLuat.Modules.Promotion.Contracts` (`IPromotionService`).
+thanh toán. Module cũng quản lý **combo bộ sách** giá cố định (FR-16, mục Combo bên dưới). Module
+`SachLuat.Modules.Promotion`, schema `promotion`; module Ordering gọi qua `SachLuat.Modules.Promotion.Contracts`
+(`IPromotionService`).
 
 Ví dụ "Giảm ngay 20% trên tổng hóa đơn cho tất cả các đầu sách pháp luật chính hãng, áp dụng đến hết 31/12/2026"
 là **một chương trình** giảm trên đơn, tự áp, 20%, mọi sách (payload mẫu ở mục API). Các câu quảng cáo như "Giao hàng
@@ -72,6 +73,37 @@ khi tạo/sửa. Nghị định về khuyến mại giới hạn mức giảm gi
 Thương; Em ghi theo hiểu biết hiện tại và **chưa kiểm tra bản sửa đổi mới nhất, cần pháp chế xác nhận** trước khi
 ra mắt.
 
+**Combo bộ sách** (`Combo`, bảng `combos` và `combo_items`, FR-16): bộ sách **cố định** (2–10 SKU, mỗi SKU kèm số
+cuốn trong một bộ) bán với **giá combo** thấp hơn tổng giá lẻ. Ví dụ sách AB gồm tập 1 (A) và tập 2 (B), mua lẻ mỗi
+cuốn 50.000đ, mua chung chỉ 70.000đ. Combo nằm ở Promotion vì không có SKU hay tồn kho riêng: bản chất là ưu đãi giá
+trên các SKU có sẵn nên Cart, Inventory và dòng đơn **không đổi**.
+
+| Nhóm | Thuộc tính |
+| --- | --- |
+| Hiển thị | `name`, `slug` (trang `/combo/{slug}`, duy nhất giữa các combo chưa xóa), `description`, `imageUrl` (https) |
+| Giá | `comboPrice` (VNĐ nguyên, một bộ), `items[]` = `{skuId, quantity}` |
+| Thời gian | `startsAt`, `endsAt` (UTC, `endsAt` là mốc loại trừ, trống = chạy đến khi tắt), `isActive` |
+
+- **Tự nhận diện trong giỏ**: khách thêm lẻ A và B (hoặc bấm "Mua combo", FE chỉ việc thêm lần lượt từng SKU vào giỏ)
+  thì giỏ đủ bộ tự được giá combo ở `POST /checkout/preview` và khi tạo đơn. Số bộ =
+  `min(floor(số lượng SKU trong giỏ / số cuốn trong một bộ))`; phần dư không được giảm.
+  Ví dụ A×2 + B×1 là một bộ, A×2 + B×2 là hai bộ.
+- **Mức giảm một bộ** = `tổng giá lẻ hiện hành − comboPrice` (giá hiện hành đã gồm lịch giá, xem `catalog.md`). Sách
+  đang sale khiến giá lẻ không cao hơn giá combo thì combo không áp.
+- **Không cộng dồn với chương trình giảm trên đơn**: tổng giảm của các combo được so với chương trình giảm trên đơn
+  tốt nhất, bên nào giảm nhiều hơn thì thắng, **hòa thì giữ chương trình** (nên mã khách nhập vẫn được dùng). Mã hợp lệ
+  nhưng thua combo: không lỗi, `couponApplied = false`. Giảm phí ship áp độc lập như thường.
+- Nhiều combo chung SKU: xét **tham lam**, combo giảm nhiều mỗi bộ lấy sách trước, hòa thì combo tạo sớm hơn.
+- Tiền giảm phân bổ về từng dòng bằng cùng hàm `Allocate` của chương trình, tính trên phần sách thuộc từng combo.
+- Kết quả: `AppliedPromotion` có `kind = combo`, `promotionId` là **id combo**, `couponId` null (mỗi combo một phần tử).
+  Combo **không** ghi `promotion_redemptions`: `RedeemAsync` bỏ qua, `ReleaseAsync` không cần làm gì.
+- Khi tạo/sửa, `ComboAdminService` kiểm tra qua `ICatalogSkuReader` (Contracts của Catalog): SKU phải tồn tại
+  (`REFERENCE_NOT_FOUND`), `comboPrice` phải thấp hơn tổng **giá bán thường** (chưa tính lịch giá) và không giảm quá
+  `Promotion:MaxDiscountPercent` (cùng trần và cùng lưu ý pháp lý với chương trình giảm trên đơn).
+- Trang khách: danh sách ẩn combo có sách ngừng bán; trang chi tiết vẫn mở kèm `isSellable = false` để FE tắt nút mua.
+  Sách trong bộ không còn ở Catalog thì combo coi như không tồn tại.
+- Xóa là **xóa mềm** (`deleted_at`); slug của combo đã xóa dùng lại được.
+
 ## API (method, route, request, response, mã lỗi)
 
 Tiền tố `/api/v1`. Admin dùng policy `pricing_admin` (`super_admin`, `product_manager`, `marketing`, bắt buộc 2FA).
@@ -92,6 +124,47 @@ Enum trong JSON dạng snake_case.
 | PUT | `/admin/coupons/{id}` | pricing_admin | `{isActive, usageLimit?}` → `CouponResponse` |
 
 Phía khách dùng `POST /checkout/preview` và `couponCode` ở `POST /orders` (xem `docs/features/ordering.md`).
+
+**Combo** (admin cùng policy `pricing_admin`):
+
+| Method | Route | Xác thực | Request → Response |
+| --- | --- | --- | --- |
+| GET | `/combos?skuId=` | Không | → `ComboResponse[]` (đang chạy, mới nhất trước, tối đa 50, không phân trang; `skuId` chỉ lấy combo có SKU đó; ẩn combo có sách ngừng bán) |
+| GET | `/combos/{slug}` | Không | → `ComboResponse` (404 `NOT_FOUND` khi combo không chạy/không tồn tại) |
+| GET | `/admin/combos?q=&page=&limit=` | pricing_admin | → `PagedResponse<AdminComboResponse>` (`q` khớp tên hoặc slug) |
+| GET | `/admin/combos/{id}` | pricing_admin | → `AdminComboResponse` |
+| POST | `/admin/combos` | pricing_admin | `UpsertComboRequest` → 201 `AdminComboResponse` |
+| PUT | `/admin/combos/{id}` | pricing_admin | `UpsertComboRequest` → `AdminComboResponse` |
+| DELETE | `/admin/combos/{id}` | pricing_admin | → 204 (xóa mềm) |
+
+`ComboResponse` (khách): `{id, name, slug, description, imageUrl, comboPrice, retailPrice, savings, items[], isSellable,
+startsAt, endsAt}`; `retailPrice` là tổng giá **hiện hành** của một bộ nếu mua lẻ, `savings = max(0, retailPrice −
+comboPrice)`; mỗi item: `{skuId, skuCode, bookTitle, bookSlug, editionName, coverType, coverImageUrl, quantity,
+unitPrice, isSellable}`. `AdminComboResponse`: các trường của request kèm `regularTotal` (tổng giá bán thường một bộ,
+`null` nếu có SKU không còn ở Catalog), `status` (`inactive`, `scheduled`, `running`, `ended`), `items[]` =
+`{skuId, quantity, skuCode, bookTitle, regularSalePrice}` và `createdAt`, `updatedAt`.
+
+Payload mẫu cho ví dụ sách AB (SKU 11 là tập 1, SKU 12 là tập 2, mỗi cuốn bán thường 50.000đ):
+
+```json
+{
+  "name": "Combo trọn bộ sách AB",
+  "slug": "combo-tron-bo-sach-ab",
+  "description": "Trọn bộ hai tập, tiết kiệm 30.000đ so với mua lẻ.",
+  "imageUrl": null,
+  "comboPrice": 70000,
+  "items": [
+    { "skuId": 11, "quantity": 1 },
+    { "skuId": 12, "quantity": 1 }
+  ],
+  "startsAt": "2026-11-01T00:00:00+07:00",
+  "endsAt": null,
+  "isActive": true
+}
+```
+
+Mua combo trên FE: gọi `POST /cart/items` lần lượt cho từng item (số lượng = `quantity` của item). Giá combo hiện ở
+`POST /checkout/preview` dưới dạng một phần tử `appliedPromotions` có `kind = combo`.
 
 Payload mẫu cho ví dụ giảm 20% (giờ Việt Nam, kết thúc đúng 0h ngày 01/01/2027 tức hết ngày 31/12/2026):
 
@@ -123,13 +196,15 @@ Payload mẫu cho ví dụ giảm 20% (giờ Việt Nam, kết thúc đúng 0h n
 Mã lỗi: `VALIDATION_ERROR` (400), `NOT_FOUND` (404), `COUPON_INVALID`, `COUPON_EXPIRED` (hết hạn, hết lượt, hoặc khách đã
 dùng hết lượt của mã), `COUPON_MIN_ORDER`, `COUPON_NOT_APPLICABLE` (giỏ không có sách thuộc phạm vi),
 `COUPON_LOGIN_REQUIRED` (đều 422), `COUPON_CODE_DUPLICATE` (409), `PROMOTION_NOT_COUPON` (422, thêm mã cho chương trình
-tự áp), `PROMOTION_UNAVAILABLE` (422, chương trình tự áp hết lượt/hết hạn giữa lúc đặt hàng).
+tự áp), `PROMOTION_UNAVAILABLE` (422, chương trình tự áp hết lượt/hết hạn giữa lúc đặt hàng), `COMBO_SLUG_DUPLICATE` (409),
+`REFERENCE_NOT_FOUND` (422, SKU trong combo không tồn tại). Giá combo không thấp hơn tổng giá bán thường hoặc giảm quá
+trần `Promotion:MaxDiscountPercent` trả `VALIDATION_ERROR` (400) kèm lý do.
 
 ## Cấu hình cần thiết
 
 | Key | Mặc định |
 | --- | --- |
-| `Promotion:MaxDiscountPercent` | 50 (trần % cho chương trình giảm trên đơn, xem lưu ý pháp lý ở trên) |
+| `Promotion:MaxDiscountPercent` | 50 (trần % cho chương trình giảm trên đơn và cho mức giảm của combo so với giá bán thường, xem lưu ý pháp lý ở trên) |
 | `Promotion:MaxCouponsPerBatch` | 1000 (số mã tối đa mỗi lần sinh) |
 
 ## Thay đổi CSDL (migration liên quan)
@@ -143,12 +218,26 @@ Migration `CreatePromotionSchema` (schema `promotion`):
 | `coupons` | unique `code`; khóa ngoại về `promotions` (cùng schema) |
 | `promotion_redemptions` | unique `(reference, promotion_id)` để idempotent; index `(promotion_id, customer_key)` lọc `status = 'redeemed'`; `reference` là mã đơn, không khóa ngoại sang Ordering |
 
+Migration `AddCombos` (chỉ thêm bảng, không đổi dữ liệu cũ):
+
+| Bảng | Ghi chú |
+| --- | --- |
+| `combos` | `combo_price numeric(12,0)`; check `combo_price > 0`, `ends_at > starts_at`; unique `slug` (index `ux_combos_slug`, chỉ với dòng chưa xóa mềm); xóa mềm |
+| `combo_items` | unique `(combo_id, sku_id)`, check `quantity > 0`, index `sku_id`; khóa ngoại về `combos` (cascade); **không** khóa ngoại sang `catalog.skus` |
+
 Catalog không đổi schema nhưng `ICatalogSkuReader` trả thêm `RegularSalePrice` và `CategoryIds` (gồm danh mục cha).
 Production tắt `Database:ApplyMigrationsOnStartup`, cần áp migration này ở bước deploy.
 
 ## Hạn chế / việc còn lại
 
-- Chưa có đối tượng "đơn đầu tiên" và nhóm khách hàng (FR-85), flash sale, combo (FR-16), tặng quà.
+- Chưa có đối tượng "đơn đầu tiên" và nhóm khách hàng (FR-85), flash sale, tặng quà.
+- Combo: chưa có giới hạn lượt dùng, đối tượng khách hay thống kê riêng (không ghi `promotion_redemptions`); chỉ có
+  bộ sách cố định, chưa có kiểu "mua N cuốn bất kỳ trong nhóm"; `imageUrl` chỉ kiểm tra là link https, chưa ràng buộc
+  link Cloudinary như ảnh bìa (xem `catalog.md`) và chưa có API ký upload riêng cho ảnh combo.
+- Giỏ hàng chưa hiện giá combo: khách chỉ thấy ở bước xem trước thanh toán (`POST /checkout/preview`); thêm combo vào
+  giỏ là nhiều lệnh `POST /cart/items` không nguyên tử (một SKU hết hàng thì các SKU khác đã vào giỏ).
+- Nhiều combo chung SKU tính theo tham lam, chưa tìm phương án tối ưu tuyệt đối (hiếm gặp).
+- Đơn đã áp combo không hiển thị riêng giá combo trên dòng đơn, chỉ có `discountAmount` đã phân bổ về từng dòng.
 - Chưa có chương trình "Đổi sách cũ – Lấy bản mới" tự nhận diện khách đủ điều kiện (BR-30): hiện chỉ có sinh mã riêng
   hàng loạt để gửi tay; chưa có tự động gửi mã (chờ module Notification).
 - `targetIds` không được kiểm tra tồn tại vì Catalog là module khác; id sai thì chương trình không áp dụng cho sách nào.
