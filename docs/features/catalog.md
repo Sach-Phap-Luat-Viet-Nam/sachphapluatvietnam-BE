@@ -84,6 +84,7 @@ Giá trong response (danh sách, chi tiết, và `AdminBookResponse`):
 | GET | `/admin/books?q=&status=` | Danh sách mọi trạng thái; `q` như website, thêm khớp nguyên `slug` |
 | GET/PUT | `/admin/books/{id}` | Chi tiết (mọi ấn bản, tồn từng SKU) / sửa |
 | POST | `/admin/books` | Tạo: `{title, slug, bookType, status, description?, targetAudiences[], metaTitle?, metaDescription?, categoryIds[], authorIds[]}` |
+| POST | `/admin/books/quick` | Tạo trọn gói `{book: {...như POST /admin/books}, edition: {...như POST /admin/books/{id}/editions}, skus: [{skuCode, coverType, listPrice, salePrice, allowPreorder}]}` trong **một transaction**: đầu sách + ấn bản đầu tiên (tự là mới nhất) + SKU; lỗi phần nào cũng không tạo gì. Mỗi loại bìa và mã SKU chỉ xuất hiện một lần trong `skus`. Trả `AdminBookResponse` (201) |
 | POST | `/admin/books/{id}/editions` | Thêm ấn bản; ấn bản đầu tiên tự là mới nhất |
 | PUT | `/admin/editions/{id}` | Sửa ấn bản (ISBN, QĐXB, "cập nhật đến", trạng thái, `legalDocumentIds[]`, ...) |
 | POST | `/admin/editions/{id}/set-latest` | Đổi ấn bản mới nhất (BR-02) |

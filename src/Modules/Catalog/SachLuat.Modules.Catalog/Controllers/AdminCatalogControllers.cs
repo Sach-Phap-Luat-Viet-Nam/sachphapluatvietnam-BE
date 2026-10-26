@@ -30,6 +30,13 @@ internal sealed class AdminBooksController(CatalogAdminService service) : Contro
         CancellationToken cancellationToken) =>
         StatusCode(StatusCodes.Status201Created, await service.CreateBookAsync(request, cancellationToken));
 
+    /// <summary>Tạo trọn gói đầu sách + ấn bản đầu tiên + SKU trong một request (nhập sách nhanh).</summary>
+    [HttpPost("quick")]
+    public async Task<ActionResult<AdminBookResponse>> QuickCreate(
+        QuickCreateBookRequest request,
+        CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, await service.QuickCreateBookAsync(request, cancellationToken));
+
     [HttpPut("{id:long}")]
     public Task<AdminBookResponse> Update(long id, UpsertBookRequest request, CancellationToken cancellationToken) =>
         service.UpdateBookAsync(id, request, cancellationToken);

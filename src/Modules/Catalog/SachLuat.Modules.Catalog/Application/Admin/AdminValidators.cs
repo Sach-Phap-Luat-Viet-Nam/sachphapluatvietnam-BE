@@ -85,6 +85,28 @@ internal sealed class CreateSkuRequestValidator : AbstractValidator<CreateSkuReq
     }
 }
 
+internal sealed class QuickCreateBookRequestValidator : AbstractValidator<QuickCreateBookRequest>
+{
+    public QuickCreateBookRequestValidator(
+        IValidator<UpsertBookRequest> bookValidator,
+        IValidator<UpsertEditionRequest> editionValidator,
+        IValidator<CreateSkuRequest> skuValidator)
+    {
+        RuleFor(request => request.Book).NotNull().SetValidator(bookValidator);
+        RuleFor(request => request.Edition).NotNull().SetValidator(editionValidator);
+        RuleFor(request => request.Skus).NotEmpty().WithMessage("Cần ít nhất một SKU");
+        RuleForEach(request => request.Skus).SetValidator(skuValidator);
+        RuleFor(request => request.Skus)
+            .Must(skus => skus.Select(sku => sku.CoverType).Distinct().Count() == skus.Count)
+            .WithMessage("Mỗi loại bìa chỉ có một SKU")
+            .When(request => request.Skus is not null);
+        RuleFor(request => request.Skus)
+            .Must(skus => skus.Select(sku => sku.SkuCode.Trim().ToUpperInvariant()).Distinct().Count() == skus.Count)
+            .WithMessage("Mã SKU bị trùng nhau")
+            .When(request => request.Skus is not null);
+    }
+}
+
 internal sealed class UpdateSkuRequestValidator : AbstractValidator<UpdateSkuRequest>
 {
     public UpdateSkuRequestValidator()

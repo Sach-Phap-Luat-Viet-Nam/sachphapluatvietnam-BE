@@ -57,6 +57,15 @@ internal sealed record CreateSkuRequest(
     decimal SalePrice,
     bool AllowPreorder);
 
+/// <summary>
+/// Tạo trọn gói đầu sách + ấn bản đầu tiên (tự là ấn bản mới nhất) + các SKU trong một lần lưu: lỗi ở bất kỳ phần nào
+/// thì không tạo gì. Mỗi phần có cùng quy tắc như API tạo riêng lẻ.
+/// </summary>
+internal sealed record QuickCreateBookRequest(
+    UpsertBookRequest Book,
+    UpsertEditionRequest Edition,
+    IReadOnlyList<CreateSkuRequest> Skus);
+
 internal sealed record UpdateSkuRequest(decimal ListPrice, decimal SalePrice, bool AllowPreorder);
 
 /// <param name="StartsAt">Có offset (ví dụ <c>2026-11-01T00:00:00+07:00</c>); lưu UTC.</param>

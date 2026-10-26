@@ -96,6 +96,31 @@ internal sealed class CatalogAdminService(
         return await GetBookAsync(book.Id, cancellationToken);
     }
 
+    /// <summary>
+    /// Tạo đầu sách + ấn bản đầu tiên + SKU trong một lần lưu (một transaction): lỗi ở bất kỳ phần nào thì không tạo gì.
+    /// </summary>
+    public async Task<AdminBookResponse> QuickCreateBookAsync(
+        QuickCreateBookRequest request,
+        CancellationToken cancellationToken)
+    {
+        var book = new Book(request.Book.Title, request.Book.Slug, request.Book.BookType);
+        await ApplyAsync(book, request.Book, cancellationToken);
+
+        var edition = book.AddEdition(ToPublishingInfo(request.Edition));
+        await ApplyAsync(edition, request.Edition, cancellationToken);
+        book.SetLatestEdition(edition);
+        foreach (var skuRequest in request.Skus)
+        {
+            var sku = edition.AddSku(
+                skuRequest.SkuCode, skuRequest.CoverType, skuRequest.ListPrice, skuRequest.SalePrice);
+            sku.SetPreorder(skuRequest.AllowPreorder);
+        }
+
+        dbContext.Books.Add(book);
+        await dbContext.SaveCatalogChangesAsync(cancellationToken);
+        return await GetBookAsync(book.Id, cancellationToken);
+    }
+
     public async Task<AdminBookResponse> UpdateBookAsync(
         long bookId,
         UpsertBookRequest request,
