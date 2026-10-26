@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using SachLuat.Modules.Promotion.Contracts;
 using SachLuat.Modules.Promotion.Domain;
+using SachLuat.SharedKernel.Errors;
 using Xunit;
 using static SachLuat.UnitTests.Modules.Promotion.PromotionTestData;
 
@@ -119,38 +120,75 @@ public sealed class ComboEvaluatorTests
     }
 
     [Fact]
-    public void ComboBeatsASmallerOrderDiscount_AndReplacesIt()
+    public void OrderDiscount_StacksOnTopOfTheCombo()
     {
-        // Sale 20% = 20.000đ < combo 30.000đ: không cộng dồn, lấy cái lợi hơn.
+        // Combo giảm 30.000đ (còn 70.000đ), sale 20% tính tiếp trên 70.000đ = 14.000đ: tổng giảm 44.000đ.
         var result = Evaluate(Request(BothVolumes), [Auto(Campaign(id: 9, value: 20m))], combos: [NewCombo(id: 5)]);
 
-        result.OrderDiscount.Should().Be(30_000m);
-        result.Applied.Should().ContainSingle().Which.Kind.Should().Be(PromotionKind.Combo);
+        result.OrderDiscount.Should().Be(44_000m);
+        result.LineDiscounts.Should().BeEquivalentTo(new Dictionary<long, decimal> { [1] = 22_000m, [2] = 22_000m });
+        result.Applied.Select(applied => (applied.PromotionId, applied.Kind, applied.Amount)).Should().Equal(
+            (5L, PromotionKind.Combo, 30_000m), (9L, PromotionKind.OrderDiscount, 14_000m));
     }
 
     [Fact]
-    public void BiggerOrderDiscountBeatsTheCombo()
+    public void BiggerOrderDiscount_AlsoStacksInsteadOfReplacingTheCombo()
     {
-        // Sale 40% = 40.000đ > combo 30.000đ.
         var result = Evaluate(Request(BothVolumes), [Auto(Campaign(id: 9, value: 40m))], combos: [NewCombo(id: 5)]);
 
-        result.OrderDiscount.Should().Be(40_000m);
-        result.LineDiscounts.Should().BeEquivalentTo(new Dictionary<long, decimal> { [1] = 20_000m, [2] = 20_000m });
-        result.Applied.Should().ContainSingle().Which.PromotionId.Should().Be(9);
+        result.OrderDiscount.Should().Be(58_000m); // 30.000đ combo + 40% × 70.000đ
+        result.Applied.Select(applied => applied.Kind).Should()
+            .Equal(PromotionKind.Combo, PromotionKind.OrderDiscount);
     }
 
     [Fact]
-    public void Tie_KeepsTheOrderDiscountProgram()
+    public void Percent_IsComputedOnTheMoneyLeftAfterTheCombo_NotOnTheRetailTotal()
     {
-        // 30% = 30.000đ bằng combo: giữ chương trình để hành vi cũ (mã khách nhập) không đổi.
+        // 30% của 100.000đ lẻ là 30.000đ, nhưng tiền còn lại sau combo là 70.000đ nên chỉ giảm 21.000đ.
         var result = Evaluate(Request(BothVolumes), [Auto(Campaign(id: 9, value: 30m))], combos: [NewCombo(id: 5)]);
 
-        result.Applied.Should().ContainSingle().Which.Should().Match<AppliedPromotion>(applied =>
-            applied.PromotionId == 9 && applied.Kind == PromotionKind.OrderDiscount);
+        result.Applied.Single(applied => applied.Kind == PromotionKind.OrderDiscount).Amount.Should().Be(21_000m);
+        result.OrderDiscount.Should().Be(51_000m);
     }
 
     [Fact]
-    public void CouponLosingToTheCombo_IsNotAppliedAndDoesNotThrow()
+    public void FixedAmountProgram_NeverTakesMoreThanTheMoneyLeftAfterTheCombo()
+    {
+        var result = Evaluate(
+            Request(BothVolumes),
+            [Auto(Campaign(id: 9, discountType: DiscountType.FixedAmount, value: 100_000m))],
+            combos: [NewCombo(id: 5)]);
+
+        // Combo 30.000đ + chương trình tối đa 70.000đ còn lại: cả đơn về 0đ, không dòng nào bị giảm quá tiền của dòng.
+        result.OrderDiscount.Should().Be(100_000m);
+        result.LineDiscounts.Should().BeEquivalentTo(new Dictionary<long, decimal> { [1] = 50_000m, [2] = 50_000m });
+    }
+
+    [Fact]
+    public void MinOrder_StillUsesTheSubtotalBeforeTheCombo()
+    {
+        // Tạm tính 100.000đ trước combo (còn 70.000đ sau combo): chương trình đơn từ 100.000đ vẫn đủ điều kiện.
+        var result = Evaluate(
+            Request(BothVolumes), [Auto(Campaign(id: 9, value: 20m, minOrder: 100_000m))], combos: [NewCombo(id: 5)]);
+
+        result.OrderDiscount.Should().Be(44_000m);
+    }
+
+    [Fact]
+    public void ScopedProgram_OnlyReducesTheCoveredBooksAfterTheirShareOfTheCombo()
+    {
+        var result = Evaluate(
+            Request(BothVolumes),
+            [Auto(Campaign(id: 9, value: 20m, scope: PromotionScopeType.Books, targets: [1]))],
+            combos: [NewCombo(id: 5)]);
+
+        // Sách 1 còn 35.000đ sau combo: 20% = 7.000đ; sách 2 không thuộc phạm vi nên chỉ có phần giảm của combo.
+        result.OrderDiscount.Should().Be(37_000m);
+        result.LineDiscounts.Should().BeEquivalentTo(new Dictionary<long, decimal> { [1] = 22_000m, [2] = 15_000m });
+    }
+
+    [Fact]
+    public void Coupon_StacksWithTheCombo()
     {
         var coupon = NewCoupon(promotionId: 2);
 
@@ -159,8 +197,84 @@ public sealed class ComboEvaluatorTests
             [new PromotionCandidate(Campaign(id: 2, mode: PromotionMode.Coupon, value: 10m), coupon)],
             combos: [NewCombo(id: 5)]);
 
-        result.Applied.Should().ContainSingle().Which.Kind.Should().Be(PromotionKind.Combo);
-        result.CouponApplied.Should().BeFalse();
+        result.CouponApplied.Should().BeTrue();
+        result.OrderDiscount.Should().Be(37_000m); // 30.000đ combo + 10% × 70.000đ
+        result.Applied.Select(applied => (applied.Kind, applied.CouponCode)).Should().Equal(
+            (PromotionKind.Combo, (string?)null), (PromotionKind.OrderDiscount, "MUATHI2026"));
+    }
+
+    [Fact]
+    public void TotalDiscountCap_LimitsTheProgramOnBooksThatAlreadyHaveTheCombo()
+    {
+        // Giá gốc 2 × 550.000đ = 1.100.000đ, combo 575.000đ (giảm 525.000đ ~ 47,7%). Cộng thêm 10% sẽ vượt 50%, nên
+        // chương trình chỉ được giảm thêm 25.000đ để tổng giảm đúng 550.000đ (50% giá bán thường).
+        var lines = new[] { Line(1, 550_000m, regularPrice: 550_000m), Line(2, 550_000m, regularPrice: 550_000m) };
+
+        var result = Evaluate(
+            Request(lines),
+            [Auto(Campaign(id: 9, value: 10m))],
+            combos: [NewCombo(id: 5, price: 575_000m)],
+            maxTotalDiscountPercent: 50);
+
+        result.Applied.Single(applied => applied.Kind == PromotionKind.OrderDiscount).Amount.Should().Be(25_000m);
+        result.OrderDiscount.Should().Be(550_000m);
+        result.LineDiscounts.Should().BeEquivalentTo(new Dictionary<long, decimal> { [1] = 275_000m, [2] = 275_000m });
+    }
+
+    [Fact]
+    public void TotalDiscountCap_DoesNotCountPriceSchedules_SoTheKhaiTruongCaseKeepsItsFullDiscount()
+    {
+        // Hai tập giá gốc 550.000đ đang giảm còn 290.000đ: combo 575.000đ rẻ hơn mua lẻ 5.000đ; "Khai trương" 5% tối đa
+        // 25.000đ cộng thêm vẫn nằm xa trần 50% của giá bán thường. Khách trả 580.000đ − 30.000đ = 550.000đ.
+        var lines = new[] { Line(1, 290_000m, regularPrice: 550_000m), Line(2, 290_000m, regularPrice: 550_000m) };
+
+        var result = Evaluate(
+            Request(lines),
+            [Auto(Campaign(id: 9, value: 5m, maxDiscount: 25_000m, minOrder: 500_000m))],
+            combos: [NewCombo(id: 5, price: 575_000m)],
+            maxTotalDiscountPercent: 50);
+
+        result.OrderDiscount.Should().Be(30_000m);
+        result.Applied.Select(applied => (applied.Kind, applied.Amount)).Should().Equal(
+            (PromotionKind.Combo, 5_000m), (PromotionKind.OrderDiscount, 25_000m));
+    }
+
+    [Fact]
+    public void TotalDiscountCap_LeavesBooksWithoutAComboUnlimited()
+    {
+        // Sách 3 không thuộc combo nên không bị trần tổng giảm chặn: giữ nguyên hành vi cũ của chương trình.
+        var lines = new[] { Line(1, 50_000m), Line(2, 50_000m), Line(3, 100_000m) };
+
+        var result = Evaluate(
+            Request(lines),
+            [Auto(Campaign(id: 9, discountType: DiscountType.FixedAmount, value: 200_000m))],
+            combos: [NewCombo(id: 5)],
+            maxTotalDiscountPercent: 50);
+
+        // Sách 1, 2 mỗi cuốn còn được giảm thêm 10.000đ (50% giá = 25.000đ, đã có 15.000đ của combo); sách 3 giảm hết.
+        result.LineDiscounts.Should().BeEquivalentTo(
+            new Dictionary<long, decimal> { [1] = 25_000m, [2] = 25_000m, [3] = 100_000m });
+        result.OrderDiscount.Should().Be(150_000m);
+    }
+
+    [Fact]
+    public void TotalDiscountCap_AlreadyReachedByTheCombo_SkipsAutomaticProgramsAndRejectsACoupon()
+    {
+        // Combo 50.000đ cho bộ 100.000đ đã giảm đúng 50%: không còn chỗ cho chương trình giảm trên đơn.
+        var combo = NewCombo(id: 5, price: 50_000m);
+
+        var automatic = Evaluate(
+            Request(BothVolumes), [Auto(Campaign(id: 9, value: 10m))], combos: [combo], maxTotalDiscountPercent: 50);
+        var couponProgram = Campaign(id: 2, mode: PromotionMode.Coupon, value: 10m);
+        var withCoupon = () => Evaluate(
+            Request(BothVolumes, couponCode: "MUATHI2026"),
+            [new PromotionCandidate(couponProgram, NewCoupon(promotionId: 2))],
+            combos: [combo],
+            maxTotalDiscountPercent: 50);
+
+        automatic.Applied.Should().ContainSingle().Which.Kind.Should().Be(PromotionKind.Combo);
+        automatic.OrderDiscount.Should().Be(50_000m);
+        withCoupon.Should().Throw<BusinessException>().Which.Code.Should().Be("COUPON_NOT_APPLICABLE");
     }
 
     [Fact]

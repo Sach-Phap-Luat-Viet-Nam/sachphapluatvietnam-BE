@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SachLuat.Modules.Promotion.Contracts;
 using SachLuat.Modules.Promotion.Domain;
 using SachLuat.Modules.Promotion.Infrastructure.Persistence;
@@ -17,6 +18,7 @@ namespace SachLuat.Modules.Promotion.Application;
 internal sealed class PromotionService(
     PromotionDbContext dbContext,
     TimeProvider timeProvider,
+    IOptions<PromotionOptions> options,
     ILogger<PromotionService> logger) : IPromotionService
 {
     public async Task<PromotionEvaluation> EvaluateAsync(
@@ -39,7 +41,8 @@ internal sealed class PromotionService(
 
         var usage = await CustomerUsageAsync(candidates, request.Customer, cancellationToken);
         var combos = await RunningCombosAsync(request.Lines, now, cancellationToken);
-        return PromotionEvaluator.Evaluate(candidates, request, usage, now, combos);
+        return PromotionEvaluator.Evaluate(
+            candidates, request, usage, now, combos, options.Value.MaxTotalDiscountPercent);
     }
 
     public async Task RedeemAsync(

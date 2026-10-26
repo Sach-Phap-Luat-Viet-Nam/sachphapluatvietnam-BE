@@ -98,7 +98,9 @@ internal static class PromotionTestData
         int quantity = 1,
         long bookId = 0,
         long[]? categoryIds = null,
-        bool isOnSale = false) => new(skuId, bookId == 0 ? skuId : bookId, categoryIds ?? [], unitPrice, quantity, isOnSale);
+        bool isOnSale = false,
+        decimal? regularPrice = null) =>
+        new(skuId, bookId == 0 ? skuId : bookId, categoryIds ?? [], unitPrice, quantity, isOnSale, regularPrice);
 
     public static PromotionRequest Request(
         IReadOnlyList<PromotionLine> lines,
@@ -111,9 +113,15 @@ internal static class PromotionTestData
         PromotionRequest request,
         IEnumerable<PromotionCandidate> candidates,
         IReadOnlyDictionary<long, int>? customerUsage = null,
-        IEnumerable<Combo>? combos = null) =>
+        IEnumerable<Combo>? combos = null,
+        int maxTotalDiscountPercent = 100) =>
         PromotionEvaluator.Evaluate(
-            [.. candidates], request, customerUsage ?? new Dictionary<long, int>(), Now, [.. combos ?? []]);
+            [.. candidates],
+            request,
+            customerUsage ?? new Dictionary<long, int>(),
+            Now,
+            [.. combos ?? []],
+            maxTotalDiscountPercent);
 
     public static PromotionCandidate Auto(PromotionCampaign campaign) => new(campaign, null);
 

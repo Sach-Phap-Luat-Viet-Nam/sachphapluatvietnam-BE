@@ -15,21 +15,30 @@ internal static class PromotionEvaluator
     /// <param name="candidates">Chương trình tự áp đang chạy, cộng thêm chương trình của mã khách nhập (nếu có).</param>
     /// <param name="customerUsage">Số lượt khách này đã dùng theo mã chương trình (chỉ cần với chương trình có giới hạn).</param>
     /// <param name="combos">
-    /// Combo đang chạy có sách trong giỏ. Combo không cộng dồn với chương trình giảm trên đơn: bên nào giảm nhiều
-    /// hơn thì thắng, hòa thì giữ chương trình (nên mã khách nhập vẫn được dùng). Giảm phí ship áp độc lập.
+    /// Combo đang chạy có sách trong giỏ. Combo tính trước; chương trình giảm trên đơn **cộng dồn** với combo và tính
+    /// trên số tiền còn lại của từng dòng sau khi trừ phần giảm của combo (điều kiện đơn tối thiểu vẫn xét trên tạm
+    /// tính trước giảm giá). Giảm phí ship áp độc lập.
+    /// </param>
+    /// <param name="maxTotalDiscountPercent">
+    /// Trần tổng mức giảm (combo + chương trình) trên giá bán thường của dòng có combo, theo phần trăm; chỉ chặn phần
+    /// giảm của chương trình, không chặn combo. 100 là không chặn thêm.
     /// </param>
     public static PromotionEvaluation Evaluate(
         IReadOnlyCollection<PromotionCandidate> candidates,
         PromotionRequest request,
         IReadOnlyDictionary<long, int> customerUsage,
         DateTime now,
-        IReadOnlyCollection<Combo>? combos = null)
+        IReadOnlyCollection<Combo>? combos = null,
+        int maxTotalDiscountPercent = 100)
     {
+        var bundle = ComboEvaluator.Evaluate(combos ?? [], request.Lines, now);
+
         var outcomes = new List<Outcome>();
         foreach (var candidate in candidates)
         {
             var used = customerUsage.GetValueOrDefault(candidate.Promotion.Id);
-            var (eligibility, outcome) = Assess(candidate, request, used, now);
+            var (eligibility, outcome) = Assess(
+                candidate, request, used, now, bundle.LineDiscounts, maxTotalDiscountPercent);
 
             if (eligibility == Eligibility.Eligible && outcome is not null)
             {
@@ -45,22 +54,20 @@ internal static class PromotionEvaluator
         var order = Best(outcomes, PromotionKind.OrderDiscount);
         var shipping = Best(outcomes, PromotionKind.FreeShipping);
 
-        var bundle = ComboEvaluator.Evaluate(combos ?? [], request.Lines, now);
-        if (bundle.Amount > (order?.Amount ?? 0m))
+        // Phần giảm của combo và của chương trình cộng lại; mỗi dòng không bao giờ bị giảm quá tiền của dòng đó vì
+        // chương trình chỉ tính trên phần còn lại sau combo.
+        var lineDiscounts = new Dictionary<long, decimal>(bundle.LineDiscounts);
+        foreach (var (skuId, amount) in order?.LineDiscounts ?? [])
         {
-            order = null;
-        }
-        else
-        {
-            bundle = ComboEvaluation.None;
+            lineDiscounts[skuId] = lineDiscounts.GetValueOrDefault(skuId) + amount;
         }
 
         var applied = new[] { order, shipping }.OfType<Outcome>().ToList();
 
         return new PromotionEvaluation(
-            order?.Amount ?? bundle.Amount,
+            bundle.Amount + (order?.Amount ?? 0m),
             shipping?.Amount ?? 0m,
-            order?.LineDiscounts ?? bundle.LineDiscounts,
+            lineDiscounts,
             [
                 .. bundle.Matches.Select(match => new AppliedPromotion(
                     match.Combo.Id, match.Combo.Name, PromotionKind.Combo, null, null, match.Amount)),
@@ -125,7 +132,9 @@ internal static class PromotionEvaluator
         PromotionCandidate candidate,
         PromotionRequest request,
         int customerUsed,
-        DateTime now)
+        DateTime now,
+        IReadOnlyDictionary<long, decimal> comboDiscounts,
+        int maxTotalDiscountPercent)
     {
         var promotion = candidate.Promotion;
         var coupon = candidate.Coupon;
@@ -165,14 +174,47 @@ internal static class PromotionEvaluator
                 : (Eligibility.NotApplicable, null);
         }
 
+        // Tính trên tiền còn lại sau combo. `Room` là phần chương trình được giảm thêm trên dòng đó: toàn bộ tiền còn
+        // lại, trừ dòng có combo thì bị chặn bởi trần tổng mức giảm.
         var eligibleLines = request.Lines
             .Where(line => promotion.CoversLine(line) && !(promotion.ExcludeOnSaleItems && line.IsOnSale))
-            .Select(line => (line.SkuId, Total: line.UnitPrice * line.Quantity))
+            .Select(line =>
+            {
+                var comboDiscount = comboDiscounts.GetValueOrDefault(line.SkuId);
+                var payable = (line.UnitPrice * line.Quantity) - comboDiscount;
+                var room = Room(line, payable, comboDiscount, maxTotalDiscountPercent);
+                return (line.SkuId, Payable: payable, Room: room);
+            })
             .ToList();
-        var discount = ComputeAmount(promotion, eligibleLines.Sum(line => line.Total));
+        var discount = Math.Min(
+            ComputeAmount(promotion, eligibleLines.Sum(line => line.Payable)),
+            eligibleLines.Sum(line => line.Room));
+
+        // Phân bổ theo `Room` để không dòng nào vượt phần được giảm thêm; không có combo thì `Room` là tiền của dòng.
         return discount > 0
-            ? (Eligibility.Eligible, new Outcome(promotion, coupon, discount, Allocate(eligibleLines, discount)))
+            ? (Eligibility.Eligible, new Outcome(
+                promotion,
+                coupon,
+                discount,
+                Allocate([.. eligibleLines.Select(line => (line.SkuId, line.Room))], discount)))
             : (Eligibility.NotApplicable, null);
+    }
+
+    /// <summary>
+    /// Phần chương trình giảm trên đơn còn được giảm thêm trên một dòng. Dòng không có combo: toàn bộ tiền của dòng như
+    /// trước đây. Dòng có combo: tổng giảm (combo + chương trình) không vượt
+    /// <paramref name="maxTotalDiscountPercent"/> của giá bán thường.
+    /// </summary>
+    private static decimal Room(PromotionLine line, decimal payable, decimal comboDiscount, int maxTotalDiscountPercent)
+    {
+        if (comboDiscount <= 0)
+        {
+            return payable;
+        }
+
+        var regularTotal = (line.RegularPrice ?? line.UnitPrice) * line.Quantity;
+        var allowance = Math.Floor(regularTotal * maxTotalDiscountPercent / 100m) - comboDiscount;
+        return Math.Clamp(allowance, 0m, payable);
     }
 
     // Lợi nhất cho khách trước; hòa thì ưu tiên mã khách chủ động nhập, rồi độ ưu tiên, rồi chương trình cũ hơn.

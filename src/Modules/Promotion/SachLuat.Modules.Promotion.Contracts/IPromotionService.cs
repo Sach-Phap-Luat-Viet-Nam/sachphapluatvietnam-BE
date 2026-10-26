@@ -8,9 +8,10 @@ namespace SachLuat.Modules.Promotion.Contracts;
 public interface IPromotionService
 {
     /// <summary>
-    /// Chọn chương trình áp dụng cho giỏ: tối đa một chương trình giảm trên đơn và một chương trình giảm phí ship,
-    /// mỗi loại lấy chương trình có lợi nhất cho khách. Mã giảm giá khách nhập sai/hết hạn thì ném lỗi; chương trình
-    /// tự áp không đủ điều kiện thì bị bỏ qua.
+    /// Chọn ưu đãi áp dụng cho giỏ: combo bộ sách (nếu giỏ có đủ bộ), cộng thêm tối đa một chương trình giảm trên đơn
+    /// và một chương trình giảm phí ship, mỗi loại chương trình lấy cái có lợi nhất cho khách. Chương trình giảm trên
+    /// đơn **cộng dồn** với combo và tính trên số tiền còn lại sau combo. Mã giảm giá khách nhập sai/hết hạn thì ném
+    /// lỗi; chương trình tự áp không đủ điều kiện thì bị bỏ qua.
     /// </summary>
     Task<PromotionEvaluation> EvaluateAsync(PromotionRequest request, CancellationToken cancellationToken);
 
@@ -34,13 +35,18 @@ public sealed record PromotionCustomer(long? UserId, string? Phone);
 
 /// <param name="CategoryIds">Danh mục của sách, gồm cả danh mục cha.</param>
 /// <param name="IsOnSale">Đang chạy lịch giá (giá bán thấp hơn giá bán thường).</param>
+/// <param name="RegularPrice">
+/// Giá bán thường (chưa áp lịch giá) của SKU, dùng để tính trần tổng mức giảm khi cộng dồn combo với chương trình
+/// giảm trên đơn; null là dùng <paramref name="UnitPrice"/>.
+/// </param>
 public sealed record PromotionLine(
     long SkuId,
     long BookId,
     IReadOnlyCollection<long> CategoryIds,
     decimal UnitPrice,
     int Quantity,
-    bool IsOnSale);
+    bool IsOnSale,
+    decimal? RegularPrice = null);
 
 /// <param name="ShippingFee">Phí ship khách phải trả trước khi giảm (0 nếu đã được miễn phí theo ngưỡng).</param>
 /// <param name="CouponCode">Mã khách nhập, không phân biệt hoa thường; null nếu không dùng mã.</param>

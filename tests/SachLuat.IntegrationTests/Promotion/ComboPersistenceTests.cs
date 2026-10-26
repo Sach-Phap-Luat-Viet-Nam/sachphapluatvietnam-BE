@@ -153,7 +153,7 @@ public sealed class ComboPersistenceTests(PromotionDatabaseFixture fixture)
     }
 
     [Fact]
-    public async Task Evaluate_ComboLosesToABiggerOrderDiscountProgram()
+    public async Task Evaluate_ComboStacksWithAnOrderDiscountProgram_WithinTheTotalDiscountCap()
     {
         await using var scope = await fixture.CreateCleanScopeAsync();
         await Admin(scope).CreateAsync(Request(), CancellationToken);
@@ -162,8 +162,11 @@ public sealed class ComboPersistenceTests(PromotionDatabaseFixture fixture)
 
         var result = await Service(scope).EvaluateAsync(Cart((1, 50_000m, 1), (2, 50_000m, 1)), CancellationToken);
 
-        result.OrderDiscount.Should().Be(40_000m);
-        result.Applied.Should().ContainSingle().Which.Kind.Should().Be(PromotionKind.OrderDiscount);
+        // Combo giảm 30.000đ (còn 70.000đ). 40% × 70.000đ = 28.000đ nhưng trần tổng giảm
+        // Promotion:MaxTotalDiscountPercent = 50% của giá bán thường 100.000đ chỉ còn chỗ cho 20.000đ: tổng đúng 50.000đ.
+        result.Applied.Select(applied => (applied.Kind, applied.Amount)).Should().Equal(
+            (PromotionKind.Combo, 30_000m), (PromotionKind.OrderDiscount, 20_000m));
+        result.OrderDiscount.Should().Be(50_000m);
     }
 
     [Fact]

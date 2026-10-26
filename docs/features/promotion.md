@@ -90,9 +90,18 @@ trên các SKU có sẵn nên Cart, Inventory và dòng đơn **không đổi**.
   Ví dụ A×2 + B×1 là một bộ, A×2 + B×2 là hai bộ.
 - **Mức giảm một bộ** = `tổng giá lẻ hiện hành − comboPrice` (giá hiện hành đã gồm lịch giá, xem `catalog.md`). Sách
   đang sale khiến giá lẻ không cao hơn giá combo thì combo không áp.
-- **Không cộng dồn với chương trình giảm trên đơn**: tổng giảm của các combo được so với chương trình giảm trên đơn
-  tốt nhất, bên nào giảm nhiều hơn thì thắng, **hòa thì giữ chương trình** (nên mã khách nhập vẫn được dùng). Mã hợp lệ
-  nhưng thua combo: không lỗi, `couponApplied = false`. Giảm phí ship áp độc lập như thường.
+- **Cộng dồn với chương trình giảm trên đơn**: combo tính trước, rồi chương trình giảm trên đơn (tự áp hoặc mã, vẫn
+  chọn một chương trình giảm nhiều nhất) tính tiếp trên **số tiền còn lại của từng dòng sau khi trừ phần giảm của
+  combo** (phần dòng thuộc phạm vi chương trình). `minOrderAmount` vẫn xét trên tạm tính trước giảm giá. Tổng giảm
+  (`orderDiscount`) = giảm combo + giảm chương trình; phần chương trình phân bổ về dòng nên không dòng nào bị giảm quá
+  tiền của dòng. Mã giảm giá hợp lệ vẫn dùng được cùng combo. Giảm phí ship áp độc lập như thường.
+- **Trần tổng mức giảm** `Promotion:MaxTotalDiscountPercent` (mặc định 50): với dòng thuộc combo, tổng giảm (combo +
+  chương trình) không vượt phần trăm này của **giá bán thường** (`PromotionLine.RegularPrice`, chưa tính lịch giá của
+  sách). Chỉ chặn phần giảm của chương trình (combo không bị cắt, vì combo đã có trần riêng lúc tạo/sửa); dòng không có
+  combo không bị chặn nên chương trình hoạt động như cũ. Lịch giá không bị tính vào trần. Hết chỗ giảm thì chương trình
+  tự áp bị bỏ qua êm, còn mã khách nhập báo `COUPON_NOT_APPLICABLE`. Ví dụ hai tập giá gốc 550.000đ, combo 575.000đ (giảm
+  47,7%) cộng thêm "Khai trương" 10% thì chương trình chỉ được thêm 25.000đ để tổng giảm đúng 50%. Trần này cùng lưu ý
+  pháp lý như `MaxDiscountPercent`: cần pháp chế xác nhận.
 - Nhiều combo chung SKU: xét **tham lam**, combo giảm nhiều mỗi bộ lấy sách trước, hòa thì combo tạo sớm hơn.
 - Tiền giảm phân bổ về từng dòng bằng cùng hàm `Allocate` của chương trình, tính trên phần sách thuộc từng combo.
 - Kết quả: `AppliedPromotion` có `kind = combo`, `promotionId` là **id combo**, `couponId` null (mỗi combo một phần tử).
@@ -206,6 +215,7 @@ trần `Promotion:MaxDiscountPercent` trả `VALIDATION_ERROR` (400) kèm lý do
 | Key | Mặc định |
 | --- | --- |
 | `Promotion:MaxDiscountPercent` | 50 (trần % cho chương trình giảm trên đơn và cho mức giảm của combo so với giá bán thường, xem lưu ý pháp lý ở trên) |
+| `Promotion:MaxTotalDiscountPercent` | 50 (trần tổng giảm combo + chương trình trên giá bán thường của dòng có combo, xem mục Combo; cần pháp chế xác nhận) |
 | `Promotion:MaxCouponsPerBatch` | 1000 (số mã tối đa mỗi lần sinh) |
 
 ## Thay đổi CSDL (migration liên quan)
@@ -242,7 +252,8 @@ Production tắt `Database:ApplyMigrationsOnStartup`, cần áp migration này �
 - Chưa có chương trình "Đổi sách cũ – Lấy bản mới" tự nhận diện khách đủ điều kiện (BR-30): hiện chỉ có sinh mã riêng
   hàng loạt để gửi tay; chưa có tự động gửi mã (chờ module Notification).
 - `targetIds` không được kiểm tra tồn tại vì Catalog là module khác; id sai thì chương trình không áp dụng cho sách nào.
-- Một đơn chỉ nhận một chương trình giảm trên đơn và một chương trình giảm ship, chưa có cờ cộng dồn.
+- Một đơn chỉ nhận một chương trình giảm trên đơn và một chương trình giảm ship (không cộng dồn các chương trình cùng
+  loại); riêng combo thì cộng dồn với chương trình giảm trên đơn (xem mục Combo).
 - Báo cáo hiệu quả (FR-95) mới có `stats` theo chương trình (số lượt, tổng tiền giảm); chưa có doanh thu mang lại,
   chưa xuất Excel.
 - Chưa ghi nhật ký thao tác (FR-98) cho tạo/sửa/xóa chương trình, hiện chỉ ghi log ứng dụng.

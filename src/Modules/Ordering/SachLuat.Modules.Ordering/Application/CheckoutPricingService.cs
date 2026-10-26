@@ -90,7 +90,8 @@ internal sealed class CheckoutPricingService(
                         sku.CategoryIds,
                         sku.SalePrice,
                         line.Quantity,
-                        IsOnSale: sku.SalePrice < sku.RegularSalePrice);
+                        IsOnSale: sku.SalePrice < sku.RegularSalePrice,
+                        RegularPrice: sku.RegularSalePrice);
                 })],
                 quote.Fee,
                 customer,

@@ -13,6 +13,14 @@ internal sealed class PromotionOptions
     [Range(1, 100)]
     public int MaxDiscountPercent { get; set; } = 50;
 
+    /// <summary>
+    /// Trần tổng mức giảm (combo + chương trình giảm trên đơn) trên giá bán thường của sách thuộc combo, tính theo phần
+    /// trăm. Chỉ chặn phần giảm của chương trình khi đã cộng dồn với combo; combo tự có trần riêng lúc tạo/sửa
+    /// (<see cref="MaxDiscountPercent"/>). Cần pháp chế xác nhận cùng <see cref="MaxDiscountPercent"/>.
+    /// </summary>
+    [Range(1, 100)]
+    public int MaxTotalDiscountPercent { get; set; } = 50;
+
     /// <summary>Số mã tối đa sinh trong một lần gọi.</summary>
     [Range(1, 10_000)]
     public int MaxCouponsPerBatch { get; set; } = 1000;
