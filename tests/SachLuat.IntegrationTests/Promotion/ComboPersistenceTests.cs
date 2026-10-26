@@ -238,6 +238,7 @@ public sealed class ComboPersistenceTests(PromotionDatabaseFixture fixture)
         var combo = await Storefront(scope, reader).GetAsync("combo-ab", CancellationToken);
 
         combo.RetailPrice.Should().Be(90_000m);
+        combo.ListPrice.Should().Be(100_000m); // giá bìa không đổi khi có lịch giá
         combo.Savings.Should().Be(20_000m);
         combo.IsSellable.Should().BeTrue();
         combo.Items.Select(item => (item.SkuId, item.UnitPrice, item.BookTitle)).Should()

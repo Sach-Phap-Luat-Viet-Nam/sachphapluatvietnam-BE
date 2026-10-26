@@ -65,8 +65,12 @@ internal sealed record ComboItemResponse(
     decimal UnitPrice,
     bool IsSellable);
 
-/// <param name="RetailPrice">Tổng giá hiện hành của một bộ nếu mua lẻ.</param>
-/// <param name="Savings">Số tiền tiết kiệm một bộ so với mua lẻ, không âm.</param>
+/// <param name="RetailPrice">Tổng giá hiện hành (đã áp lịch giá) của một bộ nếu mua lẻ.</param>
+/// <param name="ListPrice">Tổng giá bìa (giá gốc) của một bộ, để hiện giá cũ gạch ngang; không đổi khi sách có lịch giá.</param>
+/// <param name="Savings">
+/// Số tiền một bộ rẻ hơn so với <paramref name="RetailPrice"/>, không âm. Bằng 0 nghĩa là combo không còn lợi (sách đang
+/// có lịch giá) và backend không áp combo khi thanh toán.
+/// </param>
 /// <param name="IsSellable">false khi có sách trong bộ tạm ngừng bán; FE nên tắt nút mua combo.</param>
 internal sealed record ComboResponse(
     long Id,
@@ -76,6 +80,7 @@ internal sealed record ComboResponse(
     string? ImageUrl,
     decimal ComboPrice,
     decimal RetailPrice,
+    decimal ListPrice,
     decimal Savings,
     IReadOnlyList<ComboItemResponse> Items,
     bool IsSellable,

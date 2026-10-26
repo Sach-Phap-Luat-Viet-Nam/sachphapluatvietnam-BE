@@ -1,5 +1,6 @@
 -- Seed 1 combo bộ sách: "Luật Xây dựng - Hệ thống các văn bản quy định, hướng dẫn chi tiết thi hành" (PL258 + PL259).
--- Mua lẻ 2 tập = 550.000đ + 550.000đ = 1.100.000đ, mua combo 625.000đ (giảm ~43,2%, dưới trần Promotion:MaxDiscountPercent = 50).
+-- Giá gốc (giá bìa/giá bán thường) 2 tập = 550.000đ + 550.000đ = 1.100.000đ, giá combo 575.000đ (giảm ~47,7% so với giá gốc,
+-- dưới trần Promotion:MaxDiscountPercent = 50).
 --
 -- Chạy lại an toàn: đã có combo cùng slug (chưa xóa) thì bỏ qua, không tạo trùng.
 -- Cần chạy SAU migration AddCombos (schema promotion có bảng combos, combo_items) và SAU docs/seed/catalog-books.sql
@@ -8,8 +9,9 @@
 -- LƯU Ý:
 --  * Query ghi thẳng vào bảng nên KHÔNG qua kiểm tra của ComboAdminService (SKU tồn tại, giá combo thấp hơn tổng giá bán
 --    thường, trần % giảm). Các điều kiện đó đã được kiểm bằng tay ở trên; đổi giá thì kiểm lại.
---  * Giá combo là giá so với GIÁ HIỆN HÀNH: nếu một tập đang chạy lịch giá khiến tổng lẻ thấp hơn hoặc bằng 625.000đ thì
---    combo tự không áp (khách đã có giá tốt hơn).
+--  * Backend áp combo khi giá combo thấp hơn tổng giá lẻ HIỆN HÀNH (đã gồm lịch giá). Khi hai tập đang giảm còn
+--    290.000đ/tập (tổng 580.000đ) thì combo 575.000đ chỉ rẻ hơn 5.000đ; nếu tổng lẻ thấp hơn hoặc bằng 575.000đ thì combo
+--    tự không áp. Giá cũ gạch ngang trên web là giá gốc (ListPrice của ComboResponse), không phải giá lẻ đang giảm.
 --  * Bắt đầu chạy ngay (starts_at = now()), không có ngày kết thúc. Tắt bằng is_active = false hoặc PUT /admin/combos/{id}.
 --  * image_url để trống: trang combo tự dựng từ ảnh bìa hai tập. Ảnh banner 1920x1080 là ảnh quảng cáo (popup), không
 --    hợp làm ảnh combo vì trang combo hiện ảnh tỷ lệ 4:3 sẽ cắt mất chữ trên banner.
@@ -40,9 +42,9 @@ BEGIN
     VALUES
         ('Combo Luật Xây dựng - Hệ thống các văn bản quy định, hướng dẫn chi tiết thi hành (trọn bộ 2 tập)',
          v_slug,
-         'Trọn bộ 2 tập Luật Xây dựng và hệ thống văn bản quy định, hướng dẫn chi tiết thi hành: Tập 1 về hoạt động xây dựng, Tập 2 về quản lý chi phí đầu tư xây dựng, hợp đồng xây dựng. Mua cả bộ chỉ 625.000đ thay vì 1.100.000đ khi mua lẻ.',
+         'Trọn bộ 2 tập Luật Xây dựng và hệ thống văn bản quy định, hướng dẫn chi tiết thi hành: Tập 1 về hoạt động xây dựng, Tập 2 về quản lý chi phí đầu tư xây dựng, hợp đồng xây dựng. Mua cả bộ chỉ 575.000đ, giá gốc 1.100.000đ.',
          NULL,
-         625000,
+         575000,
          true,
          now(),
          NULL,
@@ -55,7 +57,7 @@ BEGIN
     VALUES (v_combo, v_sku1, 1),
            (v_combo, v_sku2, 1);
 
-    RAISE NOTICE 'Đã tạo combo id = % (PL258 + PL259, 625.000đ).', v_combo;
+    RAISE NOTICE 'Đã tạo combo id = % (PL258 + PL259, 575.000đ).', v_combo;
 END
 $$;
 

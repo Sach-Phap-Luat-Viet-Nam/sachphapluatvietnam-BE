@@ -84,6 +84,7 @@ internal sealed class ComboStorefrontService(
             })
             .ToList();
         var retailPrice = items.Sum(item => item.UnitPrice * item.Quantity);
+        var listPrice = combo.Items.Sum(item => skus[item.SkuId].ListPrice * item.Quantity);
 
         return new ComboResponse(
             combo.Id,
@@ -93,6 +94,7 @@ internal sealed class ComboStorefrontService(
             combo.ImageUrl,
             combo.ComboPrice,
             retailPrice,
+            listPrice,
             Math.Max(0m, retailPrice - combo.ComboPrice),
             items,
             items.All(item => item.IsSellable),
