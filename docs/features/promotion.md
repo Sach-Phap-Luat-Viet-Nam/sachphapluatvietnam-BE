@@ -150,7 +150,7 @@ Phía khách dùng `POST /checkout/preview` và `couponCode` ở `POST /orders` 
 isSellable, startsAt, endsAt}`; `retailPrice` là tổng giá **hiện hành** (đã áp lịch giá) của một bộ nếu mua lẻ,
 `listPrice` là tổng **giá bìa** (giá gốc, không đổi khi có lịch giá) để FE hiện giá cũ gạch ngang, `savings = max(0,
 retailPrice − comboPrice)` (0 nghĩa là combo không còn lợi nên không được áp, xem Quy tắc giá ở trên); mỗi item: `{skuId, skuCode, bookTitle, bookSlug, editionName, coverType, coverImageUrl, quantity,
-unitPrice, isSellable}`. `AdminComboResponse`: các trường của request kèm `regularTotal` (tổng giá bán thường một bộ,
+unitPrice, listPrice, isSellable}` (`unitPrice` là giá hiện hành của một cuốn, `listPrice` là giá bìa/giá gốc của một cuốn). `AdminComboResponse`: các trường của request kèm `regularTotal` (tổng giá bán thường một bộ,
 `null` nếu có SKU không còn ở Catalog), `status` (`inactive`, `scheduled`, `running`, `ended`), `items[]` =
 `{skuId, quantity, skuCode, bookTitle, regularSalePrice}` và `createdAt`, `updatedAt`.
 

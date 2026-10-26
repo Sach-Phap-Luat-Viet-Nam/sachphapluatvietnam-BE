@@ -53,6 +53,7 @@ internal sealed class AdminCombosQuery : PagedQuery
 }
 
 /// <param name="UnitPrice">Giá hiện hành của SKU (đã áp lịch giá).</param>
+/// <param name="ListPrice">Giá bìa (giá gốc) của SKU, không đổi khi sách có lịch giá; để hiện giá gốc từng cuốn.</param>
 internal sealed record ComboItemResponse(
     long SkuId,
     string SkuCode,
@@ -63,6 +64,7 @@ internal sealed record ComboItemResponse(
     string? CoverImageUrl,
     int Quantity,
     decimal UnitPrice,
+    decimal ListPrice,
     bool IsSellable);
 
 /// <param name="RetailPrice">Tổng giá hiện hành (đã áp lịch giá) của một bộ nếu mua lẻ.</param>

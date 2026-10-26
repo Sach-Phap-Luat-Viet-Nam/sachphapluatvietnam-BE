@@ -80,6 +80,7 @@ internal sealed class ComboStorefrontService(
                     sku.CoverImageUrl,
                     item.Quantity,
                     sku.SalePrice,
+                    sku.ListPrice,
                     sku.IsSellable);
             })
             .ToList();
