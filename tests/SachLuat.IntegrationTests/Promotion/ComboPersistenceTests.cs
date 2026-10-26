@@ -80,12 +80,13 @@ public sealed class ComboPersistenceTests(PromotionDatabaseFixture fixture)
     }
 
     [Theory]
-    [InlineData(100_000, false)] // bằng tổng giá bán thường: không phải combo
+    [InlineData(100_001, false)] // cao hơn tổng giá hiện hành (sau giảm) của các sách
     [InlineData(120_000, false)]
+    [InlineData(100_000, true)] // bằng tổng giá hiện hành: được phép (vẫn thấp hơn giá niêm yết)
     [InlineData(49_999, false)] // giảm hơn 50% so với giá bán thường: vượt trần Promotion:MaxDiscountPercent
     [InlineData(50_000, true)]
     [InlineData(70_000, true)]
-    public async Task Create_PriceMustBeBelowRegularTotalAndWithinTheDiscountCap(int price, bool allowed)
+    public async Task Create_PriceMustNotExceedTheCurrentTotalAndStayWithinTheDiscountCap(int price, bool allowed)
     {
         await using var scope = await fixture.CreateCleanScopeAsync();
 

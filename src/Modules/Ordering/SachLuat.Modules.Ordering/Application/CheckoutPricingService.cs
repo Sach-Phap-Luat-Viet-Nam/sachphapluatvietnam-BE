@@ -9,11 +9,19 @@ using SachLuat.SharedKernel.Persistence;
 
 namespace SachLuat.Modules.Ordering.Application;
 
-internal sealed record PricedLine(SkuInfo Sku, int Quantity, decimal Discount)
+/// <param name="ListMarkup">
+/// Chênh lệch <c>giá niêm yết − giá hiện hành</c> của cả dòng khi sách được combo phủ trọn: dòng hiện và lưu theo giá
+/// niêm yết, khớp với tiền giảm combo (đã gồm phần chênh này) nên số khách phải trả không đổi.
+/// </param>
+internal sealed record PricedLine(SkuInfo Sku, int Quantity, decimal Discount, decimal ListMarkup = 0m)
 {
-    public decimal LineTotal => Sku.SalePrice * Quantity;
+    /// <summary>Giá một cuốn của dòng: giá hiện hành, hoặc giá niêm yết khi sách được combo phủ trọn.</summary>
+    public decimal UnitPrice => Sku.SalePrice + (ListMarkup / Quantity);
+
+    public decimal LineTotal => (Sku.SalePrice * Quantity) + ListMarkup;
 }
 
+/// <param name="Subtotal">Tạm tính theo giá của các dòng (sách được combo phủ trọn tính theo giá niêm yết).</param>
 /// <param name="CouponApplied">null khi khách không nhập mã.</param>
 internal sealed record CheckoutPricing(
     IReadOnlyList<PricedLine> Lines,
@@ -44,6 +52,8 @@ internal sealed record CheckoutPricing(
 /// <summary>
 /// Cách tính tiền duy nhất của thanh toán: dùng chung cho xem trước và tạo đơn nên hai nơi không thể lệch nhau.
 /// Thứ tự: tạm tính → phí ship (theo tỉnh, trọng lượng, ngưỡng miễn phí trên tạm tính) → khuyến mãi.
+/// Phí ship và ngưỡng miễn phí tính trên tạm tính theo <b>giá hiện hành</b> (không gồm phần chênh niêm yết của combo)
+/// để cách đặt giá hiển thị không làm đổi phí ship.
 /// </summary>
 internal sealed class CheckoutPricingService(
     ICatalogSkuReader skuReader,
@@ -72,11 +82,11 @@ internal sealed class CheckoutPricingService(
             throw skuNotAvailable();
         }
 
-        var subtotal = lines.Sum(line => skus[line.SkuId].SalePrice * line.Quantity);
+        var currentSubtotal = lines.Sum(line => skus[line.SkuId].SalePrice * line.Quantity);
         var quote = await shippingQuoteService.QuoteAsync(
             province,
             [.. lines.Select(line => new ShippingItem(skus[line.SkuId].WeightGram, line.Quantity))],
-            subtotal,
+            currentSubtotal,
             cancellationToken);
 
         var evaluation = await promotionService.EvaluateAsync(
@@ -91,7 +101,8 @@ internal sealed class CheckoutPricingService(
                         sku.SalePrice,
                         line.Quantity,
                         IsOnSale: sku.SalePrice < sku.RegularSalePrice,
-                        RegularPrice: sku.RegularSalePrice);
+                        RegularPrice: sku.RegularSalePrice,
+                        ListPrice: sku.ListPrice);
                 })],
                 quote.Fee,
                 customer,
@@ -100,11 +111,14 @@ internal sealed class CheckoutPricingService(
 
         var pricedLines = lines
             .Select(line => new PricedLine(
-                skus[line.SkuId], line.Quantity, evaluation.LineDiscounts.GetValueOrDefault(line.SkuId)))
+                skus[line.SkuId],
+                line.Quantity,
+                evaluation.LineDiscounts.GetValueOrDefault(line.SkuId),
+                evaluation.ListMarkups.GetValueOrDefault(line.SkuId)))
             .ToList();
         return new CheckoutPricing(
             pricedLines,
-            subtotal,
+            pricedLines.Sum(line => line.LineTotal),
             evaluation,
             quote,
             string.IsNullOrWhiteSpace(couponCode) ? null : evaluation.CouponApplied);

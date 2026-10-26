@@ -232,7 +232,7 @@ internal sealed class OrderService(
                 line.Sku.BookTitle,
                 line.Sku.EditionName,
                 line.Sku.CoverType,
-                line.Sku.SalePrice,
+                line.UnitPrice,
                 line.Quantity,
                 line.LineTotal,
                 line.Discount))],
@@ -353,7 +353,7 @@ internal sealed class OrderService(
         {
             var sku = line.Sku;
             var item = new OrderItem(
-                sku.SkuId, sku.SkuCode, sku.BookTitle, sku.EditionName, sku.Isbn, sku.CoverType, sku.SalePrice,
+                sku.SkuId, sku.SkuCode, sku.BookTitle, sku.EditionName, sku.Isbn, sku.CoverType, line.UnitPrice,
                 line.Quantity);
             item.ApplyDiscount(line.Discount);
             return item;

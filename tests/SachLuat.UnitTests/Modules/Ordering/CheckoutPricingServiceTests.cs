@@ -107,6 +107,45 @@ public sealed class CheckoutPricingServiceTests
     }
 
     [Fact]
+    public async Task Price_ComboOnListPrice_RaisesSubtotalAndUnitPrices_ButNotWhatTheCustomerPays()
+    {
+        // Hai sách giá niêm yết 200.000đ, hiện hành 150.000đ và 120.000đ (tổng 270.000đ); combo giảm thật 20.000đ
+        // (khách trả 250.000đ) và chênh lệch niêm yết 50.000đ + 80.000đ: tiền giảm combo hiển thị 150.000đ.
+        _promotions.EvaluateAsync(Arg.Any<PromotionRequest>(), Arg.Any<CancellationToken>()).Returns(
+            new PromotionEvaluation(
+                OrderDiscount: 150_000m,
+                ShippingDiscount: 0m,
+                new Dictionary<long, decimal> { [1] = 60_000m, [2] = 90_000m },
+                [new AppliedPromotion(5, "Combo", PromotionKind.Combo, null, null, 150_000m)],
+                CouponApplied: false)
+            {
+                ListMarkups = new Dictionary<long, decimal> { [1] = 50_000m, [2] = 80_000m },
+            });
+
+        var pricing = await PriceAsync([new StockLine(1, 1), new StockLine(2, 1)], couponCode: null);
+
+        pricing.Lines.Select(line => line.UnitPrice).Should().Equal(200_000m, 200_000m);
+        pricing.Lines.Select(line => line.LineTotal).Should().Equal(200_000m, 200_000m);
+        pricing.Subtotal.Should().Be(400_000m);
+        pricing.Discount.Should().Be(150_000m);
+        pricing.Total.Should().Be(280_000m, "270.000đ − 20.000đ giảm thật + 30.000đ ship, như khi chưa tính theo giá niêm yết");
+        // Phí ship vẫn tính trên tạm tính theo giá hiện hành.
+        await _shipping.Received(1).QuoteAsync(
+            Arg.Any<string?>(), Arg.Any<IReadOnlyCollection<ShippingItem>>(), 270_000m, Arg.Any<CancellationToken>());
+        await _promotions.Received(1).EvaluateAsync(
+            Arg.Is<PromotionRequest>(request => request.Lines.All(line => line.ListPrice == 200_000m)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Price_WithoutComboMarkup_KeepsTheCurrentPricesAsUnitPrices()
+    {
+        var pricing = await PriceAsync([new StockLine(1, 2), new StockLine(2, 1)], couponCode: null);
+
+        pricing.Lines.Select(line => line.UnitPrice).Should().Equal(150_000m, 120_000m);
+    }
+
+    [Fact]
     public async Task Price_FreeShippingByThreshold_ChargesNothingButKeepsBaseFee()
     {
         SetShipping(fee: 0m, baseFee: 30_000m);

@@ -20,8 +20,9 @@ internal static class PromotionEvaluator
     /// tính trước giảm giá). Giảm phí ship áp độc lập.
     /// </param>
     /// <param name="maxTotalDiscountPercent">
-    /// Trần tổng mức giảm (combo + chương trình) trên giá bán thường của dòng có combo, theo phần trăm; chỉ chặn phần
-    /// giảm của chương trình, không chặn combo. 100 là không chặn thêm.
+    /// Trần tổng mức giảm (combo + chương trình) trên giá <b>hiện hành</b> của dòng có combo, theo phần trăm; chỉ chặn
+    /// phần giảm của chương trình, không chặn combo. Phần giảm combo được tính theo giá hiện hành (không gồm phần chênh
+    /// niêm yết). 100 là không chặn thêm.
     /// </param>
     public static PromotionEvaluation Evaluate(
         IReadOnlyCollection<PromotionCandidate> candidates,
@@ -56,7 +57,13 @@ internal static class PromotionEvaluator
 
         // Phần giảm của combo và của chương trình cộng lại; mỗi dòng không bao giờ bị giảm quá tiền của dòng đó vì
         // chương trình chỉ tính trên phần còn lại sau combo.
+        // Phần giảm theo giá hiện hành của combo + phần chênh niêm yết (để dòng hiện theo giá niêm yết vẫn khớp).
         var lineDiscounts = new Dictionary<long, decimal>(bundle.LineDiscounts);
+        foreach (var (skuId, markup) in bundle.ListMarkups)
+        {
+            lineDiscounts[skuId] = lineDiscounts.GetValueOrDefault(skuId) + markup;
+        }
+
         foreach (var (skuId, amount) in order?.LineDiscounts ?? [])
         {
             lineDiscounts[skuId] = lineDiscounts.GetValueOrDefault(skuId) + amount;
@@ -79,7 +86,10 @@ internal static class PromotionEvaluator
                     outcome.Coupon?.Code,
                     outcome.Amount)),
             ],
-            applied.Any(outcome => outcome.Coupon is not null));
+            applied.Any(outcome => outcome.Coupon is not null))
+        {
+            ListMarkups = bundle.ListMarkups,
+        };
     }
 
     /// <summary>
@@ -203,7 +213,7 @@ internal static class PromotionEvaluator
     /// <summary>
     /// Phần chương trình giảm trên đơn còn được giảm thêm trên một dòng. Dòng không có combo: toàn bộ tiền của dòng như
     /// trước đây. Dòng có combo: tổng giảm (combo + chương trình) không vượt
-    /// <paramref name="maxTotalDiscountPercent"/> của giá bán thường.
+    /// <paramref name="maxTotalDiscountPercent"/> của giá hiện hành.
     /// </summary>
     private static decimal Room(PromotionLine line, decimal payable, decimal comboDiscount, int maxTotalDiscountPercent)
     {
@@ -212,8 +222,8 @@ internal static class PromotionEvaluator
             return payable;
         }
 
-        var regularTotal = (line.RegularPrice ?? line.UnitPrice) * line.Quantity;
-        var allowance = Math.Floor(regularTotal * maxTotalDiscountPercent / 100m) - comboDiscount;
+        var currentTotal = line.UnitPrice * line.Quantity;
+        var allowance = Math.Floor(currentTotal * maxTotalDiscountPercent / 100m) - comboDiscount;
         return Math.Clamp(allowance, 0m, payable);
     }
 

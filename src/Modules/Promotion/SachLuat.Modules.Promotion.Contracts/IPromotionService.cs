@@ -36,8 +36,12 @@ public sealed record PromotionCustomer(long? UserId, string? Phone);
 /// <param name="CategoryIds">Danh mục của sách, gồm cả danh mục cha.</param>
 /// <param name="IsOnSale">Đang chạy lịch giá (giá bán thấp hơn giá bán thường).</param>
 /// <param name="RegularPrice">
-/// Giá bán thường (chưa áp lịch giá) của SKU, dùng để tính trần tổng mức giảm khi cộng dồn combo với chương trình
-/// giảm trên đơn; null là dùng <paramref name="UnitPrice"/>.
+/// Giá bán thường (chưa áp lịch giá) của SKU. Không còn dùng cho trần tổng mức giảm (nay tính trên
+/// <paramref name="UnitPrice"/> hiện hành); giữ để tương thích.
+/// </param>
+/// <param name="ListPrice">
+/// Giá niêm yết (giá bìa) của SKU: combo tính tiền giảm so với giá này cho sách được các bộ phủ trọn; null là dùng
+/// <paramref name="UnitPrice"/> (không có phần chênh niêm yết).
 /// </param>
 public sealed record PromotionLine(
     long SkuId,
@@ -46,7 +50,8 @@ public sealed record PromotionLine(
     decimal UnitPrice,
     int Quantity,
     bool IsOnSale,
-    decimal? RegularPrice = null);
+    decimal? RegularPrice = null,
+    decimal? ListPrice = null);
 
 /// <param name="ShippingFee">Phí ship khách phải trả trước khi giảm (0 nếu đã được miễn phí theo ngưỡng).</param>
 /// <param name="CouponCode">Mã khách nhập, không phân biệt hoa thường; null nếu không dùng mã.</param>
@@ -79,7 +84,14 @@ public sealed record AppliedPromotion(
     string? CouponCode,
     decimal Amount);
 
-/// <param name="LineDiscounts">Phần giảm trên đơn phân bổ cho từng SKU (tổng bằng <paramref name="OrderDiscount"/>).</param>
+/// <param name="OrderDiscount">
+/// Tổng giảm trên đơn, gồm giảm combo (so với giá niêm yết, đã cộng <see cref="PromotionEvaluation.ListMarkups"/>) và
+/// chương trình giảm trên đơn.
+/// </param>
+/// <param name="LineDiscounts">
+/// Phần giảm trên đơn phân bổ cho từng SKU (tổng bằng <paramref name="OrderDiscount"/>), gồm cả phần chênh niêm yết của
+/// combo để <c>tiền dòng theo giá niêm yết − giảm</c> vẫn bằng số khách phải trả.
+/// </param>
 /// <param name="CouponApplied">false khi khách nhập mã hợp lệ nhưng có chương trình khác lợi hơn nên mã không được dùng.</param>
 public sealed record PromotionEvaluation(
     decimal OrderDiscount,
@@ -90,4 +102,10 @@ public sealed record PromotionEvaluation(
 {
     public static PromotionEvaluation None { get; } = new(
         0m, 0m, new Dictionary<long, decimal>(), [], CouponApplied: false);
+
+    /// <summary>
+    /// Chênh lệch <c>giá niêm yết − giá hiện hành</c> của các cuốn được combo phủ trọn, theo SKU. Ordering cộng vào
+    /// tiền dòng và tạm tính (dòng hiện theo giá niêm yết) để khớp với tiền giảm combo; số khách phải trả không đổi.
+    /// </summary>
+    public IReadOnlyDictionary<long, decimal> ListMarkups { get; init; } = new Dictionary<long, decimal>();
 }

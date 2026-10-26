@@ -340,4 +340,113 @@ public sealed class ComboEvaluatorTests
         withEmptyCombos.Should().BeEquivalentTo(withoutCombos);
         withoutCombos.OrderDiscount.Should().Be(20_000m);
     }
+
+    // --- Giá niêm yết: combo giảm so với giá bìa, số khách trả không đổi ---
+
+    private static readonly PromotionLine[] ScheduledBooks =
+    [
+        Line(1, 290_000m, regularPrice: 550_000m, listPrice: 550_000m),
+        Line(2, 290_000m, regularPrice: 550_000m, listPrice: 550_000m),
+    ];
+
+    [Fact]
+    public void ComboDiscount_IsMeasuredAgainstTheListPrice_NotTheScheduledPrice()
+    {
+        // Hai tập giá bìa 550.000đ đang giảm còn 290.000đ, combo 575.000đ: giảm 525.000đ so với giá bìa
+        // (1.100.000đ − 575.000đ), trong đó 5.000đ là giảm thật so với giá hiện hành 580.000đ.
+        var result = Evaluate(Request(ScheduledBooks), [], combos: [NewCombo(id: 5, price: 575_000m)]);
+
+        result.OrderDiscount.Should().Be(525_000m);
+        result.Applied.Should().ContainSingle().Which.Amount.Should().Be(525_000m);
+        result.ListMarkups.Should().BeEquivalentTo(new Dictionary<long, decimal> { [1] = 260_000m, [2] = 260_000m });
+        result.LineDiscounts.Values.Sum().Should().Be(525_000m);
+    }
+
+    [Fact]
+    public void ListPriceView_PaysExactlyTheSameAsTheCurrentPriceView()
+    {
+        // Khách trả: giá bìa 1.100.000đ − giảm 525.000đ = 575.000đ = giá hiện hành 580.000đ − giảm thật 5.000đ.
+        var result = Evaluate(Request(ScheduledBooks), [], combos: [NewCombo(id: 5, price: 575_000m)]);
+
+        var listTotal = ScheduledBooks.Sum(line => line.UnitPrice + result.ListMarkups.GetValueOrDefault(line.SkuId));
+        (listTotal - result.OrderDiscount).Should().Be(575_000m);
+    }
+
+    [Fact]
+    public void KhaiTruongCoupon_StacksOnTopOfTheListPriceCombo_WithoutChangingWhatTheCustomerPays()
+    {
+        var result = Evaluate(
+            Request(ScheduledBooks),
+            [Auto(Campaign(id: 9, value: 5m, maxDiscount: 25_000m, minOrder: 500_000m))],
+            combos: [NewCombo(id: 5, price: 575_000m)],
+            maxTotalDiscountPercent: 50);
+
+        result.Applied.Select(applied => (applied.Kind, applied.Amount)).Should().Equal(
+            (PromotionKind.Combo, 525_000m), (PromotionKind.OrderDiscount, 25_000m));
+        result.OrderDiscount.Should().Be(550_000m);
+        result.LineDiscounts.Values.Sum().Should().Be(550_000m);
+        var listTotal = ScheduledBooks.Sum(line => line.UnitPrice + result.ListMarkups.GetValueOrDefault(line.SkuId));
+        (listTotal - result.OrderDiscount).Should().Be(550_000m, "580.000đ − 5.000đ combo − 25.000đ mã, như trước");
+    }
+
+    [Fact]
+    public void ComboPriceEqualToTheCurrentTotal_StillApplies_BecauseItIsBelowTheListPrice()
+    {
+        var result = Evaluate(Request(ScheduledBooks), [], combos: [NewCombo(id: 5, price: 580_000m)]);
+
+        result.OrderDiscount.Should().Be(520_000m); // 1.100.000đ − 580.000đ, toàn bộ là chênh lệch niêm yết
+        result.LineDiscounts.Values.Sum().Should().Be(520_000m);
+    }
+
+    [Fact]
+    public void ComboPriceAboveTheCurrentTotal_IsNotApplied_EvenIfBelowTheListPrice()
+    {
+        // Mua lẻ đang rẻ hơn combo (đang sale mạnh): khách không được trả nhiều hơn.
+        var result = Evaluate(Request(ScheduledBooks), [], combos: [NewCombo(id: 5, price: 581_000m)]);
+
+        result.Applied.Should().BeEmpty();
+        result.ListMarkups.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SpareCopies_KeepTheirCurrentPrice_SoOnlyFullyBundledBooksGetTheListMarkup()
+    {
+        // 2 × A + 1 × B: bộ đủ dùng 1 A và 1 B. B được phủ trọn nên lên giá niêm yết; A còn một cuốn lẻ dư nên giữ giá
+        // hiện hành (không có chênh lệch niêm yết).
+        var lines = new[]
+        {
+            Line(1, 290_000m, quantity: 2, listPrice: 550_000m),
+            Line(2, 290_000m, listPrice: 550_000m),
+        };
+
+        var result = Evaluate(Request(lines), [], combos: [NewCombo(id: 5, price: 575_000m)]);
+
+        result.ListMarkups.Should().BeEquivalentTo(new Dictionary<long, decimal> { [2] = 260_000m });
+        result.OrderDiscount.Should().Be(265_000m); // 5.000đ giảm thật + 260.000đ chênh niêm yết của cuốn B
+        var listTotal = lines.Sum(line => (line.UnitPrice * line.Quantity) + result.ListMarkups.GetValueOrDefault(line.SkuId));
+        (listTotal - result.OrderDiscount).Should().Be(865_000m, "3 × 290.000đ − 5.000đ giảm thật của combo");
+    }
+
+    [Fact]
+    public void WithoutListPrices_BehavesAsBefore()
+    {
+        var result = Evaluate(Request(BothVolumes), [], combos: [NewCombo(id: 5)]);
+
+        result.ListMarkups.Should().BeEmpty();
+        result.OrderDiscount.Should().Be(30_000m);
+    }
+
+    [Fact]
+    public void TotalDiscountCap_IsMeasuredOnTheCurrentPrice()
+    {
+        // Mỗi cuốn hiện hành 290.000đ (giá bán thường 550.000đ): trần 50% là 145.000đ/cuốn, đã có 2.500đ giảm thật của
+        // combo, nên chương trình giảm tiền cố định 400.000đ chỉ được giảm thêm 2 × 142.500đ = 285.000đ.
+        var result = Evaluate(
+            Request(ScheduledBooks),
+            [Auto(Campaign(id: 9, discountType: DiscountType.FixedAmount, value: 400_000m))],
+            combos: [NewCombo(id: 5, price: 575_000m)],
+            maxTotalDiscountPercent: 50);
+
+        result.Applied.Single(applied => applied.Kind == PromotionKind.OrderDiscount).Amount.Should().Be(285_000m);
+    }
 }

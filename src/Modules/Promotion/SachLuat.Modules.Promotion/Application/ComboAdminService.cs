@@ -97,8 +97,9 @@ internal sealed class ComboAdminService(
     }
 
     /// <summary>
-    /// SKU phải tồn tại ở Catalog, và giá combo phải thấp hơn tổng giá bán thường nhưng không vượt trần giảm giá
-    /// (<see cref="PromotionOptions.MaxDiscountPercent"/>, cùng trần với chương trình giảm trên đơn).
+    /// SKU phải tồn tại ở Catalog, giá combo không được cao hơn tổng giá **hiện hành** (sau giảm, đã áp lịch giá) của
+    /// các sách, và không giảm quá trần so với giá bán thường (<see cref="PromotionOptions.MaxDiscountPercent"/>, cùng
+    /// trần với chương trình giảm trên đơn).
     /// </summary>
     private async Task EnsureItemsAllowedAsync(
         decimal comboPrice,
@@ -111,12 +112,14 @@ internal sealed class ComboAdminService(
             throw PromotionErrors.ComboSkuNotFound();
         }
 
-        var regularTotal = items.Sum(item => skus[item.SkuId].RegularSalePrice * item.Quantity);
-        if (comboPrice >= regularTotal)
+        var currentTotal = items.Sum(item => skus[item.SkuId].SalePrice * item.Quantity);
+        if (comboPrice > currentTotal)
         {
             throw PromotionErrors.Invalid(
-                $"Giá combo phải thấp hơn tổng giá bán thường của các sách ({regularTotal:N0}đ)");
+                $"Giá combo không được cao hơn tổng giá hiện hành (sau giảm) của các sách ({currentTotal:N0}đ)");
         }
+
+        var regularTotal = items.Sum(item => skus[item.SkuId].RegularSalePrice * item.Quantity);
 
         if ((regularTotal - comboPrice) * 100 > regularTotal * _options.MaxDiscountPercent)
         {
@@ -171,9 +174,9 @@ internal sealed class ComboAdminService(
         DateTime now)
     {
         var items = combo.Items.OrderBy(item => item.Id).ToList();
-        decimal? regularTotal = items.All(item => skus.ContainsKey(item.SkuId))
-            ? items.Sum(item => skus[item.SkuId].RegularSalePrice * item.Quantity)
-            : null;
+        var allKnown = items.All(item => skus.ContainsKey(item.SkuId));
+        decimal? regularTotal = allKnown ? items.Sum(item => skus[item.SkuId].RegularSalePrice * item.Quantity) : null;
+        decimal? currentTotal = allKnown ? items.Sum(item => skus[item.SkuId].SalePrice * item.Quantity) : null;
 
         return new AdminComboResponse(
             combo.Id,
@@ -183,10 +186,11 @@ internal sealed class ComboAdminService(
             combo.ImageUrl,
             combo.ComboPrice,
             regularTotal,
+            currentTotal,
             [.. items.Select(item => skus.TryGetValue(item.SkuId, out var sku)
                 ? new AdminComboItemResponse(
-                    item.SkuId, item.Quantity, sku.SkuCode, sku.BookTitle, sku.RegularSalePrice)
-                : new AdminComboItemResponse(item.SkuId, item.Quantity, null, null, null))],
+                    item.SkuId, item.Quantity, sku.SkuCode, sku.BookTitle, sku.RegularSalePrice, sku.SalePrice)
+                : new AdminComboItemResponse(item.SkuId, item.Quantity, null, null, null, null))],
             combo.IsActive,
             combo.StartsAt,
             combo.EndsAt,

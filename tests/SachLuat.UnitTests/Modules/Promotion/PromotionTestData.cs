@@ -99,8 +99,9 @@ internal static class PromotionTestData
         long bookId = 0,
         long[]? categoryIds = null,
         bool isOnSale = false,
-        decimal? regularPrice = null) =>
-        new(skuId, bookId == 0 ? skuId : bookId, categoryIds ?? [], unitPrice, quantity, isOnSale, regularPrice);
+        decimal? regularPrice = null,
+        decimal? listPrice = null) =>
+        new(skuId, bookId == 0 ? skuId : bookId, categoryIds ?? [], unitPrice, quantity, isOnSale, regularPrice, listPrice);
 
     public static PromotionRequest Request(
         IReadOnlyList<PromotionLine> lines,
