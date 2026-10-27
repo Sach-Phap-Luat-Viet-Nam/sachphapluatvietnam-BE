@@ -221,11 +221,11 @@ internal sealed class StorefrontQueryService(
             // Tạm dùng ILIKE; tìm không dấu và theo tác giả/ISBN sẽ chuyển sang Meilisearch (FR-11).
             var term = query.Q.Trim();
             var pattern = LikePatterns.Contains(term);
-            // Mã SKU lưu dạng chữ hoa nên so bằng = để dùng unique index thay vì ILIKE.
-            var skuCode = term.ToUpperInvariant();
+            // Mã SKU khớp theo "chứa chuỗi" để khách gõ "250" vẫn ra PL250; ISBN vẫn phải nhập đủ.
             books = books.Where(book => EF.Functions.ILike(book.Title, pattern, LikePatterns.EscapeCharacter)
                 || book.Editions.Any(edition => edition.Isbn == term
-                    || edition.Skus.Any(sku => sku.SkuCode == skuCode)));
+                    || edition.Skus.Any(sku => EF.Functions.ILike(
+                        sku.SkuCode, pattern, LikePatterns.EscapeCharacter))));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Category))

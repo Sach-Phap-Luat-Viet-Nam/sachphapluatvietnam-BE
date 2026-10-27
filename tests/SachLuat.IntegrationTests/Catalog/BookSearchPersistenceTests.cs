@@ -10,7 +10,7 @@ using Xunit;
 
 namespace SachLuat.IntegrationTests.Catalog;
 
-/// <summary>Tham số <c>q</c> khớp mã SKU (không phân biệt hoa/thường, khớp nguyên mã).</summary>
+/// <summary>Tham số <c>q</c> khớp mã SKU (không phân biệt hoa/thường, khớp một phần mã).</summary>
 public sealed class BookSearchPersistenceTests(CatalogDatabaseFixture fixture)
     : IClassFixture<CatalogDatabaseFixture>
 {
@@ -27,11 +27,13 @@ public sealed class BookSearchPersistenceTests(CatalogDatabaseFixture fixture)
         var exact = await service.ListBooksAsync(new BooksQuery { Q = skuCode }, CancellationToken);
         var lower = await service.ListBooksAsync(
             new BooksQuery { Q = $"  {skuCode.ToLowerInvariant()} " }, CancellationToken);
-        var partial = await service.ListBooksAsync(new BooksQuery { Q = skuCode[..^1] }, CancellationToken);
+        var partial = await service.ListBooksAsync(new BooksQuery { Q = skuCode[^8..^1] }, CancellationToken);
+        var unrelated = await service.ListBooksAsync(new BooksQuery { Q = $"{skuCode}-KHAC" }, CancellationToken);
 
         exact.Items.Should().ContainSingle().Which.Id.Should().Be(book.Id);
         lower.Items.Should().ContainSingle().Which.Id.Should().Be(book.Id);
-        partial.Items.Should().NotContain(item => item.Id == book.Id);
+        partial.Items.Should().Contain(item => item.Id == book.Id);
+        unrelated.Items.Should().NotContain(item => item.Id == book.Id);
     }
 
     [Fact]
@@ -45,7 +47,11 @@ public sealed class BookSearchPersistenceTests(CatalogDatabaseFixture fixture)
         var result = await service.ListBooksAsync(
             new AdminBooksQuery { Q = skuCode.ToLowerInvariant() }, CancellationToken);
 
+        var partial = await service.ListBooksAsync(
+            new AdminBooksQuery { Q = skuCode[^8..^1].ToLowerInvariant() }, CancellationToken);
+
         result.Items.Should().ContainSingle().Which.Id.Should().Be(book.Id);
+        partial.Items.Should().Contain(item => item.Id == book.Id);
     }
 
     private static async Task<(Book Book, string SkuCode)> SaveBookAsync(CatalogDbContext dbContext)

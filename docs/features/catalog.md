@@ -73,8 +73,8 @@ Giá trong response (danh sách, chi tiết, và `AdminBookResponse`):
 | `discountPercent` | % giảm của `salePrice` so với `listPrice`, làm tròn xuống |
 | `saleEndsAt` | Thời điểm hết giá lịch (UTC), để hiện đếm ngược; `null` khi đang bán giá thường |
 
-`q` khớp tên sách (chứa chuỗi, không phân biệt hoa/thường), ISBN hoặc mã SKU (`skuCode`) của bất kỳ ấn bản nào
-(khớp nguyên mã; SKU không phân biệt hoa/thường).
+`q` khớp tên sách và mã SKU (`skuCode`) của bất kỳ ấn bản nào theo kiểu chứa chuỗi, không phân biệt hoa/thường
+(gõ `250` hoặc `pl250` đều ra sách PL250); ISBN phải nhập đủ.
 `category` gồm cả danh mục con; `legalDocument` khớp văn bản gắn với ấn bản hoặc nhãn "Cập nhật đến".
 
 **Admin** (policy `catalog_admin`: super_admin, product_manager, bắt buộc 2FA):

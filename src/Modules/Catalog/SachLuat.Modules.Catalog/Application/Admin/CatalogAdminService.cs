@@ -25,11 +25,11 @@ internal sealed class CatalogAdminService(
         {
             var term = query.Q.Trim();
             var pattern = LikePatterns.Contains(term);
-            var skuCode = term.ToUpperInvariant();
             books = books.Where(book => EF.Functions.ILike(book.Title, pattern, LikePatterns.EscapeCharacter)
                 || book.Slug == term
                 || book.Editions.Any(edition => edition.Isbn == term
-                    || edition.Skus.Any(sku => sku.SkuCode == skuCode)));
+                    || edition.Skus.Any(sku => EF.Functions.ILike(
+                        sku.SkuCode, pattern, LikePatterns.EscapeCharacter))));
         }
 
         if (SnakeCaseEnumConverter<BookStatus>.TryParse(query.Status, out var status))
