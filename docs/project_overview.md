@@ -348,7 +348,7 @@ Hệ thống gồm 2 phân hệ: **Website khách hàng** (FR-01 → FR-59) và 
 | FR-91 | Nội dung | Banner trang chủ, bài viết, trang tĩnh, menu (trình soạn thảo WYSIWYG) | Must |
 | FR-92 | Thông báo | Mẫu email/SMS/ZNS; gửi thông báo ấn bản mới cho danh sách đăng ký | Must |
 | FR-95 | Báo cáo | Doanh thu theo ngày/kênh/danh mục/đầu sách; lợi nhuận gộp (giá bán − giá vốn lô); tồn kho; khách hàng mới/quay lại; hiệu quả mã giảm giá; xuất Excel | Must |
-| FR-97 | Người dùng nội bộ và phân quyền | Tạo tài khoản nhân viên, gán vai trò (RBAC) theo bảng 4.2; bắt buộc 2FA cho admin | Must |
+| FR-97 | Người dùng nội bộ và phân quyền | Tạo tài khoản nhân viên, gán vai trò (RBAC) theo bảng 4.2; 2FA bắt buộc với Super Admin, nhân viên khác tự chọn bật | Must |
 | FR-98 | Nhật ký hệ thống | Log mọi thao tác sửa giá, tồn kho, đơn hàng, quyền: ai, lúc nào, giá trị cũ → mới | Must |
 | FR-99 | Cấu hình | Thông tin công ty, phí ship, ngưỡng miễn ship, thời hạn đổi trả, kết nối cổng thanh toán/vận chuyển/hóa đơn | Must |
 
@@ -410,7 +410,7 @@ Website phải tải trang dưới 2,5 giây trên 4G, chạy ổn định 99,5%
 | NFR-12 | Bảo mật | Chống tấn công phổ biến | Không có lỗi OWASP Top 10 mức cao khi pentest; chống SQL injection, XSS, CSRF |
 | NFR-13 | Bảo mật | Giới hạn truy cập | Rate limit đăng nhập, OTP, tìm kiếm; reCAPTCHA/Turnstile ở form |
 | NFR-14 | Bảo mật | Dữ liệu thẻ | Không lưu thông tin thẻ; mọi thanh toán thẻ qua cổng đạt PCI DSS |
-| NFR-15 | Bảo mật | Quản trị | 2FA bắt buộc; whitelist IP tùy chọn; tự đăng xuất sau 30 phút không thao tác |
+| NFR-15 | Bảo mật | Quản trị | 2FA bắt buộc với Super Admin, vai trò nhân viên khác tự chọn (đổi ngày 27/10/2026); whitelist IP tùy chọn; tự đăng xuất sau 30 phút không thao tác |
 | NFR-16 | Bảo mật | File đọc thử | Watermark, chặn tải trực tiếp, link có hạn |
 | NFR-20 | Dữ liệu | Sao lưu | DB tự động hằng ngày, giữ 30 ngày; lưu ở vùng khác; thử khôi phục mỗi quý |
 | NFR-21 | Dữ liệu | Mục tiêu khôi phục | RPO ≤ 24 giờ; RTO ≤ 4 giờ |
@@ -716,7 +716,8 @@ API theo chuẩn REST, JSON, tiền tố `/api/v1`; xác thực bằng JWT (acce
 
 Đã triển khai giai đoạn 1 (23/10/2026): books, editions, skus, categories, authors, legal-documents,
 inventory (phiếu nhập có duyệt, thẻ kho, tồn thấp, xuất thủ công), orders, users; route và request chi tiết ở
-`docs/features/*.md`. Mọi API Admin yêu cầu đăng nhập có 2FA.
+`docs/features/*.md`. API Admin yêu cầu đăng nhập; Super Admin phải đã qua 2FA, vai trò khác không bắt buộc
+(`docs/features/auth.md`).
 
 Tiền tố `/api/v1/admin`, mọi endpoint kiểm tra quyền theo vai trò: `/books`, `/editions`, `/skus`, `/print-batches`, `/inventory/transactions`, `/inventory/stocktakes`, `/orders` (+ `/orders/{id}/status`, `/orders/{id}/shipments`), `/returns`, `/customers`, `/reviews`, `/promotions`, `/coupons`, `/posts`, `/banners`, `/reports/{type}`, `/users`, `/roles`, `/audit-logs`, `/settings`, `/imports` (Excel).
 
@@ -996,7 +997,7 @@ Danh sách đầy đủ mã lỗi theo module: `docs/features/*.md`. Lỗi chung
 - [ ] Chuyển hướng 301 từ link cũ (nếu có website cũ)
 - [ ] Sao lưu tự động chạy; đã thử khôi phục
 - [ ] Giám sát, cảnh báo đã cấu hình và gửi tới đúng người
-- [ ] Tài khoản admin có 2FA; xóa tài khoản test
+- [ ] Tài khoản Super Admin có 2FA (khuyến khích nhân viên tự bật); xóa tài khoản test
 - [ ] Hướng dẫn sử dụng Admin đã bàn giao, nhân viên đã được đào tạo
 - [ ] Kế hoạch trực sự cố 2 tuần đầu sau ra mắt
 
