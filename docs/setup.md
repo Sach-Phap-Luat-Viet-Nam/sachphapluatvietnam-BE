@@ -224,8 +224,8 @@ của module mới.
 
 ## Hạn chế / việc còn lại
 
-- Chưa có hàng đợi/worker riêng (Hangfire hoặc tương đương), Meilisearch, module Notification (email/ZNS),
-  Payment, Report.
+- Chưa có hàng đợi/worker riêng (Hangfire hoặc tương đương), Meilisearch, Payment, Report. Module Notification
+  mới có tin nhắn nội bộ qua Zalo Bot (`docs/features/staff-notification.md`), chưa có email/ZNS gửi khách.
 - Chưa có nhật ký thao tác hệ thống (FR-98).
 - Container PostgreSQL local hiện không có database `postgres` mặc định (image chuẩn luôn có). Test end-to-end
   đã tránh phụ thuộc (dùng `template1`); các công cụ khác cần tạo database mới có thể báo

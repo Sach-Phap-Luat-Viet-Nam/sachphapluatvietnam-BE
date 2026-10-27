@@ -28,6 +28,10 @@
     <Project Path="src/Modules/Inventory/SachLuat.Modules.Inventory.Contracts/SachLuat.Modules.Inventory.Contracts.csproj" />
     <Project Path="src/Modules/Inventory/SachLuat.Modules.Inventory/SachLuat.Modules.Inventory.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Notification/">
+    <Project Path="src/Modules/Notification/SachLuat.Modules.Notification.Contracts/SachLuat.Modules.Notification.Contracts.csproj" />
+    <Project Path="src/Modules/Notification/SachLuat.Modules.Notification/SachLuat.Modules.Notification.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Ordering/">
     <Project Path="src/Modules/Ordering/SachLuat.Modules.Ordering/SachLuat.Modules.Ordering.csproj" />
   </Folder>

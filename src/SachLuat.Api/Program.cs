@@ -8,6 +8,7 @@ using SachLuat.Modules.Cart;
 using SachLuat.Modules.Catalog;
 using SachLuat.Modules.Content;
 using SachLuat.Modules.Inventory;
+using SachLuat.Modules.Notification;
 using SachLuat.Modules.Ordering;
 using SachLuat.Modules.Promotion;
 using SachLuat.Modules.Shipping;
@@ -32,7 +33,8 @@ builder.AddModules(
     new OrderingModule(),
     new ContentModule(),
     new ShippingModule(),
-    new PromotionModule());
+    new PromotionModule(),
+    new NotificationModule());
 
 var app = builder.Build();
 

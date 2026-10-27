@@ -20,15 +20,18 @@ internal sealed class OrderStatusService(
     OrderingDbContext dbContext,
     IInventoryService inventoryService,
     IPromotionService promotionService,
+    OrderNotificationOutbox notificationOutbox,
     TimeProvider timeProvider,
     ILogger<OrderStatusService> logger)
 {
+    /// <param name="staffNotification">Báo nhân viên qua outbox, lưu cùng transaction với trạng thái mới.</param>
     public async Task<Order> ChangeAsync(
         long orderId,
         OrderStatus target,
         long? changedBy,
         string? note,
         Action<Order>? guard,
+        OrderNotificationKind? staffNotification,
         CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -57,6 +60,11 @@ internal sealed class OrderStatusService(
             case OrderStatus.Returned when OrderStatusMachine.IsStockDeducted(previous):
                 await inventoryService.RestockAsync(order.OrderCode, cancellationToken);
                 break;
+        }
+
+        if (staffNotification is { } kind)
+        {
+            notificationOutbox.Enqueue(order, kind);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

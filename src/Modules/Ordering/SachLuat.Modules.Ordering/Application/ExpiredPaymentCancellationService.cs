@@ -68,7 +68,13 @@ internal sealed class ExpiredPaymentCancellationService(
             try
             {
                 await scope.ServiceProvider.GetRequiredService<OrderStatusService>().ChangeAsync(
-                    orderId, OrderStatus.Cancelled, changedBy: null, CancelNote, guard: null, cancellationToken);
+                    orderId,
+                    OrderStatus.Cancelled,
+                    changedBy: null,
+                    CancelNote,
+                    guard: null,
+                    staffNotification: null,
+                    cancellationToken);
                 cancelled++;
             }
             catch (BusinessException exception)

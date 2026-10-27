@@ -18,6 +18,8 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
 
     public DbSet<OrderCodeCounter> OrderCodeCounters => Set<OrderCodeCounter>();
 
+    public DbSet<OrderNotification> OrderNotifications => Set<OrderNotification>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(Schema);
@@ -98,6 +100,16 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
             transaction.Property(t => t.Note).HasMaxLength(1000);
         });
 
+        modelBuilder.Entity<OrderNotification>(notification =>
+        {
+            notification.ToTable("order_notifications");
+            notification.HasOne(n => n.Order).WithMany().HasForeignKey(n => n.OrderId);
+            notification.HasIndex(n => n.NextAttemptAt)
+                .HasFilter("status = 'pending'")
+                .HasDatabaseName("ix_order_notifications_pending_next_attempt_at");
+            notification.Property(n => n.LastError).HasMaxLength(500);
+        });
+
         modelBuilder.Entity<OrderCodeCounter>(counter =>
         {
             counter.ToTable("order_code_counters");
@@ -112,6 +124,8 @@ internal sealed class OrderingDbContext(DbContextOptions<OrderingDbContext> opti
         MapEnum<PaymentStatus>(configurationBuilder);
         MapEnum<OrderType>(configurationBuilder);
         MapEnum<SepayTransactionResult>(configurationBuilder);
+        MapEnum<OrderNotificationKind>(configurationBuilder);
+        MapEnum<OrderNotificationStatus>(configurationBuilder);
     }
 
     private static void MapEnum<TEnum>(ModelConfigurationBuilder configurationBuilder)

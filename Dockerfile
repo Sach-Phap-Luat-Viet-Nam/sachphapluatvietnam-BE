@@ -20,6 +20,8 @@ COPY src/Modules/Shipping/SachLuat.Modules.Shipping.Contracts/SachLuat.Modules.S
 COPY src/Modules/Shipping/SachLuat.Modules.Shipping/SachLuat.Modules.Shipping.csproj src/Modules/Shipping/SachLuat.Modules.Shipping/
 COPY src/Modules/Promotion/SachLuat.Modules.Promotion.Contracts/SachLuat.Modules.Promotion.Contracts.csproj src/Modules/Promotion/SachLuat.Modules.Promotion.Contracts/
 COPY src/Modules/Promotion/SachLuat.Modules.Promotion/SachLuat.Modules.Promotion.csproj src/Modules/Promotion/SachLuat.Modules.Promotion/
+COPY src/Modules/Notification/SachLuat.Modules.Notification.Contracts/SachLuat.Modules.Notification.Contracts.csproj src/Modules/Notification/SachLuat.Modules.Notification.Contracts/
+COPY src/Modules/Notification/SachLuat.Modules.Notification/SachLuat.Modules.Notification.csproj src/Modules/Notification/SachLuat.Modules.Notification/
 COPY src/SachLuat.Api/SachLuat.Api.csproj src/SachLuat.Api/
 RUN dotnet restore src/SachLuat.Api/SachLuat.Api.csproj
 

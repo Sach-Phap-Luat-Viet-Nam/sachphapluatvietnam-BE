@@ -280,6 +280,65 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SachLuat.Modules.Ordering.Domain.OrderNotification", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTime?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<long>("OrderId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("order_id");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("pk_order_notifications");
+
+                    b.HasIndex("NextAttemptAt")
+                        .HasDatabaseName("ix_order_notifications_pending_next_attempt_at")
+                        .HasFilter("status = 'pending'");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_order_notifications_order_id");
+
+                    b.ToTable("order_notifications", "ordering");
+                });
+
             modelBuilder.Entity("SachLuat.Modules.Ordering.Domain.OrderStatusLog", b =>
                 {
                     b.Property<long>("Id")
@@ -341,7 +400,7 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                         .HasColumnName("account_number");
 
                     b.Property<decimal>("Amount")
-                        .HasPrecision(14, 0)
+                        .HasPrecision(14)
                         .HasColumnType("numeric(14,0)")
                         .HasColumnName("amount");
 
@@ -512,6 +571,18 @@ namespace SachLuat.Modules.Ordering.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_order_items_orders_order_id");
+                });
+
+            modelBuilder.Entity("SachLuat.Modules.Ordering.Domain.OrderNotification", b =>
+                {
+                    b.HasOne("SachLuat.Modules.Ordering.Domain.Order", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_order_notifications_orders_order_id");
+
+                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("SachLuat.Modules.Ordering.Domain.OrderStatusLog", b =>

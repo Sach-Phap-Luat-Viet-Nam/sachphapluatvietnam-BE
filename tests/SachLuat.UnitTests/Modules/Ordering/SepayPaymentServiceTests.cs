@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using SachLuat.Modules.Inventory.Contracts;
+using SachLuat.Modules.Notification.Contracts;
 using SachLuat.Modules.Ordering.Application;
 using SachLuat.Modules.Ordering.Domain;
 using SachLuat.Modules.Ordering.Infrastructure.Persistence;
@@ -119,6 +120,7 @@ public sealed class SepayPaymentServiceTests
             dbContext,
             Substitute.For<IInventoryService>(),
             Substitute.For<IPromotionService>(),
+            new OrderNotificationOutbox(dbContext, Substitute.For<IStaffNotifier>(), timeProvider),
             timeProvider,
             NullLogger<OrderStatusService>.Instance);
         return new SepayPaymentService(

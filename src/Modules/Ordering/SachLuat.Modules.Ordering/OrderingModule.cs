@@ -44,7 +44,9 @@ public sealed class OrderingModule : IModule
         services.AddScoped<CheckoutPricingService>();
         services.AddScoped<CustomerRiskService>();
         services.AddScoped<SepayPaymentService>();
+        services.AddScoped<OrderNotificationOutbox>();
         services.AddHostedService<ExpiredPaymentCancellationService>();
+        services.AddHostedService<OrderNotificationDispatcher>();
         services.AddValidatorsFromAssembly(typeof(OrderingModule).Assembly, includeInternalTypes: true);
 
         services.AddHealthChecks()

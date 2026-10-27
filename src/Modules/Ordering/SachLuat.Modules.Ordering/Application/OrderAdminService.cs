@@ -93,7 +93,13 @@ internal sealed class OrderAdminService(
             ?? throw OrderErrors.NotFound();
 
         var order = await statusService.ChangeAsync(
-            orderId, request.Status, staffUserId, request.Note?.Trim(), guard: null, cancellationToken);
+            orderId,
+            request.Status,
+            staffUserId,
+            request.Note?.Trim(),
+            guard: null,
+            staffNotification: null,
+            cancellationToken);
         return order.ToAdminResponse(await riskService.GetAsync(order.Phone, cancellationToken));
     }
 

@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 using SachLuat.Modules.Auth.Infrastructure.Realtime;
+using SachLuat.Modules.Notification.Contracts;
 using Xunit;
 
 namespace SachLuat.IntegrationTests.EndToEnd;
@@ -23,6 +24,10 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
     /// <summary>Super Admin duy nhất được nhớ thiết bị (<c>Auth:TrustedDeviceSuperAdminEmails</c>).</summary>
     public const string TrustedSuperAdminEmail = "root-duoc-nho@e2e.test";
 
+    public const string AdminBaseUrl = "https://admin.e2e.test";
+
+    public const string SepayApiKey = "e2e-sepay-api-key";
+
     // Hằng số (không lấy từ input) nên ghép thẳng vào câu DROP/CREATE DATABASE an toàn.
     private const string DatabaseName = "sachluat_e2e";
 
@@ -34,6 +39,9 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
 
     /// <summary>Ghi lại các thông báo kết thúc phiên thay cho Pusher thật.</summary>
     internal RecordingSessionNotifier SessionNotices { get; } = new();
+
+    /// <summary>Ghi lại tin nhắn báo nhân viên thay cho Zalo thật.</summary>
+    internal RecordingStaffNotifier StaffNotices { get; } = new();
 
     public bool IsConfigured => _connectionString is not null && !string.IsNullOrWhiteSpace(_redis);
 
@@ -70,6 +78,9 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
         builder.UseSetting("Jwt:SigningKey", ApiFactory.TestSigningKey);
         builder.UseSetting("Database:ApplyMigrationsOnStartup", IsConfigured ? "true" : "false");
         builder.UseSetting("Ordering:EnableExpiredPaymentSweep", "false");
+        builder.UseSetting("Ordering:EnableStaffNotificationDispatch", "false");
+        builder.UseSetting("Ordering:AdminBaseUrl", AdminBaseUrl);
+        builder.UseSetting("SePay:ApiKey", SepayApiKey);
         builder.UseSetting("RateLimiting:AuthPermitPerMinute", "1000");
         builder.UseSetting("Cart:KeyPrefix", $"e2e:{Guid.NewGuid():N}:cart:");
         builder.UseSetting("Auth:TrustedDeviceSuperAdminEmails:0", TrustedSuperAdminEmail);
@@ -81,6 +92,7 @@ public sealed class EndToEndFactory : WebApplicationFactory<Program>, IAsyncLife
         {
             services.AddSingleton<TimeProvider>(Clock);
             services.AddSingleton<ISessionNotifier>(SessionNotices);
+            services.AddSingleton<IStaffNotifier>(StaffNotices);
         });
     }
 
@@ -115,6 +127,51 @@ internal sealed class RecordingSessionNotifier : ISessionNotifier
         lock (_gate)
         {
             _notices.Add(new SessionNotice(userId, sessionVersion, reason));
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class RecordingStaffNotifier : IStaffNotifier
+{
+    private readonly List<string> _messages = [];
+    private readonly Lock _gate = new();
+    private int _failuresToSimulate;
+
+    public bool IsEnabled => true;
+
+    /// <summary>Giả lập Zalo lỗi cho <paramref name="count"/> lần gửi kế tiếp.</summary>
+    public void FailNext(int count)
+    {
+        lock (_gate)
+        {
+            _failuresToSimulate = count;
+        }
+    }
+
+    /// <summary>Lấy và xóa các tin đã gửi.</summary>
+    public IReadOnlyList<string> TakeAll()
+    {
+        lock (_gate)
+        {
+            var messages = _messages.ToList();
+            _messages.Clear();
+            return messages;
+        }
+    }
+
+    public Task SendAsync(string text, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (_failuresToSimulate > 0)
+            {
+                _failuresToSimulate--;
+                throw new StaffNotificationException("Giả lập Zalo Bot API lỗi");
+            }
+
+            _messages.Add(text);
         }
 
         return Task.CompletedTask;

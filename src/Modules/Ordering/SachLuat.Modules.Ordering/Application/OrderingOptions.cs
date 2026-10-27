@@ -27,4 +27,20 @@ internal sealed class OrderingOptions
     /// <summary>Số đơn COD giao thất bại ("bom hàng") để số điện thoại chỉ được chuyển khoản; 0 = không khóa.</summary>
     [Range(0, 100)]
     public int CodFailedDeliveryLimit { get; set; } = 2;
+
+    /// <summary>Bật job gửi thông báo đơn cho nhân viên từ outbox (tắt trong test để gọi tay).</summary>
+    public bool EnableStaffNotificationDispatch { get; set; } = true;
+
+    [Range(1, 3600)]
+    public int StaffNotificationPollSeconds { get; set; } = 10;
+
+    /// <summary>Gửi lỗi quá số lần này thì bỏ cuộc (lùi dần 30 giây → tối đa 1 giờ giữa các lần).</summary>
+    [Range(1, 20)]
+    public int StaffNotificationMaxAttempts { get; set; } = 10;
+
+    /// <summary>
+    /// Địa chỉ trang Admin (ví dụ <c>https://admin.example.com</c>) để gắn link đơn vào tin nhắn; trống thì bỏ link.
+    /// </summary>
+    [Url]
+    public string? AdminBaseUrl { get; set; }
 }

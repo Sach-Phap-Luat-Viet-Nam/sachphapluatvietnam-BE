@@ -25,6 +25,7 @@ internal sealed class OrderService(
     CheckoutPricingService pricingService,
     CustomerRiskService riskService,
     SepayPaymentService sepayService,
+    OrderNotificationOutbox notificationOutbox,
     IShippingQuoteService shippingQuoteService,
     IPromotionService promotionService,
     ICurrentCart currentCart,
@@ -324,6 +325,7 @@ internal sealed class OrderService(
                     throw OrderErrors.NotCancellable();
                 }
             },
+            OrderNotificationKind.CancelledByCustomer,
             cancellationToken);
     }
 
@@ -398,6 +400,13 @@ internal sealed class OrderService(
         try
         {
             dbContext.Orders.Add(order);
+
+            // Đơn chờ thanh toán chưa báo: nhân viên chỉ nhận tin khi SePay xác nhận tiền về (tránh spam đơn bỏ dở).
+            if (order.Status != OrderStatus.PendingPayment)
+            {
+                notificationOutbox.Enqueue(order, OrderNotificationKind.NewOrder);
+            }
+
             await dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException exception)

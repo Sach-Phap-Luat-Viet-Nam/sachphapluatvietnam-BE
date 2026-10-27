@@ -1,6 +1,8 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SachLuat.Modules.Ordering.Application;
@@ -11,7 +13,8 @@ namespace SachLuat.IntegrationTests.EndToEnd;
 /// <summary>
 /// Luồng nghiệp vụ chính chạy trên CSDL + Redis thật: Admin bật 2FA → nhập Catalog → phiếu nhập kho được duyệt
 /// → khách mua hàng → đóng gói trừ kho FIFO → hủy đơn hoàn kho → tự hủy đơn quá hạn thanh toán → mua ngay
-/// → khách vãng lai xem/hủy đơn qua link bí mật → chống bom hàng COD theo số điện thoại.
+/// → khách vãng lai xem/hủy đơn qua link bí mật → chống bom hàng COD theo số điện thoại → SePay xác nhận chuyển
+/// khoản; kèm tin nhắn báo nhân viên qua outbox ở các bước đặt/hủy/thanh toán.
 /// </summary>
 [Collection(EndToEndCollection.Name)]
 public sealed class PurchaseFlowTests(EndToEndFactory factory)
@@ -223,6 +226,18 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         stock.GetProperty("available").GetInt32().Should().Be(8);
         stock.GetProperty("reserved").GetInt32().Should().Be(5);
 
+        // Báo nhân viên đơn COD mới: lần gửi đầu Zalo lỗi thì outbox giữ tin và gửi lại sau 30 giây.
+        factory.StaffNotices.FailNext(1);
+        (await DispatchStaffNoticesAsync()).Should().BeEmpty();
+        factory.Clock.Advance(TimeSpan.FromSeconds(30));
+        (await DispatchStaffNoticesAsync()).Should().ContainSingle().Which.Should()
+            .StartWith($"🛒 ĐƠN MỚI #{orderCode} – COD")
+            .And.Contain("Khách: Nguyễn V. A – 09xxxxx567")
+            .And.Contain("5 cuốn – Tổng: 750.000đ")
+            .And.Contain($"{EndToEndFactory.AdminBaseUrl}/don-hang/{orderCode}")
+            .And.NotContain(CustomerPhone)
+            .And.NotContain("Xuân Thủy");
+
         // 7. Đóng gói: trừ tồn thật theo FIFO (3 cuốn lô 01 + 2 cuốn lô 02), ghi giá vốn.
         await admin.PostAsync($"/api/v1/admin/orders/{orderCode}/status", new { status = "confirmed" });
         var packed = await admin.PostAsync($"/api/v1/admin/orders/{orderCode}/status", new { status = "packing" });
@@ -250,12 +265,16 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         await member.PostAsync("/api/v1/cart/items", new { skuId, quantity = 2 });
         var memberOrder = await member.PostAsync("/api/v1/orders", NewOrder("bank_transfer"), HttpStatusCode.Created);
         memberOrder.GetProperty("status").GetString().Should().Be("pending_payment");
+        (await DispatchStaffNoticesAsync()).Should().BeEmpty("đơn chờ chuyển khoản chỉ báo khi đã nhận tiền");
         memberOrder.GetProperty("shippingFee").GetDecimal().Should().Be(0m);
         var memberCode = memberOrder.GetProperty("orderCode").GetString();
         (await member.GetAsync("/api/v1/orders")).GetProperty("meta").GetProperty("total").GetInt32().Should().Be(1);
         (await member.PostAsync($"/api/v1/orders/{memberCode}/cancel", new { reason = "Đặt nhầm" }))
             .GetProperty("status").GetString().Should().Be("cancelled");
         (await StockAsync(keeper, skuId)).GetProperty("available").GetInt32().Should().Be(8);
+        (await DispatchStaffNoticesAsync()).Should().ContainSingle().Which.Should()
+            .StartWith($"❌ KHÁCH HỦY ĐƠN #{memberCode} – Chuyển khoản")
+            .And.Contain("Lý do: Đặt nhầm");
 
         // 10. Đơn chuyển khoản quá 30 phút chưa thanh toán thì job tự hủy và hoàn tồn.
         await member.PostAsync("/api/v1/cart/items", new { skuId, quantity = 1 });
@@ -264,6 +283,7 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         factory.Clock.Advance(TimeSpan.FromMinutes(31));
         var sweeper = factory.Services.GetServices<IHostedService>().OfType<ExpiredPaymentCancellationService>().Single();
         (await sweeper.SweepAsync(TestContext.Current.CancellationToken)).Should().Be(1);
+        (await DispatchStaffNoticesAsync()).Should().BeEmpty("job tự hủy đơn quá hạn không báo nhân viên");
         (await guest.PostAsync("/api/v1/orders/lookup",
                 new { orderCode = expiring.GetProperty("orderCode").GetString(), phone = CustomerPhone }))
             .GetProperty("status").GetString().Should().Be("cancelled");
@@ -343,11 +363,11 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         (await guest.PostAsync(
                 "/api/v1/orders/buy-now", BuyNow(skuId, quantity: 1, phone: riskyPhone), (HttpStatusCode)422))
             .GetProperty("code").GetString().Should().Be("COD_NOT_ALLOWED");
-        (await guest.PostAsync(
-                "/api/v1/orders/buy-now",
-                BuyNow(skuId, quantity: 1, phone: riskyPhone, paymentMethod: "bank_transfer"),
-                HttpStatusCode.Created))
-            .GetProperty("status").GetString().Should().Be("pending_payment");
+        var transfer = await guest.PostAsync(
+            "/api/v1/orders/buy-now",
+            BuyNow(skuId, quantity: 1, phone: riskyPhone, paymentMethod: "bank_transfer"),
+            HttpStatusCode.Created);
+        transfer.GetProperty("status").GetString().Should().Be("pending_payment");
         var risk = (await admin.GetAsync($"/api/v1/admin/orders/{codCodes[2]}")).GetProperty("customerRisk");
         risk.GetProperty("totalOrders").GetInt32().Should().Be(4);
         risk.GetProperty("failedCodCount").GetInt32().Should().Be(2);
@@ -355,6 +375,54 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         risk.GetProperty("codBlocked").GetBoolean().Should().BeTrue();
         (await guest.PostAsync("/api/v1/checkout/preview", new { source = "buy_now", skuId, quantity = 1 }))
             .GetProperty("codAllowed").GetBoolean().Should().BeTrue("chưa biết SĐT thì chưa chặn COD");
+
+        // 14. SePay báo tiền về đủ → đơn sang paid và nhân viên nhận tin "đã thanh toán".
+        (await DispatchStaffNoticesAsync()).Should().HaveCount(
+            6, "bước 11–13: 5 đơn COD mới + 1 đơn khách vãng lai tự hủy; admin đổi trạng thái không báo");
+        var transferCode = transfer.GetProperty("orderCode").GetString();
+        await SendSepayWebhookAsync(new
+        {
+            id = 9_000_001,
+            gateway = "MBBank",
+            transactionDate = "2026-10-27 10:00:00",
+            accountNumber = "0123456789",
+            code = transferCode,
+            content = $"{transferCode} chuyen khoan",
+            transferType = "in",
+            transferAmount = transfer.GetProperty("total").GetDecimal(),
+            referenceCode = "FT0001",
+        });
+        (await admin.GetAsync($"/api/v1/admin/orders/{transferCode}"))
+            .GetProperty("order").GetProperty("status").GetString().Should().Be("paid");
+        (await DispatchStaffNoticesAsync()).Should().ContainSingle().Which.Should()
+            .StartWith($"💰 ĐÃ THANH TOÁN #{transferCode} – Chuyển khoản");
+    }
+
+    /// <summary>Chạy job gửi outbox tới khi hết tin đến hạn; trả các tin nhân viên nhận được.</summary>
+    private async Task<IReadOnlyList<string>> DispatchStaffNoticesAsync()
+    {
+        var dispatcher = factory.Services.GetServices<IHostedService>().OfType<OrderNotificationDispatcher>().Single();
+        int sent;
+        do
+        {
+            sent = await dispatcher.DispatchAsync(TestContext.Current.CancellationToken);
+        }
+        while (sent > 0);
+
+        return factory.StaffNotices.TakeAll();
+    }
+
+    private async Task SendSepayWebhookAsync(object payload)
+    {
+        using var client = factory.CreateClient(
+            new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/payments/sepay/webhook")
+        {
+            Content = JsonContent.Create(payload),
+        };
+        request.Headers.TryAddWithoutValidation("Authorization", $"Apikey {EndToEndFactory.SepayApiKey}");
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     private static Task<JsonElement> StockAsync(ApiClient client, long skuId) =>

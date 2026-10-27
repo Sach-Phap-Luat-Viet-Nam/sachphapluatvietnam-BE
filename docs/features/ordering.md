@@ -130,6 +130,9 @@ Mã lỗi: `CART_EMPTY` (422, chỉ đặt từ giỏ), `SKU_NOT_AVAILABLE` (422
 | `Ordering:EnableExpiredPaymentSweep`, `Ordering:ExpiredPaymentSweepSeconds` | true, 60 |
 | `Ordering:MaxOpenCodOrdersPerPhone` | 3 (0 = không giới hạn) |
 | `Ordering:CodFailedDeliveryLimit` | 2 (0 = không khóa COD) |
+| `Ordering:EnableStaffNotificationDispatch`, `Ordering:StaffNotificationPollSeconds` | true, 10 |
+| `Ordering:StaffNotificationMaxAttempts` | 10 |
+| `Ordering:AdminBaseUrl` | trống (tin nhắn báo nhân viên không kèm link đơn) |
 | `RateLimiting:AuthPermitPerMinute` | 10 (dùng chung cho `/orders/lookup` và `/orders/guest/*`) |
 | `RateLimiting:CheckoutPermitPerMinute` | 60 (số request `POST /checkout/preview` mỗi phút mỗi IP) |
 
@@ -155,6 +158,10 @@ miễn ship theo ngưỡng sẽ có phí biểu giá bằng 0 (không khôi ph�
 index `ix_orders_phone`; câu `UPDATE` đổi `phone` dạng `+84xxxxxxxxx` của đơn cũ về `0xxxxxxxxx` (Down không đổi
 ngược). Đơn vãng lai tạo trước migration không có token, khách vẫn tra cứu bằng mã đơn + SĐT. Production cần áp
 migration ở bước deploy như trên.
+
+`AddOrderNotificationOutbox`: bảng `order_notifications` (outbox tin nhắn báo nhân viên qua Zalo, khóa ngoại
+`order_id` sang `orders` cùng schema), index lọc `status = 'pending'` theo `next_attempt_at`. Chi tiết:
+`docs/features/staff-notification.md`. Production cần áp migration ở bước deploy như trên.
 
 ## Hạn chế / việc còn lại
 

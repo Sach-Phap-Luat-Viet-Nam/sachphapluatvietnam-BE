@@ -25,7 +25,7 @@ nằm trong module `Ordering` (không thêm module mới), schema `ordering`.
 | Mã đơn không tồn tại, hoặc không phải đơn chuyển khoản | `unmatched` | Chỉ ghi nhận |
 | Đơn không còn `pending_payment` (đã hủy, quá hạn, đã thanh toán) | `order_not_payable` | Chỉ ghi nhận |
 | Số tiền khác `total` của đơn (thiếu hoặc thừa) | `amount_mismatch` | Chỉ ghi nhận |
-| Đúng đơn, đúng tiền, đang `pending_payment` | `matched` | Đơn → `paid` (`OrderStatusService`, ghi lịch sử) |
+| Đúng đơn, đúng tiền, đang `pending_payment` | `matched` | Đơn → `paid` (`OrderStatusService`, ghi lịch sử), báo group Zalo nhân viên (`docs/features/staff-notification.md`) |
 
 7. Trả HTTP 200 `{"success": true}` cho mọi giao dịch đã nhận (kể cả không khớp đơn), vì đã lưu để đối soát; SePay
    không cần gửi lại. Lỗi hệ thống (500) thì SePay gửi lại theo cơ chế của họ.

@@ -199,6 +199,7 @@ internal sealed partial class SepayPaymentService(
                 changedBy: null,
                 $"SePay xác nhận đã nhận tiền (giao dịch {transaction.SepayId})",
                 guard: null,
+                OrderNotificationKind.Paid,
                 cancellationToken);
         }
         catch (BusinessException exception) when (exception.Code == OrderErrors.InvalidTransitionCode)
