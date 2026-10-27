@@ -124,7 +124,7 @@ trên các SKU có sẵn nên Cart, Inventory và dòng đơn **không đổi**.
 
 ## API (method, route, request, response, mã lỗi)
 
-Tiền tố `/api/v1`. Admin dùng policy `pricing_admin` (`super_admin`, `product_manager`, `marketing`, bắt buộc 2FA).
+Tiền tố `/api/v1`. Admin dùng policy `pricing_admin` (`super_admin`, `product_manager`, `marketing`, Super Admin bắt buộc 2FA).
 Enum trong JSON dạng snake_case.
 
 | Method | Route | Xác thực | Request → Response |

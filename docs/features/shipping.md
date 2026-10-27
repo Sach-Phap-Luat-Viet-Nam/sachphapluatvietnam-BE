@@ -31,7 +31,7 @@ Báo giá được Ordering dùng ở `POST /shipping/quote`, `POST /checkout/pr
 
 ## API (method, route, request, response, mã lỗi)
 
-Tiền tố `/api/v1/admin/shipping`, policy `shipping_admin` (`super_admin`, `order_manager`, bắt buộc 2FA).
+Tiền tố `/api/v1/admin/shipping`, policy `shipping_admin` (`super_admin`, `order_manager`, Super Admin bắt buộc 2FA).
 Phía khách dùng `POST /shipping/quote` (xem `docs/features/ordering.md`).
 
 | Method | Route | Request → Response |

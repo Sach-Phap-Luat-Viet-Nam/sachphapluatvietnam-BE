@@ -122,7 +122,8 @@ SachLuat.Modules.<Ten>/
   `PagedQueryValidator<T>`; trả `PagedResponse<T>` = `{items, meta: {page, limit, total}}`.
 - Enum trong JSON dạng snake_case. Enum trong query string là `string` rồi parse bằng
   `SnakeCaseEnumConverter<T>.TryParse` (model binding mặc định không hiểu `on_sale`).
-- API Admin: `[Authorize(Policy = Policies.Xxx)]`, mọi policy yêu cầu đăng nhập có 2FA.
+- API Admin: `[Authorize(Policy = Policies.Xxx)]`, mọi policy yêu cầu đăng nhập; token có vai trò Super Admin
+  phải đã qua 2FA (`AuthModule.HasRequiredTwoFactor`).
 - Người dùng hiện tại: inject `ICurrentUser` (`UserId`, `RequireUserId()`). Khi Super Admin fast login vào hộ,
   `UserId` là tài khoản đích, `ImpersonatorUserId` là id admin (`IsImpersonated = true`); dùng để ghi nhận thao tác
   do admin làm hộ (xem `docs/features/auth.md`).

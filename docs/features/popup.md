@@ -37,7 +37,7 @@ Module `SachLuat.Modules.Content`, schema `content`. Module này cũng là chỗ
 
 ## API (method, route, request, response, mã lỗi)
 
-Tiền tố `/api/v1`. API Admin dùng policy `content_admin` (`super_admin`, `marketing`, bắt buộc 2FA).
+Tiền tố `/api/v1`. API Admin dùng policy `content_admin` (`super_admin`, `marketing`, Super Admin bắt buộc 2FA).
 
 | Method | Route | Xác thực | Request → Response |
 | --- | --- | --- | --- |
