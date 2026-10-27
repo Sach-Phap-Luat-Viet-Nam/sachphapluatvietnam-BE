@@ -45,8 +45,8 @@ Admin để canh đơn mới. Tin đi qua **Zalo Bot API** chính thức (Zalo B
    👤 Tăng T. Bình · 09xxxxx425
    📍 Tây Thạnh, TP. Hồ Chí Minh
    📚 Sách:
-   • Bộ luật Dân sự 2026 ×1
-   • Luật Đất đai ×1
+   • [SLVN-BLDS-2026-BM] Bộ luật Dân sự 2026 ×1
+   • [SLVN-LDD-2024-BM] Luật Đất đai ×1
    ━━━━━━━━━━━━
    ➡️ Gọi khách xác nhận đơn
    🔗 Xem đơn: https://admin.example.com/don-hang/SLVN2610270002
@@ -55,7 +55,8 @@ Admin để canh đơn mới. Tin đi qua **Zalo Bot API** chính thức (Zalo B
    - **Dòng đầu** có loại sự kiện và mã đơn, vì Zalo chỉ hiện dòng này trong thông báo đẩy:
      `🛒 ĐƠN MỚI`, `💰 ĐÃ THANH TOÁN`, `❌ KHÁCH HỦY ĐƠN`.
    - **Thông tin cá nhân**: tên rút gọn tên đệm, SĐT chỉ giữ 2 số đầu và 3 số cuối, không có số nhà/đường.
-   - **Danh sách sách** có ấn bản (nếu có) và số lượng. Đơn quá 5 đầu sách thì hiện 4 dòng đầu và
+   - **Danh sách sách**: mỗi dòng có mã SKU (đứng đầu để kho dò mã khi soạn hàng), tên sách, ấn bản (nếu có) và
+     số lượng. Đơn quá 5 đầu sách thì hiện 4 dòng đầu và
      `… và N sách khác`. Tên sách dài quá 60 ký tự thì cắt.
    - **Tin hủy** kèm `📝 Lý do: ...` (cắt ở 200 ký tự) khi khách có nhập lý do.
    - **Dòng việc cần làm**:

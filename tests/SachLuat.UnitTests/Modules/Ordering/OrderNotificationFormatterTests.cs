@@ -23,8 +23,8 @@ public sealed class OrderNotificationFormatterTests
             👤 Nguyễn V. An · 09xxxxx678
             📍 Phường Cầu Giấy, Hà Nội
             📚 Sách:
-            • Bộ luật Dân sự ×2
-            • Luật Đất đai ×1
+            • [SLVN-A-BM] Bộ luật Dân sự ×2
+            • [SLVN-B-BM] Luật Đất đai ×1
             ━━━━━━━━━━━━
             ➡️ Gọi khách xác nhận đơn
             🔗 Xem đơn: https://admin.example.com/don-hang/SLVN2610270001
@@ -86,8 +86,8 @@ public sealed class OrderNotificationFormatterTests
 
         var text = OrderNotificationFormatter.Format(OrderNotificationKind.NewOrder, order, null);
 
-        text.Should().Contain("• Sách số 1 (Tái bản 2026) ×1\n• Sách số 2 ×1\n• Sách số 3 ×1\n• Sách số 4 ×1\n"
-            + "• … và 3 sách khác");
+        text.Should().Contain("• [SKU-1] Sách số 1 (Tái bản 2026) ×1\n• [SKU-2] Sách số 2 ×1\n"
+            + "• [SKU-3] Sách số 3 ×1\n• [SKU-4] Sách số 4 ×1\n• … và 3 sách khác");
         text.Should().NotContain("Sách số 5");
     }
 

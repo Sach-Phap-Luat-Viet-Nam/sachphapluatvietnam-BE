@@ -74,7 +74,8 @@ internal static class OrderNotificationFormatter
             var title = string.IsNullOrWhiteSpace(item.EditionName)
                 ? item.BookTitle
                 : $"{item.BookTitle} ({item.EditionName})";
-            yield return $"• {Shorten(title, MaxTitleLength)} ×{item.Quantity}";
+            // SKU đứng đầu để kho dò đúng mã khi soạn hàng.
+            yield return $"• [{item.SkuCode}] {Shorten(title, MaxTitleLength)} ×{item.Quantity}";
         }
 
         if (items.Count > shown)

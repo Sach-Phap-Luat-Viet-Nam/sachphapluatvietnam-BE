@@ -233,7 +233,7 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         (await DispatchStaffNoticesAsync()).Should().ContainSingle().Which.Should()
             .StartWith($"🛒 ĐƠN MỚI #{orderCode}\n💵 750.000đ · COD · 5 cuốn")
             .And.Contain("👤 Nguyễn V. A · 09xxxxx567")
-            .And.Contain("• Bộ luật Dân sự 2026")
+            .And.Contain("• [SLVN-BLDS-2026-BM] Bộ luật Dân sự 2026")
             .And.Contain($"{EndToEndFactory.AdminBaseUrl}/don-hang/{orderCode}")
             .And.NotContain(CustomerPhone)
             .And.NotContain("Xuân Thủy");
