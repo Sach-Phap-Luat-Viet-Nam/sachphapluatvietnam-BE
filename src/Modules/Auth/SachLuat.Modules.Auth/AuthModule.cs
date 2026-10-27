@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -152,6 +153,15 @@ public sealed class AuthModule : IModule
         }
     }
 
+    /// <summary>
+    /// Token của tài khoản có vai trò bắt buộc 2FA (Super Admin) phải mang <c>amr=mfa</c>; vai trò khác không bắt buộc.
+    /// Xét mọi vai trò trong token, kể cả vai trò không thuộc policy, để Super Admin chưa qua 2FA không lách qua vai trò
+    /// phụ.
+    /// </summary>
+    internal static bool HasRequiredTwoFactor(ClaimsPrincipal user) =>
+        user.HasClaim(AuthClaimTypes.AuthenticationMethod, AuthClaimTypes.MultiFactor)
+        || !Roles.TwoFactorRequired.Any(user.IsInRole);
+
     private static void AddAuthorizationPolicies(IServiceCollection services)
     {
         var authorization = services.AddAuthorizationBuilder();
@@ -160,7 +170,7 @@ public sealed class AuthModule : IModule
             authorization.AddPolicy(policy, builder => builder
                 .RequireAuthenticatedUser()
                 .RequireRole(roles)
-                .RequireClaim(AuthClaimTypes.AuthenticationMethod, AuthClaimTypes.MultiFactor));
+                .RequireAssertion(context => HasRequiredTwoFactor(context.User)));
         }
     }
 }

@@ -12,10 +12,19 @@ public static class Roles
     public const string Accountant = "accountant";
     public const string Customer = "customer";
 
-    /// <summary>Vai trò nhân viên: bắt buộc 2FA (FR-97, NFR-15).</summary>
+    /// <summary>Vai trò nhân viên (dùng được app Admin).</summary>
     public static readonly IReadOnlySet<string> Staff = new HashSet<string>(StringComparer.Ordinal)
     {
         SuperAdmin, ProductManager, OrderManager, WarehouseKeeper, CustomerService, Marketing, Accountant,
+    };
+
+    /// <summary>
+    /// Vai trò bắt buộc bật 2FA mới dùng được API Admin. Nhân viên vai trò khác tự chọn bật hay không; ai đã bật thì
+    /// đăng nhập vẫn phải nhập mã.
+    /// </summary>
+    public static readonly IReadOnlySet<string> TwoFactorRequired = new HashSet<string>(StringComparer.Ordinal)
+    {
+        SuperAdmin,
     };
 
     public static readonly IReadOnlyList<string> All = [.. Staff, Customer];

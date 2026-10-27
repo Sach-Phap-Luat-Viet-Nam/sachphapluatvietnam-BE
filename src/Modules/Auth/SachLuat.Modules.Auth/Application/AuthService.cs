@@ -232,7 +232,6 @@ internal sealed class AuthService(
     internal static UserResponse ToResponse(AppUser user, IEnumerable<string> userRoles)
     {
         var roles = userRoles.Order(StringComparer.Ordinal).ToList();
-        var isStaff = roles.Any(Roles.Staff.Contains);
         return new UserResponse(
             user.Id,
             user.Email ?? string.Empty,
@@ -242,7 +241,7 @@ internal sealed class AuthService(
             user.Occupation,
             roles,
             user.TwoFactorEnabled,
-            RequiresTwoFactorSetup: isStaff && !user.TwoFactorEnabled,
+            RequiresTwoFactorSetup: roles.Any(Roles.TwoFactorRequired.Contains) && !user.TwoFactorEnabled,
             user.IsActive,
             user.Theme,
             user.AvatarUrl);

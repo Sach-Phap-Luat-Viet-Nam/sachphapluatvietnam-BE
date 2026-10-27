@@ -34,7 +34,8 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         await admin.GetAsync("/api/v1/admin/books", HttpStatusCode.Forbidden);
         await admin.EnableTwoFactorAsync();
 
-        // 2. Tạo thủ kho; thủ kho cũng phải bật 2FA.
+        // 2. Tạo thủ kho: 2FA chỉ bắt buộc với Super Admin, thủ kho dùng được API Admin ngay; tự bật 2FA thì đăng nhập
+        //    sau đó phải nhập mã.
         var keeperId = (await admin.PostAsync("/api/v1/admin/users", new
         {
             email = "kho@e2e.test",
@@ -45,6 +46,8 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         using var keeper = new ApiClient(factory);
         var keeperSession = await keeper.LoginAsync("kho@e2e.test", "kho-password-123", portal: "admin");
         keeperSession.GetProperty("loginVia").GetString().Should().Be("portal");
+        keeperSession.GetProperty("user").GetProperty("requiresTwoFactorSetup").GetBoolean().Should().BeFalse();
+        await keeper.GetAsync("/api/v1/admin/inventory/low-stock");
         await keeper.EnableTwoFactorAsync();
 
         // 2b. Fast login: Super Admin vào hộ thủ kho (chỉ access token, cờ loginVia=admin); không vào được chính mình.

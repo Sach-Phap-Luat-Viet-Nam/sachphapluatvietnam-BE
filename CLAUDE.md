@@ -12,7 +12,7 @@
   Shipping (vùng giao hàng, phí ship), Promotion (khuyến mãi, mã giảm giá),
   Notification (tin nhắn nội bộ qua Zalo Bot, chưa có CSDL)
   (mô tả từng module: `docs/features/*.md`)
-- **Bảo mật**: JWT 15 phút + refresh token cookie HttpOnly; API Admin dùng `Policies.*`, bắt buộc 2FA
+- **Bảo mật**: JWT 15 phút + refresh token cookie HttpOnly; API Admin dùng `Policies.*`, 2FA bắt buộc với Super Admin
 - **Validate**: FluentValidation (`FluentValidationFilter` tự chạy); phân trang `PagedQuery`
 - **Test**: xUnit v3 (Microsoft.Testing.Platform) + NSubstitute + AwesomeAssertions
   (fork Apache-2.0 của FluentAssertions; FluentAssertions 8+ là license thương mại).

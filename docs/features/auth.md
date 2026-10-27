@@ -3,7 +3,8 @@
 ## Mục đích
 
 Đăng ký/đăng nhập cho khách hàng (FR-01, FR-03), tài khoản nhân viên theo vai trò bảng 4.2 (FR-97),
-bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `SachLuat.Modules.Auth`, schema `auth`.
+xác thực 2 bước (2FA): **bắt buộc với Super Admin**, các vai trò nhân viên khác tự chọn bật. Module
+`SachLuat.Modules.Auth`, schema `auth`.
 
 ## Luồng xử lý
 
@@ -21,8 +22,16 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
   - Mỗi lần `/auth/refresh` thu hồi token cũ, cấp token mới. Dùng lại token đã thu hồi → coi là bị đánh cắp,
     thu hồi mọi phiên của user.
 - **2FA cho nhân viên** (TOTP, Google Authenticator...):
-  1. Nhân viên đăng nhập bằng mật khẩu → token có `amr=pwd`, `user.requiresTwoFactorSetup = true`.
-     Gọi API Admin lúc này bị 403.
+  - **Super Admin bắt buộc** (`Roles.TwoFactorRequired`): đăng nhập bằng mật khẩu thì token có `amr=pwd` và
+    `user.requiresTwoFactorSetup = true`. Gọi API Admin lúc này bị 403 cho tới khi bật 2FA.
+  - **Vai trò nhân viên khác không bắt buộc**: chưa bật 2FA vẫn dùng API Admin theo vai trò, và
+    `requiresTwoFactorSetup = false`. FE muốn biết đã bật hay chưa thì đọc `twoFactorEnabled`. Đã bật thì mỗi lần
+    đăng nhập vẫn phải nhập mã (hoặc dùng thiết bị tin cậy).
+  - Tài khoản vừa là Super Admin vừa có vai trò khác vẫn bị bắt buộc. Nhân viên chưa bật 2FA mà được nâng lên
+    Super Admin thì sẽ bị chặn từ token kế tiếp (lần refresh tiếp theo) cho tới khi bật.
+
+  Các bước bật:
+  1. Đăng nhập bằng mật khẩu → token có `amr=pwd`.
   2. `POST /auth/2fa/setup` → `sharedKey`, `authenticatorUri` (hiển thị QR từ URI).
   3. `POST /auth/2fa/enable` với mã 6 số → token mới có `amr=mfa`, các phiên cũ bị thu hồi.
   4. Các lần sau: `/auth/login` trả `requiresTwoFactor = true` + `twoFactorToken` (hạn 5 phút) →
@@ -41,7 +50,8 @@ bắt buộc xác thực 2 bước (2FA) cho mọi API Admin (NFR-15). Module `S
     đã có bản ghi, thì lần đăng nhập kế tiếp lại bị hỏi mã.
   - Thu hồi (xóa mọi thiết bị tin cậy của user): đổi mật khẩu (`/auth/password/change`, đồng thời xóa cookie), Super Admin
     đăng xuất hộ, đặt mật khẩu mới, vô hiệu hóa tài khoản. Hết hạn thì bản ghi bị dọn khi user đó tin cậy thiết bị mới.
-- **Phân quyền**: claim `role` theo bảng 4.2. Policy Admin = đúng vai trò + `amr=mfa`:
+- **Phân quyền**: claim `role` theo bảng 4.2. Policy Admin = đúng vai trò + (token có Super Admin thì phải có
+  `amr=mfa`):
 
 | Policy | Vai trò | Dùng cho |
 | --- | --- | --- |

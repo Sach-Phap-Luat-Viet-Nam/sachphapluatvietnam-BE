@@ -44,7 +44,7 @@ internal sealed class UserAdminService(
             await profileService.GetInvoiceInfoAsync(user.Id, cancellationToken));
     }
 
-    /// <summary>Tạo nhân viên với mật khẩu tạm; nhân viên phải bật 2FA trước khi dùng được API Admin.</summary>
+    /// <summary>Tạo nhân viên với mật khẩu tạm; Super Admin phải bật 2FA trước khi dùng được API Admin.</summary>
     public async Task<UserResponse> CreateStaffAsync(CreateStaffRequest request)
     {
         if (await userManager.FindByEmailAsync(request.Email) is not null)
