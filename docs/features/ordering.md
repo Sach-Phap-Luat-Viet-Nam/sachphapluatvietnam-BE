@@ -67,6 +67,18 @@ Tác động kèm theo:
 | `returned` | Nhập lại kho đúng các lô đã xuất |
 | `refunded` | Chỉ khi đã thanh toán; `payment_status = refunded` |
 
+- **Chuyển nhanh nhiều bước** (Admin): `POST /admin/orders/{code}/status` nhận cả trạng thái nằm phía sau trên
+  **luồng chính** `pending_confirm` / `preorder_waiting` / `paid` → `confirmed` → `packing` → `ready_to_ship` →
+  `shipping` → `delivered`.
+  - Đơn đi lần lượt từng bước trong **một transaction**. Mỗi bước vẫn chạy đủ tác động ở bảng trên (qua `packing` là
+    trừ kho) và ghi một dòng lịch sử. Các bước trung gian có ghi chú "Chuyển nhanh nhiều bước", ghi chú của nhân viên
+    gắn vào bước cuối.
+  - Lỗi ở bước nào (ví dụ thiếu tồn khi đóng gói) thì đơn giữ nguyên trạng thái cũ.
+  - Không chuyển nhanh được bước rẽ nhánh hoặc khó quay lại (`cancelled`, `paid` từ `pending_payment`, hoàn hàng,
+    hoàn tiền), và không chuyển nhanh tới `completed` vì sau khi giao còn thời gian khách yêu cầu đổi trả. Mấy bước
+    này vẫn chỉ đi từng bước theo bảng 16.1.
+  - `GET /admin/orders/{code}` trả `fastForward: [{status, steps[]}]`: các trạng thái cách từ hai bước trở lên, kèm
+    các bước sẽ đi qua để FE hiện khi hỏi xác nhận.
 - **Khách tự hủy** (BR-12): chỉ khi trạng thái hiện tại còn chuyển được sang `cancelled`
   (`pending_payment`, `pending_confirm`, `preorder_waiting`, `confirmed`).
 - **Tự hủy quá hạn** (BR-10 bước 4): job nền mỗi 60 giây hủy đơn `pending_payment` quá hạn và hoàn tồn.
@@ -89,8 +101,8 @@ Tiền tố `/api/v1`.
 | POST | `/orders/guest/{token}/cancel` | Không | `{reason?}` → `OrderResponse` (giới hạn tần suất) |
 | POST | `/shipping/quote` | Không | `{subtotal, province?, items?: [{skuId, quantity}]}` → `{shippingFee, freeShippingThreshold, amountToFreeShipping, eta: {minDays, maxDays}?, zoneName?}`. Chỉ gửi `subtotal` (không `province`) thì dùng phí cố định như trước. `freeShippingThreshold` là `null` khi Admin tắt miễn ship theo ngưỡng |
 | GET | `/admin/orders?status=&paymentMethod=&from=&to=&q=` | orders_read | Lọc theo trạng thái, phương thức, ngày (giờ VN), mã đơn/SĐT |
-| GET | `/admin/orders/{code}` | orders_read | `{order, userId, nextStatuses[], costOfGoods, customerRisk}` |
-| POST | `/admin/orders/{code}/status` | orders_manage | `{status, note?}` |
+| GET | `/admin/orders/{code}` | orders_read | `{order, userId, nextStatuses[], costOfGoods, customerRisk, fastForward[]}` |
+| POST | `/admin/orders/{code}/status` | orders_manage | `{status, note?}`; `status` là một bước kế tiếp hoặc một trạng thái trong `fastForward` |
 
 `OrderResponse`: mã đơn, trạng thái, phương thức/tình trạng thanh toán, thông tin khách, địa chỉ, `items[]`,
 `subtotal, discount, shippingFee, shippingDiscount, total`, `appliedPromotions[]` (snapshot tên, mã, số tiền),

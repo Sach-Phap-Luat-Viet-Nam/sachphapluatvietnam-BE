@@ -249,7 +249,7 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         stock.GetProperty("reserved").GetInt32().Should().Be(0);
         stock.GetProperty("batches")[0].GetProperty("remaining").GetInt32().Should().Be(0);
         stock.GetProperty("batches")[1].GetProperty("remaining").GetInt32().Should().Be(8);
-        (await admin.PostAsync($"/api/v1/admin/orders/{orderCode}/status", new { status = "delivered" },
+        (await admin.PostAsync($"/api/v1/admin/orders/{orderCode}/status", new { status = "completed" },
             HttpStatusCode.Conflict)).GetProperty("code").GetString().Should().Be("ORDER_INVALID_TRANSITION");
 
         // 8. Tra cứu đơn không cần đăng nhập (mã đơn + SĐT).
@@ -355,12 +355,22 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         (await guest.PostAsync(
                 "/api/v1/checkout/preview", new { source = "buy_now", skuId, quantity = 1, phone = riskyPhone }))
             .GetProperty("codAllowed").GetBoolean().Should().BeFalse();
+        // Chuyển nhanh từ chờ xác nhận tới đang giao (4 bước, có trừ kho ở bước đóng gói) rồi hoàn hàng.
+        var fastForward = (await admin.GetAsync($"/api/v1/admin/orders/{codCodes[0]}")).GetProperty("fastForward");
+        fastForward.EnumerateArray().Select(option => option.GetProperty("status").GetString())
+            .Should().Equal("packing", "ready_to_ship", "shipping", "delivered");
+        fastForward[2].GetProperty("steps").EnumerateArray().Select(step => step.GetString())
+            .Should().Equal("confirmed", "packing", "ready_to_ship", "shipping");
         foreach (var code in codCodes.Take(2))
         {
-            foreach (var status in new[] { "confirmed", "packing", "ready_to_ship", "shipping", "returning" })
-            {
-                await admin.PostAsync($"/api/v1/admin/orders/{code}/status", new { status });
-            }
+            var shipped = await admin.PostAsync(
+                $"/api/v1/admin/orders/{code}/status", new { status = "shipping", note = "Giao gấp" });
+            shipped.GetProperty("order").GetProperty("status").GetString().Should().Be("shipping");
+            shipped.GetProperty("costOfGoods").ValueKind.Should().Be(JsonValueKind.Number, "bước đóng gói đã trừ kho");
+            shipped.GetProperty("order").GetProperty("history").EnumerateArray()
+                .Select(log => log.GetProperty("toStatus").GetString())
+                .Should().EndWith(["confirmed", "packing", "ready_to_ship", "shipping"]);
+            await admin.PostAsync($"/api/v1/admin/orders/{code}/status", new { status = "returning" });
         }
 
         (await guest.PostAsync(

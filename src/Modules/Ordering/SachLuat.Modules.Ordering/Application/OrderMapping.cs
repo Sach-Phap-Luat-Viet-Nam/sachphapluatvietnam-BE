@@ -56,5 +56,9 @@ internal static class OrderMapping
         order.Items.All(item => item.CostPrice is not null)
             ? order.Items.Sum(item => item.CostPrice.GetValueOrDefault() * item.Quantity)
             : null,
-        customerRisk);
+        customerRisk,
+        [
+            .. OrderStatusMachine.FastForwardPaths(order.Status)
+                .Select(steps => new FastForwardOption(steps[^1], steps)),
+        ]);
 }

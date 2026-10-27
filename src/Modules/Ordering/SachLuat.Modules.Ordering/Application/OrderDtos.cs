@@ -218,12 +218,20 @@ internal sealed record OrderSummaryResponse(
 
 /// <param name="CostOfGoods">Tổng giá vốn (có sau khi đóng gói), dùng cho báo cáo lợi nhuận gộp (FR-95).</param>
 /// <param name="CustomerRisk">Lịch sử đơn theo số điện thoại của đơn, để CSKH cân nhắc khi gọi xác nhận.</param>
+/// <param name="FastForward">
+/// Trạng thái chuyển nhanh được (cách từ hai bước trở lên trên luồng chính), gửi <c>status</c> đó vào
+/// <c>POST /admin/orders/{code}/status</c> là đi qua đủ các bước trong <see cref="FastForwardOption.Steps"/>.
+/// </param>
 internal sealed record AdminOrderResponse(
     OrderResponse Order,
     long? UserId,
     IReadOnlyList<OrderStatus> NextStatuses,
     decimal? CostOfGoods,
-    CustomerRiskResponse CustomerRisk);
+    CustomerRiskResponse CustomerRisk,
+    IReadOnlyList<FastForwardOption> FastForward);
+
+/// <param name="Steps">Các trạng thái lần lượt đi qua, phần tử cuối chính là <paramref name="Status"/>.</param>
+internal sealed record FastForwardOption(OrderStatus Status, IReadOnlyList<OrderStatus> Steps);
 
 /// <summary>Số liệu theo số điện thoại (mọi đơn, kể cả đơn hiện tại).</summary>
 /// <param name="FailedCodCount">Đơn COD giao thất bại (từng sang <c>returning</c>).</param>

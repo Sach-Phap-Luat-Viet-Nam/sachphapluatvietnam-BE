@@ -24,13 +24,56 @@ internal sealed class OrderStatusService(
     TimeProvider timeProvider,
     ILogger<OrderStatusService> logger)
 {
+    // Ghi vào lịch sử các bước trung gian khi chuyển nhanh; ghi chú của nhân viên gắn vào bước cuối.
+    private const string FastForwardNote = "Chuyển nhanh nhiều bước";
+
     /// <param name="staffNotification">Báo nhân viên qua outbox, lưu cùng transaction với trạng thái mới.</param>
-    public async Task<Order> ChangeAsync(
+    public Task<Order> ChangeAsync(
         long orderId,
         OrderStatus target,
         long? changedBy,
         string? note,
         Action<Order>? guard,
+        OrderNotificationKind? staffNotification,
+        CancellationToken cancellationToken) =>
+        ApplyAsync(
+            orderId,
+            order =>
+            {
+                guard?.Invoke(order);
+                return [target];
+            },
+            changedBy,
+            note,
+            staffNotification,
+            cancellationToken);
+
+    /// <summary>
+    /// Chuyển tới <paramref name="target"/>: một bước nếu chuyển thẳng được, hoặc đi lần lượt các bước của luồng chính
+    /// (<see cref="OrderStatusMachine.PathTo"/>) trong cùng một transaction, mỗi bước vẫn chạy đủ tác động kho và ghi
+    /// lịch sử. Lỗi ở bước nào (ví dụ thiếu tồn khi đóng gói) thì cả lần chuyển không được lưu.
+    /// </summary>
+    public Task<Order> AdvanceAsync(
+        long orderId,
+        OrderStatus target,
+        long? changedBy,
+        string? note,
+        CancellationToken cancellationToken) =>
+        ApplyAsync(
+            orderId,
+            // Tính đường đi sau khi đã khóa dòng đơn nên luôn theo trạng thái mới nhất.
+            order => OrderStatusMachine.PathTo(order.Status, target)
+                ?? throw OrderErrors.InvalidTransition(order.Status, target),
+            changedBy,
+            note,
+            staffNotification: null,
+            cancellationToken);
+
+    private async Task<Order> ApplyAsync(
+        long orderId,
+        Func<Order, IReadOnlyList<OrderStatus>> planSteps,
+        long? changedBy,
+        string? note,
         OrderNotificationKind? staffNotification,
         CancellationToken cancellationToken)
     {
@@ -44,7 +87,34 @@ internal sealed class OrderStatusService(
             .SingleOrDefaultAsync(o => o.Id == orderId, cancellationToken)
             ?? throw OrderErrors.NotFound();
 
-        guard?.Invoke(order);
+        var initial = order.Status;
+        var steps = planSteps(order);
+        for (var i = 0; i < steps.Count; i++)
+        {
+            var isLast = i == steps.Count - 1;
+            await ApplyStepAsync(order, steps[i], changedBy, isLast ? note : FastForwardNote, cancellationToken);
+        }
+
+        if (staffNotification is { } kind)
+        {
+            notificationOutbox.Enqueue(order, kind);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        logger.LogInformation(
+            "Order {OrderCode} changed from {FromStatus} to {ToStatus} in {StepCount} step(s) by {UserId}",
+            order.OrderCode, initial, order.Status, steps.Count, changedBy);
+        return order;
+    }
+
+    private async Task ApplyStepAsync(
+        Order order,
+        OrderStatus target,
+        long? changedBy,
+        string? note,
+        CancellationToken cancellationToken)
+    {
         var previous = order.Status;
         order.ChangeStatus(target, changedBy, note, timeProvider.GetUtcNow().UtcDateTime);
 
@@ -61,17 +131,5 @@ internal sealed class OrderStatusService(
                 await inventoryService.RestockAsync(order.OrderCode, cancellationToken);
                 break;
         }
-
-        if (staffNotification is { } kind)
-        {
-            notificationOutbox.Enqueue(order, kind);
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        logger.LogInformation(
-            "Order {OrderCode} changed from {FromStatus} to {ToStatus} by {UserId}",
-            order.OrderCode, previous, target, changedBy);
-        return order;
     }
 }

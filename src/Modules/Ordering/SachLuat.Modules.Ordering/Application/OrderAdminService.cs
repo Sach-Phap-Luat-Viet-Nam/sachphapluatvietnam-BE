@@ -92,14 +92,8 @@ internal sealed class OrderAdminService(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw OrderErrors.NotFound();
 
-        var order = await statusService.ChangeAsync(
-            orderId,
-            request.Status,
-            staffUserId,
-            request.Note?.Trim(),
-            guard: null,
-            staffNotification: null,
-            cancellationToken);
+        var order = await statusService.AdvanceAsync(
+            orderId, request.Status, staffUserId, request.Note?.Trim(), cancellationToken);
         return order.ToAdminResponse(await riskService.GetAsync(order.Phone, cancellationToken));
     }
 
