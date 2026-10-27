@@ -35,22 +35,43 @@ Admin để canh đơn mới. Tin đi qua **Zalo Bot API** chính thức (Zalo B
 3. **Thử lại.** Zalo lỗi (mạng, timeout, `ok = false`, HTTP lỗi) thì lùi lần gửi sau theo cấp số nhân: 30 giây,
    1 phút, 2 phút, ... tối đa 1 giờ/lần, kèm log `Warning`. Hết `StaffNotificationMaxAttempts` lần thì chuyển sang
    `failed`, log `Error` và không tự gửi lại nữa.
-4. **Nội dung tin.** Tin đi qua nền tảng bên ngoài nên chỉ gửi đủ để nhận biết đơn. Chi tiết xem qua link Admin.
+4. **Nội dung tin.** Tin đi qua nền tảng bên ngoài nên chỉ gửi đủ để nhận biết và xử lý đơn. Chi tiết xem qua link
+   Admin.
 
    ```text
-   🛒 ĐƠN MỚI #SLVN2610270001 – COD
-   Khách: Nguyễn V. An – 09xxxxx678
-   3 cuốn – Tổng: 480.000đ
-   Giao: Phường Cầu Giấy, Hà Nội
-   👉 https://admin.example.com/don-hang/SLVN2610270001
+   🛒 ĐƠN MỚI #SLVN2610270002
+   💵 550.000đ · COD · 2 cuốn
+   ━━━━━━━━━━━━
+   👤 Tăng T. Bình · 09xxxxx425
+   📍 Tây Thạnh, TP. Hồ Chí Minh
+   📚 Sách:
+   • Bộ luật Dân sự 2026 ×1
+   • Luật Đất đai ×1
+   ━━━━━━━━━━━━
+   ➡️ Gọi khách xác nhận đơn
+   🔗 Xem đơn: https://admin.example.com/don-hang/SLVN2610270002
    ```
 
-   - Tên rút gọn tên đệm, SĐT chỉ giữ 2 số đầu và 3 số cuối, không có số nhà/đường.
-   - Tiêu đề theo sự kiện: `🛒 ĐƠN MỚI`, `💰 ĐÃ THANH TOÁN`, `❌ KHÁCH HỦY ĐƠN`. Tin hủy kèm thêm dòng
-     `Lý do: ...`, cắt ở 200 ký tự.
+   - **Dòng đầu** có loại sự kiện và mã đơn, vì Zalo chỉ hiện dòng này trong thông báo đẩy:
+     `🛒 ĐƠN MỚI`, `💰 ĐÃ THANH TOÁN`, `❌ KHÁCH HỦY ĐƠN`.
+   - **Thông tin cá nhân**: tên rút gọn tên đệm, SĐT chỉ giữ 2 số đầu và 3 số cuối, không có số nhà/đường.
+   - **Danh sách sách** có ấn bản (nếu có) và số lượng. Đơn quá 5 đầu sách thì hiện 4 dòng đầu và
+     `… và N sách khác`. Tên sách dài quá 60 ký tự thì cắt.
+   - **Tin hủy** kèm `📝 Lý do: ...` (cắt ở 200 ký tự) khi khách có nhập lý do.
+   - **Dòng việc cần làm**:
+
+     | Sự kiện | Dòng việc cần làm |
+     | --- | --- |
+     | Đơn mới | `Gọi khách xác nhận đơn` |
+     | Đã thanh toán | `Xác nhận và đóng gói đơn` |
+     | Khách hủy, đơn đã chuyển khoản (hủy sau khi `confirmed`) | `⚠️ Khách đã chuyển khoản: cần hoàn tiền` |
+     | Khách hủy, các trường hợp còn lại | `Tồn kho đã tự hoàn lại, không cần xử lý thêm` |
+
    - Đơn sỉ hoặc đặt trước có thêm dòng `🏷️ ĐƠN SỈ` / `⏳ ĐƠN ĐẶT TRƯỚC`. Hiện mọi đơn đều là đơn lẻ.
    - Không cấu hình `Ordering:AdminBaseUrl` thì bỏ dòng link.
    - Tin dài quá 2000 ký tự (giới hạn của `sendMessage`) bị cắt bớt.
+   - Tin là văn bản thường, chưa dùng `parse_mode` (in đậm, ...). Em chưa kiểm chứng được Zalo hiển thị định dạng
+     trong group thế nào, và nếu dùng thì phải escape tên/lý do do khách nhập.
 
 ## API (method, route, request, response, mã lỗi)
 

@@ -231,9 +231,9 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         (await DispatchStaffNoticesAsync()).Should().BeEmpty();
         factory.Clock.Advance(TimeSpan.FromSeconds(30));
         (await DispatchStaffNoticesAsync()).Should().ContainSingle().Which.Should()
-            .StartWith($"🛒 ĐƠN MỚI #{orderCode} – COD")
-            .And.Contain("Khách: Nguyễn V. A – 09xxxxx567")
-            .And.Contain("5 cuốn – Tổng: 750.000đ")
+            .StartWith($"🛒 ĐƠN MỚI #{orderCode}\n💵 750.000đ · COD · 5 cuốn")
+            .And.Contain("👤 Nguyễn V. A · 09xxxxx567")
+            .And.Contain("• Bộ luật Dân sự 2026")
             .And.Contain($"{EndToEndFactory.AdminBaseUrl}/don-hang/{orderCode}")
             .And.NotContain(CustomerPhone)
             .And.NotContain("Xuân Thủy");
@@ -273,7 +273,7 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
             .GetProperty("status").GetString().Should().Be("cancelled");
         (await StockAsync(keeper, skuId)).GetProperty("available").GetInt32().Should().Be(8);
         (await DispatchStaffNoticesAsync()).Should().ContainSingle().Which.Should()
-            .StartWith($"❌ KHÁCH HỦY ĐƠN #{memberCode} – Chuyển khoản")
+            .StartWith($"❌ KHÁCH HỦY ĐƠN #{memberCode}\n💵")
             .And.Contain("Lý do: Đặt nhầm");
 
         // 10. Đơn chuyển khoản quá 30 phút chưa thanh toán thì job tự hủy và hoàn tồn.
@@ -395,7 +395,8 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         (await admin.GetAsync($"/api/v1/admin/orders/{transferCode}"))
             .GetProperty("order").GetProperty("status").GetString().Should().Be("paid");
         (await DispatchStaffNoticesAsync()).Should().ContainSingle().Which.Should()
-            .StartWith($"💰 ĐÃ THANH TOÁN #{transferCode} – Chuyển khoản");
+            .StartWith($"💰 ĐÃ THANH TOÁN #{transferCode}\n💵")
+            .And.Contain("· Chuyển khoản ·");
     }
 
     /// <summary>Chạy job gửi outbox tới khi hết tin đến hạn; trả các tin nhân viên nhận được.</summary>

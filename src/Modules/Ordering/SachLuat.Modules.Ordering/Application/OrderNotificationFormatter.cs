@@ -10,17 +10,27 @@ namespace SachLuat.Modules.Ordering.Application;
 internal static class OrderNotificationFormatter
 {
     private const int MaxReasonLength = 200;
+    private const int MaxTitleLength = 60;
+
+    // Đơn nhiều đầu sách thì chỉ liệt kê vài dòng đầu cho tin gọn, phần còn lại xem trên Admin.
+    private const int MaxItemLines = 5;
+
+    private const string Divider = "━━━━━━━━━━━━";
 
     public static string Format(OrderNotificationKind kind, Order order, string? adminBaseUrl)
     {
-        var lines = new List<string>();
-        var payment = PaymentLabel(order.PaymentMethod);
-        lines.Add(kind switch
+        // Dòng đầu là thứ hiện trong thông báo đẩy của Zalo nên phải đủ để biết chuyện gì, đơn nào.
+        var lines = new List<string>
         {
-            OrderNotificationKind.NewOrder => $"🛒 ĐƠN MỚI #{order.OrderCode} – {payment}",
-            OrderNotificationKind.Paid => $"💰 ĐÃ THANH TOÁN #{order.OrderCode} – {payment}",
-            _ => $"❌ KHÁCH HỦY ĐƠN #{order.OrderCode} – {payment}",
-        });
+            kind switch
+            {
+                OrderNotificationKind.NewOrder => $"🛒 ĐƠN MỚI #{order.OrderCode}",
+                OrderNotificationKind.Paid => $"💰 ĐÃ THANH TOÁN #{order.OrderCode}",
+                _ => $"❌ KHÁCH HỦY ĐƠN #{order.OrderCode}",
+            },
+            $"💵 {FormatMoney(order.Total)} · {PaymentLabel(order.PaymentMethod)} · "
+            + $"{order.Items.Sum(item => item.Quantity)} cuốn",
+        };
 
         switch (order.OrderType)
         {
@@ -32,26 +42,58 @@ internal static class OrderNotificationFormatter
                 break;
         }
 
-        lines.Add($"Khách: {ShortenName(order.CustomerName)} – {MaskPhone(order.Phone)}");
-        lines.Add($"{order.Items.Sum(item => item.Quantity)} cuốn – Tổng: {FormatMoney(order.Total)}");
-        lines.Add($"Giao: {order.ShippingAddress.Ward}, {order.ShippingAddress.Province}");
+        lines.Add(Divider);
+        lines.Add($"👤 {ShortenName(order.CustomerName)} · {MaskPhone(order.Phone)}");
+        lines.Add($"📍 {order.ShippingAddress.Ward}, {order.ShippingAddress.Province}");
+        lines.Add("📚 Sách:");
+        lines.AddRange(ItemLines(order.Items));
 
         if (kind == OrderNotificationKind.CancelledByCustomer
             && order.StatusLogs.Where(log => log.ToStatus == OrderStatus.Cancelled).MaxBy(log => log.CreatedAt)
                 is { Note: { Length: > 0 } reason })
         {
-            lines.Add(
-                $"Lý do: {(reason.Length > MaxReasonLength ? string.Concat(reason[..MaxReasonLength], "…") : reason)}");
+            lines.Add($"📝 Lý do: {Shorten(reason, MaxReasonLength)}");
         }
 
+        lines.Add(Divider);
+        lines.Add(NextStep(kind, order));
         if (!string.IsNullOrWhiteSpace(adminBaseUrl))
         {
-            lines.Add($"👉 {adminBaseUrl.TrimEnd('/')}/don-hang/{order.OrderCode}");
+            lines.Add($"🔗 Xem đơn: {adminBaseUrl.TrimEnd('/')}/don-hang/{order.OrderCode}");
         }
 
         // Luôn dùng \n (không theo hệ điều hành) để tin nhắn hiển thị giống nhau ở mọi môi trường.
         return string.Join('\n', lines);
     }
+
+    private static IEnumerable<string> ItemLines(IReadOnlyCollection<OrderItem> items)
+    {
+        var shown = items.Count <= MaxItemLines ? items.Count : MaxItemLines - 1;
+        foreach (var item in items.Take(shown))
+        {
+            var title = string.IsNullOrWhiteSpace(item.EditionName)
+                ? item.BookTitle
+                : $"{item.BookTitle} ({item.EditionName})";
+            yield return $"• {Shorten(title, MaxTitleLength)} ×{item.Quantity}";
+        }
+
+        if (items.Count > shown)
+        {
+            yield return $"• … và {items.Count - shown} sách khác";
+        }
+    }
+
+    private static string NextStep(OrderNotificationKind kind, Order order) => kind switch
+    {
+        OrderNotificationKind.NewOrder => "➡️ Gọi khách xác nhận đơn",
+        OrderNotificationKind.Paid => "➡️ Xác nhận và đóng gói đơn",
+        // Khách được hủy cả đơn chuyển khoản đã xác nhận (BR-12); khi đó tiền đã về, phải hoàn tay.
+        _ when order.PaymentStatus == PaymentStatus.Paid => "⚠️ Khách đã chuyển khoản: cần hoàn tiền",
+        _ => "ℹ️ Tồn kho đã tự hoàn lại, không cần xử lý thêm",
+    };
+
+    private static string Shorten(string text, int maxLength) =>
+        text.Length > maxLength ? string.Concat(text.AsSpan(0, maxLength), "…") : text;
 
     /// <summary>"Nguyễn Văn An" → "Nguyễn V. An": giữ họ và tên, rút gọn tên đệm.</summary>
     internal static string ShortenName(string fullName)

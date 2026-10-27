@@ -17,11 +17,17 @@ public sealed class OrderNotificationFormatterTests
 
         text.Should().Be(
             """
-            🛒 ĐƠN MỚI #SLVN2610270001 – COD
-            Khách: Nguyễn V. An – 09xxxxx678
-            3 cuốn – Tổng: 480.000đ
-            Giao: Phường Cầu Giấy, Hà Nội
-            👉 https://admin.example.com/don-hang/SLVN2610270001
+            🛒 ĐƠN MỚI #SLVN2610270001
+            💵 480.000đ · COD · 3 cuốn
+            ━━━━━━━━━━━━
+            👤 Nguyễn V. An · 09xxxxx678
+            📍 Phường Cầu Giấy, Hà Nội
+            📚 Sách:
+            • Bộ luật Dân sự ×2
+            • Luật Đất đai ×1
+            ━━━━━━━━━━━━
+            ➡️ Gọi khách xác nhận đơn
+            🔗 Xem đơn: https://admin.example.com/don-hang/SLVN2610270001
             """.ReplaceLineEndings("\n"));
         text.Should().NotContain("0912345678").And.NotContain("Xuân Thủy");
     }
@@ -34,20 +40,55 @@ public sealed class OrderNotificationFormatterTests
 
         var text = OrderNotificationFormatter.Format(OrderNotificationKind.Paid, order, adminBaseUrl: null);
 
-        text.Should().StartWith("💰 ĐÃ THANH TOÁN #SLVN2610270001 – Chuyển khoản");
-        text.Should().NotContain("👉");
+        text.Should().StartWith("💰 ĐÃ THANH TOÁN #SLVN2610270001\n💵 480.000đ · Chuyển khoản · 3 cuốn");
+        text.Should().EndWith("➡️ Xác nhận và đóng gói đơn");
     }
 
     [Fact]
-    public void Format_CancelledByCustomer_IncludesReason()
+    public void Format_CancelledByCustomer_IncludesReasonAndStockNote()
     {
         var order = OrderNotificationTests.CreateOrder();
         order.ChangeStatus(OrderStatus.Cancelled, null, "Đặt nhầm địa chỉ", Now);
 
         var text = OrderNotificationFormatter.Format(OrderNotificationKind.CancelledByCustomer, order, null);
 
-        text.Should().StartWith("❌ KHÁCH HỦY ĐƠN #SLVN2610270001 – COD");
-        text.Should().EndWith("Lý do: Đặt nhầm địa chỉ");
+        text.Should().StartWith("❌ KHÁCH HỦY ĐƠN #SLVN2610270001");
+        text.Should().Contain("📝 Lý do: Đặt nhầm địa chỉ");
+        text.Should().EndWith("ℹ️ Tồn kho đã tự hoàn lại, không cần xử lý thêm");
+    }
+
+    [Fact]
+    public void Format_CancelledAfterBankTransferPaid_AsksForRefund()
+    {
+        var order = OrderNotificationTests.CreateOrder(PaymentMethod.BankTransfer);
+        order.ChangeStatus(OrderStatus.Paid, null, null, Now);
+        order.ChangeStatus(OrderStatus.Confirmed, 9, null, Now);
+        order.ChangeStatus(OrderStatus.Cancelled, null, null, Now);
+
+        var text = OrderNotificationFormatter.Format(OrderNotificationKind.CancelledByCustomer, order, null);
+
+        text.Should().EndWith("⚠️ Khách đã chuyển khoản: cần hoàn tiền");
+        text.Should().NotContain("Lý do");
+    }
+
+    [Fact]
+    public void Format_ManyTitles_ListsFirstFourAndCountsTheRest()
+    {
+        var items = Enumerable.Range(1, 7)
+            .Select(i => new OrderItem(
+                i, $"SKU-{i}", $"Sách số {i}", i == 1 ? "Tái bản 2026" : null, "9780306406157", "paperback",
+                100_000m, 1))
+            .ToList();
+        var order = Order.Create(
+            "SLVN2610270009", null, "Lê Bình", "0912345678", null,
+            new ShippingAddress("Hà Nội", "Phường Cầu Giấy", "1 Xuân Thủy"), PaymentMethod.Cod, null, null, null,
+            items, OrderCharges.Shipping(0m), Now, TimeSpan.FromMinutes(30));
+
+        var text = OrderNotificationFormatter.Format(OrderNotificationKind.NewOrder, order, null);
+
+        text.Should().Contain("• Sách số 1 (Tái bản 2026) ×1\n• Sách số 2 ×1\n• Sách số 3 ×1\n• Sách số 4 ×1\n"
+            + "• … và 3 sách khác");
+        text.Should().NotContain("Sách số 5");
     }
 
     [Theory]
