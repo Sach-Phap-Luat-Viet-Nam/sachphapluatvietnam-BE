@@ -40,10 +40,10 @@ src/
 tests/
   SachLuat.UnitTests/
   SachLuat.IntegrationTests/
-deploy/windows/                 # Script deploy Windows Service, backup CSDL (chỉ ký tự ASCII)
+deploy/                         # Compose production + script update/backup (máy Ubuntu tự quản lý)
 docs/
   setup.md
-  deploy-windows.md             # Deploy production lên máy Windows + Cloudflare Tunnel
+  deploy-linux.md               # Deploy production: Docker Compose + Cloudflare Tunnel
   features/                     # Mỗi tính năng một file .md (mục 7)
 ```
 
