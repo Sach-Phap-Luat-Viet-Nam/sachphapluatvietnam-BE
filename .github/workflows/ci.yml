@@ -82,8 +82,9 @@ jobs:
 
   # Deploy production khi push lên main và CI pass. Chạy trên self-hosted runner đặt tại máy production
   # (docs/deploy-linux.md, mục CI/CD): runner không checkout code, chỉ gọi update.sh có sẵn trên máy.
+  # Bật bằng biến organization DEPLOY_ENABLED=true sau khi cài runner: thiếu runner thì job nằm chờ trong hàng đợi.
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     needs: [build-and-test, docker-build]
     runs-on: [self-hosted, sachluat-prod]
     timeout-minutes: 60
