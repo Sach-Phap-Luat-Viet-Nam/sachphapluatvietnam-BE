@@ -1,0 +1,79 @@
+# Production trên một máy Linux: API + PostgreSQL + Redis + Cloudflare Tunnel. Hướng dẫn: docs/deploy-linux.md.
+# Chạy từ thư mục gốc repo: docker compose -f deploy/docker-compose.prod.yml up -d --build
+# Biến ${...} đọc từ deploy/.env (mẫu deploy/.env.example), cấu hình app đọc từ deploy/api.env.
+name: sachluat-prod
+
+# Docker mặc định không giới hạn log container: giới hạn để log không làm đầy ổ đĩa.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-16}-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sachluat
+      POSTGRES_USER: sachluat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sachluat -d sachluat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: sachluat-api:latest
+    restart: unless-stopped
+    env_file: api.env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=sachluat;Username=sachluat;Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__Redis: redis:6379
+      # Một instance duy nhất nên tự áp migration khi khởi động.
+      Database__ApplyMigrationsOnStartup: "true"
+    # Chỉ mở cho chính máy này (kiểm tra health); internet vào qua cloudflared trong mạng compose.
+    # Cổng Docker mở ra 0.0.0.0 sẽ đi vòng qua ufw, nên không đổi thành "8080:8080".
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    logging: *logging
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in deploy/.env}
+    depends_on:
+      - api
+    logging: *logging
+
+volumes:
+  postgres-data:
+  redis-data:
