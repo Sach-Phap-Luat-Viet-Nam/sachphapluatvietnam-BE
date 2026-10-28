@@ -1,14 +1,33 @@
 #!/usr/bin/env bash
 # Cập nhật production: lấy code mới (BE + FE), build lại, khởi động lại, chờ từng service sẵn sàng.
-# Dùng: bash deploy/update.sh [--no-pull]. Hướng dẫn: docs/deploy-linux.md.
+# Dùng: bash deploy/update.sh [--no-pull]. CI gọi script này sau khi pass (docs/deploy-linux.md).
 set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+cd "$(dirname "$script")/.."
 compose=(docker compose -f deploy/docker-compose.prod.yml)
+
+# Push BE và FE gần nhau sinh ra 2 lần deploy (mỗi repo một workflow): chạy lần lượt, không chồng nhau.
+# Khóa giữ nguyên qua exec bên dưới vì fd 9 được kế thừa.
+if [[ -z "${SACHLUAT_DEPLOY_LOCKED:-}" ]]; then
+  exec 9> /tmp/sachluat-deploy.lock
+  if ! flock --wait 3600 9; then
+    echo "Đang có lần deploy khác chạy quá 60 phút, dừng." >&2
+    exit 1
+  fi
+  export SACHLUAT_DEPLOY_LOCKED=1
+fi
 
 # FE_DIR trong deploy/.env tính từ thư mục deploy/, giống cách compose hiểu build context.
 fe_dir_setting="$(sed -n 's/^FE_DIR=//p' deploy/.env)"
 fe_dir="$(cd deploy && cd "${fe_dir_setting:-../../sachphapluatvietnam-FE}" && pwd)"
+
+if [[ "${1:-}" != "--no-pull" ]]; then
+  git pull --ff-only
+  git -C "$fe_dir" pull --ff-only
+  # Bash đọc script dần trong lúc chạy: lần pull có thể vừa sửa chính file này, nên chạy lại bản mới từ đầu.
+  exec bash "$script" --no-pull
+fi
 
 wait_for() {
   local name="$1" url="$2"
@@ -22,11 +41,6 @@ wait_for() {
   echo "$name chưa sẵn sàng sau 120 giây. Xem log: ${compose[*]} logs --tail 100 $name" >&2
   exit 1
 }
-
-if [[ "${1:-}" != "--no-pull" ]]; then
-  git pull --ff-only
-  git -C "$fe_dir" pull --ff-only
-fi
 
 # API chạy trước: lúc build, Next.js render trước trang tĩnh/ISR bằng dữ liệu gọi từ API.
 "${compose[@]}" build api
