@@ -193,13 +193,48 @@ crontab -e
 - Theo dõi: tạo monitor HTTP miễn phí (UptimeRobot hoặc tương đương) cho `https://api.<tên miền>/health/ready` và
   `https://<tên miền>/sach` để nhận email khi web ngừng.
 
+### 10. Tự deploy khi push lên `main` (CI/CD)
+
+Mỗi repo có job `deploy` trong `.github/workflows/ci.yml`, chạy khi push lên `main` và các job kiểm tra đã pass. Job chạy
+trên **self-hosted runner** cài ở chính máy này (label `sachluat-prod`), gọi `deploy/update.sh`; runner tự kết nối ra
+GitHub nên không mở cổng nào.
+
+1. GitHub → Organization `Sach-Phap-Luat-Viet-Nam` → Settings → Actions → Runners → **New runner** → Linux x64. Chạy
+   các lệnh tải và `./config.sh` mà GitHub hiển thị, **dưới user sở hữu `/opt/sachluat`** (đã ở nhóm `docker`, đã
+   `git pull` được cả 2 repo), thêm label khi `config.sh` hỏi:
+
+   ```bash
+   mkdir ~/actions-runner && cd ~/actions-runner
+   # ... lệnh curl + tar do GitHub hiển thị ...
+   ./config.sh --url https://github.com/Sach-Phap-Luat-Viet-Nam --token <token> --labels sachluat-prod
+   sudo ./svc.sh install $USER && sudo ./svc.sh start   # chạy nền như systemd service, tự lên khi bật máy
+   ```
+
+2. Đăng ký ở cấp organization để cả 2 repo dùng chung. Nếu gói GitHub cho phép runner group, giới hạn runner chỉ cho
+   `sachphapluatvietnam-BE` và `sachphapluatvietnam-FE`: ai có quyền push vào repo dùng được runner là chạy được lệnh
+   trên máy production. Repo phải giữ **private**.
+3. Cài ở thư mục khác `/opt/sachluat/sachphapluatvietnam-BE` thì tạo biến organization `SACHLUAT_BE_DIR`
+   (Settings → Secrets and variables → Actions → Variables).
+4. Kiểm tra: push một commit lên `main`, tab Actions có job `deploy` chạy xong màu xanh.
+
+Cách hoạt động:
+
+- Job `deploy` không checkout code; `update.sh` tự `git pull --ff-only` cả 2 repo rồi chạy lại bản script vừa pull
+  (lần pull có thể đổi chính `update.sh`). Thư mục repo trên máy phải ở nhánh `main`, không sửa tay file đã commit.
+- Push BE và FE gần nhau: GitHub xếp hàng job `deploy` theo từng repo (`concurrency: deploy-production`), còn giữa 2
+  repo thì `update.sh` giữ khóa `flock` nên chạy lần lượt.
+- Push mới lên `main` không hủy run đang chạy (chỉ pull request mới hủy run cũ), để không cắt ngang lúc đang deploy.
+- Build lỗi thì `update.sh` dừng trước `up -d`: bản đang chạy giữ nguyên, job `deploy` báo đỏ trên GitHub.
+- CI của FE không chạy `pnpm build` (runner GitHub không gọi được backend để render trước trang tĩnh); build nằm trong
+  bước deploy trên máy này.
+
 ## Vận hành
 
 Các lệnh chạy trong `/opt/sachluat/sachphapluatvietnam-BE`, `c` là `docker compose -f deploy/docker-compose.prod.yml`.
 
 | Việc | Lệnh |
 | --- | --- |
-| Cập nhật bản mới (BE + FE) | `bash deploy/update.sh` |
+| Cập nhật bản mới (BE + FE) | Tự chạy khi push lên `main` (mục 10); chạy tay: `bash deploy/update.sh` |
 | Đổi `api.env` | `c up -d api` |
 | Đổi `PROXY_SECRET`, URL, Pusher của FE | `bash deploy/update.sh --no-pull` (build lại FE) |
 | Xem log | `c logs -f --tail 200 api` (hoặc `storefront`, `admin`, `cloudflared`) |
@@ -234,7 +269,7 @@ Không có migration mới. Không đổi code API.
 
 - Một máy, không dự phòng: mất điện, mất mạng, hỏng phần cứng là cả web ngừng; khôi phục dữ liệu dựa vào backup
   ngoài máy.
-- Không còn tự deploy khi push và preview deploy theo PR như Vercel: cập nhật bằng `update.sh`.
+- Không có preview deploy theo pull request như Vercel; chỉ `main` được deploy.
 - `cloudflared` dùng tag `latest`: `update.sh` không tự kéo bản mới. Cập nhật bằng
   `docker compose -f deploy/docker-compose.prod.yml pull cloudflared && docker compose -f deploy/docker-compose.prod.yml up -d cloudflared`.
 - Request không đi qua proxy FE (ví dụ webhook SePay) có IP kết nối là của container `cloudflared`.
