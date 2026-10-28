@@ -1,6 +1,7 @@
-# Production trên một máy Linux: API + PostgreSQL + Redis + Cloudflare Tunnel. Hướng dẫn: docs/deploy-linux.md.
-# Chạy từ thư mục gốc repo: docker compose -f deploy/docker-compose.prod.yml up -d --build
-# Biến ${...} đọc từ deploy/.env (mẫu deploy/.env.example), cấu hình app đọc từ deploy/api.env.
+# Production trên một máy Linux: API + PostgreSQL + Redis + FE (storefront, admin) + Cloudflare Tunnel.
+# Hướng dẫn: docs/deploy-linux.md. Build và khởi động bằng: bash deploy/update.sh
+# (FE phải build sau khi API đã chạy vì lúc build Next.js render trước trang tĩnh bằng dữ liệu từ API).
+# Biến ${...} đọc từ deploy/.env (mẫu deploy/.env.example), cấu hình API đọc thêm từ deploy/api.env.
 name: sachluat-prod
 
 # Docker mặc định không giới hạn log container: giới hạn để log không làm đầy ổ đĩa.
@@ -9,6 +10,13 @@ x-logging: &logging
   options:
     max-size: "10m"
     max-file: "5"
+
+x-frontend-env: &frontend-env
+  # Gọi backend trong mạng compose, không đi vòng qua internet.
+  API_BASE_URL: http://api:8080
+  PROXY_SECRET: ${PROXY_SECRET:?Set PROXY_SECRET in deploy/.env}
+  # Sau Cloudflare, x-forwarded-for giả được; cf-connecting-ip do Cloudflare đặt.
+  CLIENT_IP_HEADER: cf-connecting-ip
 
 services:
   postgres:
@@ -53,8 +61,10 @@ services:
       ConnectionStrings__Redis: redis:6379
       # Một instance duy nhất nên tự áp migration khi khởi động.
       Database__ApplyMigrationsOnStartup: "true"
-    # Chỉ mở cho chính máy này (kiểm tra health); internet vào qua cloudflared trong mạng compose.
-    # Cổng Docker mở ra 0.0.0.0 sẽ đi vòng qua ufw, nên không đổi thành "8080:8080".
+      TrustedProxy__Secret: ${PROXY_SECRET}
+      Ordering__AdminBaseUrl: ${ADMIN_URL:?Set ADMIN_URL in deploy/.env}
+    # Chỉ mở cho chính máy này (kiểm tra health, build FE); internet vào qua cloudflared trong mạng compose.
+    # Cổng Docker mở ra 0.0.0.0 sẽ đi vòng qua ufw, nên không bỏ tiền tố 127.0.0.1.
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
@@ -62,6 +72,44 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    logging: *logging
+
+  storefront:
+    build:
+      context: ${FE_DIR:-../../sachphapluatvietnam-FE}
+      # Bước build gọi API qua cổng 127.0.0.1:8080 của máy chủ.
+      network: host
+      args:
+        APP: storefront
+        API_BASE_URL: http://127.0.0.1:8080
+        NEXT_PUBLIC_PUSHER_KEY: ${NEXT_PUBLIC_PUSHER_KEY:-}
+        NEXT_PUBLIC_PUSHER_CLUSTER: ${NEXT_PUBLIC_PUSHER_CLUSTER:-}
+    image: sachluat-storefront:latest
+    restart: unless-stopped
+    environment: *frontend-env
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+    logging: *logging
+
+  admin:
+    build:
+      context: ${FE_DIR:-../../sachphapluatvietnam-FE}
+      network: host
+      args:
+        APP: admin
+        API_BASE_URL: http://127.0.0.1:8080
+        NEXT_PUBLIC_STOREFRONT_URL: ${STOREFRONT_URL:?Set STOREFRONT_URL in deploy/.env}
+        NEXT_PUBLIC_PUSHER_KEY: ${NEXT_PUBLIC_PUSHER_KEY:-}
+        NEXT_PUBLIC_PUSHER_CLUSTER: ${NEXT_PUBLIC_PUSHER_CLUSTER:-}
+    image: sachluat-admin:latest
+    restart: unless-stopped
+    environment: *frontend-env
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - api
     logging: *logging
 
   cloudflared:
@@ -72,6 +120,8 @@ services:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in deploy/.env}
     depends_on:
       - api
+      - storefront
+      - admin
     logging: *logging
 
 volumes:
