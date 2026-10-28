@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using SachLuat.Api.ErrorHandling;
 using SachLuat.Api.Modules;
 using SachLuat.Api.Security;
@@ -16,7 +17,16 @@ using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.HealthChecks;
 using Scalar.AspNetCore;
 
-var builder = WebApplication.CreateBuilder(args);
+// Dưới Windows Service thư mục hiện tại là C:\Windows\System32, nên content root phải đặt ngay khi tạo builder
+// (WebApplicationBuilder không cho đổi sau). Ngoài service (dotnet run, Docker, test) giữ mặc định.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : null,
+});
+
+// Chỉ có tác dụng khi chạy dưới Windows Service: báo trạng thái cho SCM, ghi log Warning+ vào Event Log.
+builder.Services.AddWindowsService();
 
 builder.Services.AddApiProblemDetails();
 builder.Services.AddOpenApi();
