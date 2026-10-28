@@ -71,7 +71,8 @@ Directory.Packages.props       # version package tập trung (Central Package Ma
 global.json                    # ghim SDK 10, bật Microsoft.Testing.Platform cho dotnet test
 docker-compose.yml             # PostgreSQL 16 + Redis 7 cho local
 .github/workflows/ci.yml       # CI: format, build, test (kèm PostgreSQL + Redis), build Docker image
-deploy/windows/                # Script deploy Windows Service + backup, hướng dẫn: docs/deploy-windows.md
+deploy/                        # Compose production (API + PostgreSQL + Redis + Cloudflare Tunnel), script update/backup;
+                               # hướng dẫn: docs/deploy-linux.md
 src/
   SachLuat.Api/                # Host: Program.cs, xử lý lỗi, bảo mật, đăng ký module
   SachLuat.SharedKernel/       # IModule, BusinessException, ErrorCodes, ApiRoutes, Roles/Policies,
