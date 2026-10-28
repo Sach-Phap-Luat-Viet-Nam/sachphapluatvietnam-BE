@@ -40,8 +40,10 @@ src/
 tests/
   SachLuat.UnitTests/
   SachLuat.IntegrationTests/
+deploy/windows/                 # Script deploy Windows Service, backup CSDL (chỉ ký tự ASCII)
 docs/
   setup.md
+  deploy-windows.md             # Deploy production lên máy Windows + Cloudflare Tunnel
   features/                     # Mỗi tính năng một file .md (mục 7)
 ```
 
