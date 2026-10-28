@@ -1,5 +1,6 @@
 # Kiểm tra "định nghĩa xong việc" (CLAUDE.md) cho mỗi push lên main và mỗi pull request:
 # format, build không warning, toàn bộ test (kể cả test cần PostgreSQL + Redis), build Docker image.
+# Push lên main pass hết thì deploy production (job deploy).
 name: CI
 
 on:
@@ -12,7 +13,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Chỉ hủy run cũ của pull request; trên main hủy giữa chừng sẽ cắt ngang job deploy.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-test:
@@ -77,3 +79,19 @@ jobs:
 
       - name: Build image
         run: docker build --tag sachluat-api:ci .
+
+  # Deploy production khi push lên main và CI pass. Chạy trên self-hosted runner đặt tại máy production
+  # (docs/deploy-linux.md, mục CI/CD): runner không checkout code, chỉ gọi update.sh có sẵn trên máy.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-and-test, docker-build]
+    runs-on: [self-hosted, sachluat-prod]
+    timeout-minutes: 60
+    # Không hủy giữa chừng khi có push mới: lần sau xếp hàng chờ (update.sh còn khóa flock giữa BE và FE).
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Deploy
+        run: bash "${{ vars.SACHLUAT_BE_DIR || '/opt/sachluat/sachphapluatvietnam-BE' }}/deploy/update.sh"
