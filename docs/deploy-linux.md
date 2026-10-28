@@ -213,8 +213,9 @@ GitHub nên không mở cổng nào.
 2. Đăng ký ở cấp organization để cả 2 repo dùng chung. Nếu gói GitHub cho phép runner group, giới hạn runner chỉ cho
    `sachphapluatvietnam-BE` và `sachphapluatvietnam-FE`: ai có quyền push vào repo dùng được runner là chạy được lệnh
    trên máy production. Repo phải giữ **private**.
-3. Cài ở thư mục khác `/opt/sachluat/sachphapluatvietnam-BE` thì tạo biến organization `SACHLUAT_BE_DIR`
-   (Settings → Secrets and variables → Actions → Variables).
+3. Organization → Settings → Secrets and variables → Actions → **Variables**: tạo `DEPLOY_ENABLED` = `true`. Chưa có
+   biến này thì job `deploy` bị bỏ qua (tránh job nằm chờ runner không tồn tại, chặn các run CI sau trên `main`).
+   Cài ở thư mục khác `/opt/sachluat/sachphapluatvietnam-BE` thì tạo thêm biến `SACHLUAT_BE_DIR`.
 4. Kiểm tra: push một commit lên `main`, tab Actions có job `deploy` chạy xong màu xanh.
 
 Cách hoạt động:
