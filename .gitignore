@@ -5,6 +5,7 @@
 
 # dotenv files
 .env
+deploy/api.env
 
 # User-specific files
 *.rsuser
