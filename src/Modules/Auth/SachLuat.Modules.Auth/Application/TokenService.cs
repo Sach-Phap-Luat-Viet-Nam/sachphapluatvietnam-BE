@@ -80,6 +80,7 @@ internal sealed class TokenService(IOptions<JwtOptions> jwtOptions, TimeProvider
             ValidAudience = _jwt.Audience + TwoFactorAudienceSuffix,
             IssuerSigningKey = CreateSigningKey(_jwt),
             ClockSkew = TimeSpan.Zero,
+            LifetimeValidator = CreateLifetimeValidator(timeProvider),
         });
 
         if (!result.IsValid
@@ -99,6 +100,19 @@ internal sealed class TokenService(IOptions<JwtOptions> jwtOptions, TimeProvider
         var token = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
         return (token, HashRefreshToken(token));
     }
+
+    /// <summary>
+    /// Kiểm <c>nbf</c>/<c>exp</c> theo <paramref name="timeProvider"/>, cùng đồng hồ dùng khi phát token. Mặc định thư viện
+    /// so với giờ hệ thống nên lệch khi <see cref="TimeProvider"/> bị thay (đồng hồ giả trong test).
+    /// </summary>
+    public static LifetimeValidator CreateLifetimeValidator(TimeProvider timeProvider) =>
+        (notBefore, expires, _, parameters) =>
+        {
+            var now = timeProvider.GetUtcNow().UtcDateTime;
+            return expires is { } expiresAt
+                && expiresAt >= now - parameters.ClockSkew
+                && (notBefore is not { } notBeforeAt || notBeforeAt <= now + parameters.ClockSkew);
+        };
 
     private string CreateToken(IEnumerable<Claim> claims, string audience, TimeSpan lifetime)
     {

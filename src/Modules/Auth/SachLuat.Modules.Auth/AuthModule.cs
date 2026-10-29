@@ -110,7 +110,7 @@ public sealed class AuthModule : IModule
     {
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-            .Configure<IOptions<JwtOptions>>((options, jwtOptions) =>
+            .Configure<IOptions<JwtOptions>, TimeProvider>((options, jwtOptions, timeProvider) =>
             {
                 var jwt = jwtOptions.Value;
                 // Giữ nguyên tên claim trong token ("sub", "role") thay vì map sang tên dài kiểu WS-Federation.
@@ -123,6 +123,7 @@ public sealed class AuthModule : IModule
                     NameClaimType = AuthClaimTypes.Subject,
                     RoleClaimType = AuthClaimTypes.Role,
                     ClockSkew = TimeSpan.FromSeconds(30),
+                    LifetimeValidator = TokenService.CreateLifetimeValidator(timeProvider),
                 };
                 options.Events = new JwtBearerEvents { OnTokenValidated = ValidateSessionVersionAsync };
             });

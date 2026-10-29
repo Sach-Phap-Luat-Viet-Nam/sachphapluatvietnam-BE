@@ -290,6 +290,10 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
         (await guest.PostAsync("/api/v1/orders/lookup",
                 new { orderCode = expiring.GetProperty("orderCode").GetString(), phone = CustomerPhone }))
             .GetProperty("status").GetString().Should().Be("cancelled");
+        // Tua 31 phút đã quá hạn access token 15 phút.
+        await admin.RefreshAsync();
+        await keeper.RefreshAsync();
+        await member.RefreshAsync();
 
         // 11. Mua ngay: đặt thẳng một SKU, giỏ đang có giữ nguyên; tồn vẫn được tạm giữ như đặt từ giỏ.
         await member.PostAsync("/api/v1/cart/items", new { skuId, quantity = 1 });

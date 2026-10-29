@@ -57,6 +57,20 @@ public sealed class AuthSecurityTests
     }
 
     [Fact]
+    public async Task TwoFactorTicket_LifetimeFollowsInjectedClock()
+    {
+        // Đồng hồ chạy trước giờ thật: ticket vẫn hợp lệ ngay, rồi hết hạn theo chính đồng hồ đó.
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow.AddMinutes(31));
+        var service = new TokenService(Options.Create(Jwt), clock);
+        var ticket = service.CreateTwoFactorTicket(userId: 42, rememberMe: false);
+
+        (await service.ValidateTwoFactorTicketAsync(ticket)).Should().Be(new TwoFactorTicket(42, RememberMe: false));
+
+        clock.Advance(TimeSpan.FromHours(1));
+        (await service.ValidateTwoFactorTicketAsync(ticket)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task AccessToken_IsNotAcceptedAsTwoFactorTicket()
     {
         var service = new TokenService(Options.Create(Jwt), TimeProvider.System);

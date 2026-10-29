@@ -102,6 +102,13 @@ internal sealed class ApiClient : IDisposable
         return key;
     }
 
+    /// <summary>Đổi cookie refresh lấy access token mới, như FE làm khi access token hết hạn.</summary>
+    public async Task RefreshAsync()
+    {
+        var session = await PostAsync("/api/v1/auth/refresh");
+        AccessToken = session.GetProperty("accessToken").GetString();
+    }
+
     public void Dispose() => _client.Dispose();
 }
 
