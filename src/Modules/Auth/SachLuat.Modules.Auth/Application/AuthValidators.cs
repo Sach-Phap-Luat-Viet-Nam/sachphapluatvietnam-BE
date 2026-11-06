@@ -42,6 +42,8 @@ internal sealed class RegisterRequestValidator : AbstractValidator<RegisterReque
         RuleFor(request => request.FullName).NotEmpty().MaximumLength(255);
         RuleFor(request => request.PhoneNumber).Matches(AuthRules.PhonePattern)
             .When(request => !string.IsNullOrEmpty(request.PhoneNumber));
+        RuleFor(request => request.AcceptTerms).Equal(true)
+            .WithMessage("Cần đồng ý Điều khoản sử dụng và Chính sách bảo mật");
     }
 }
 
