@@ -26,6 +26,7 @@ public sealed class SingleSessionTests(EndToEndFactory factory)
             email = "mot-noi@e2e.test",
             password = "mot-noi-password",
             fullName = "Một nơi",
+            acceptTerms = true,
         }, HttpStatusCode.Created);
         first.AccessToken = registered.GetProperty("accessToken").GetString();
         var userId = registered.GetProperty("user").GetProperty("id").GetInt64();
@@ -64,6 +65,7 @@ public sealed class SingleSessionTests(EndToEndFactory factory)
             email = "bi-day@e2e.test",
             password = "bi-day-password",
             fullName = "Bị buộc đăng xuất",
+            acceptTerms = true,
         }, HttpStatusCode.Created);
         victim.AccessToken = registered.GetProperty("accessToken").GetString();
         var victimId = registered.GetProperty("user").GetProperty("id").GetInt64();
@@ -92,6 +94,7 @@ public sealed class SingleSessionTests(EndToEndFactory factory)
             email = "realtime@e2e.test",
             password = "realtime-password",
             fullName = "Realtime",
+            acceptTerms = true,
         }, HttpStatusCode.Created);
         client.AccessToken = registered.GetProperty("accessToken").GetString();
         var userId = registered.GetProperty("user").GetProperty("id").GetInt64();
