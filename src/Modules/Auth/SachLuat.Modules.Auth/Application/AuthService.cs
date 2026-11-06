@@ -39,6 +39,8 @@ internal sealed class AuthService(
             Email = request.Email,
             FullName = request.FullName.Trim(),
             PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber,
+            TermsAcceptedAt = timeProvider.GetUtcNow().UtcDateTime,
+            TermsVersion = _options.TermsVersion,
         };
 
         EnsureSucceeded(await userManager.CreateAsync(user, request.Password));
