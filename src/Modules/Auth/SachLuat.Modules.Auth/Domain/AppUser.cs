@@ -7,6 +7,8 @@ internal sealed class AppUser : IdentityUser<long>, IAuditable
 {
     public const int AvatarUrlMaxLength = 500;
 
+    public const int TermsVersionMaxLength = 32;
+
     public string FullName { get; set; } = string.Empty;
 
     public DateOnly? BirthDate { get; set; }
@@ -25,6 +27,12 @@ internal sealed class AppUser : IdentityUser<long>, IAuditable
     /// UPDATE nguyên tử trong <c>AuthService</c>, không ghi qua <c>UserManager.UpdateAsync</c>.
     /// </summary>
     public int SessionVersion { get; set; }
+
+    /// <summary>Thời điểm (UTC) khách đồng ý điều khoản khi đăng ký; null với nhân viên và tài khoản tạo trước đó.</summary>
+    public DateTime? TermsAcceptedAt { get; set; }
+
+    /// <summary>Phiên bản điều khoản (<c>Auth:TermsVersion</c>) khách đã đồng ý, đi cùng TermsAcceptedAt.</summary>
+    public string? TermsVersion { get; set; }
 
     /// <summary>false: Super Admin đã vô hiệu hóa, không đăng nhập hay làm mới phiên được nữa.</summary>
     public bool IsActive { get; set; } = true;
