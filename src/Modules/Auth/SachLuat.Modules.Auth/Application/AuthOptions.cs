@@ -42,6 +42,14 @@ internal sealed class AuthOptions
     /// </summary>
     public List<string> TrustedDeviceSuperAdminEmails { get; set; } = [];
 
+    /// <summary>
+    /// Phiên bản Điều khoản sử dụng/Chính sách bảo mật đang hiển thị ở form đăng ký, lưu cùng tài khoản khi khách
+    /// đồng ý. Đổi nội dung điều khoản thì đổi giá trị này.
+    /// </summary>
+    [Required]
+    [MaxLength(Domain.AppUser.TermsVersionMaxLength)]
+    public string TermsVersion { get; set; } = string.Empty;
+
     /// <summary>Tên hiển thị trong ứng dụng authenticator (Google Authenticator, ...).</summary>
     public string TotpIssuer { get; set; } = "Sach Luat Viet Nam";
 
