@@ -42,6 +42,7 @@ public sealed class AdminUsersTests(EndToEndFactory factory)
             password = CustomerPassword,
             fullName = "Khách cần hỗ trợ",
             phoneNumber = "0912345678",
+            acceptTerms = true,
         }, HttpStatusCode.Created);
         customer.AccessToken = registered.GetProperty("accessToken").GetString();
         var customerId = registered.GetProperty("user").GetProperty("id").GetInt64();
