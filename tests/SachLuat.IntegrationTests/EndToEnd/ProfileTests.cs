@@ -19,6 +19,7 @@ public sealed class ProfileTests(EndToEndFactory factory)
             email = "profile@e2e.test",
             password = "profile-password",
             fullName = "Hồ sơ khách",
+            acceptTerms = true,
         }, HttpStatusCode.Created);
         client.AccessToken = session.GetProperty("accessToken").GetString();
 
@@ -69,6 +70,7 @@ public sealed class ProfileTests(EndToEndFactory factory)
             email = "theme@e2e.test",
             password = "theme-password",
             fullName = "Giao diện",
+            acceptTerms = true,
         }, HttpStatusCode.Created);
         client.AccessToken = session.GetProperty("accessToken").GetString();
 
@@ -111,6 +113,7 @@ public sealed class ProfileTests(EndToEndFactory factory)
             email = "avatar@e2e.test",
             password = "avatar-password",
             fullName = "Có avatar",
+            acceptTerms = true,
         }, HttpStatusCode.Created);
         client.AccessToken = session.GetProperty("accessToken").GetString();
 
