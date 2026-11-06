@@ -340,6 +340,15 @@ namespace SachLuat.Modules.Auth.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("session_version");
 
+                    b.Property<DateTime?>("TermsAcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("terms_accepted_at");
+
+                    b.Property<string>("TermsVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("terms_version");
+
                     b.Property<string>("Theme")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
