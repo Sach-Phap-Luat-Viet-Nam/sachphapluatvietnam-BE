@@ -3,7 +3,13 @@ using SachLuat.SharedKernel.Api;
 
 namespace SachLuat.Modules.Auth.Application;
 
-internal sealed record RegisterRequest(string Email, string Password, string FullName, string? PhoneNumber);
+/// <param name="AcceptTerms">Khách tick ô đồng ý Điều khoản sử dụng và Chính sách bảo mật; phải là true.</param>
+internal sealed record RegisterRequest(
+    string Email,
+    string Password,
+    string FullName,
+    string? PhoneNumber,
+    bool AcceptTerms);
 
 /// <param name="Portal">App gọi đăng nhập; Super Admin chỉ đăng nhập được ở <see cref="LoginPortal.Admin"/>.</param>
 internal sealed record LoginRequest(
