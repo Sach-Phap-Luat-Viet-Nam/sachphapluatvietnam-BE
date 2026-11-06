@@ -10,7 +10,7 @@ xác thực 2 bước (2FA): **bắt buộc với Super Admin**, các vai trò n
 
 - **Mật khẩu**: ASP.NET Core Identity, băm bằng **bcrypt** work factor 12 (NFR-11), tối thiểu 8 ký tự.
 - **Đồng ý điều khoản khi đăng ký**: `POST /auth/register` bắt buộc `acceptTerms = true` (ô "Tôi đồng ý với Điều khoản
-  sử dụng và Chính sách bảo mật" ở form). Thiếu hoặc `false` → 400 `VALIDATION_ERROR` (lỗi ở field `AcceptTerms`),
+  sử dụng và Chính sách bảo mật" ở form). Thiếu hoặc `false` → 400 `VALIDATION_ERROR` (`errors.acceptTerms`),
   chưa tạo tài khoản. Hợp lệ thì lưu `terms_accepted_at` (UTC) và `terms_version` (= `Auth:TermsVersion` lúc đăng ký)
   vào `auth.users` làm bằng chứng đồng ý. Tài khoản nhân viên do Admin tạo và tài khoản có trước tính năng này để null.
 - **Đăng nhập theo app**: `POST /auth/login` nhận `portal` = `storefront` (mặc định) hoặc `admin`. Tài khoản có vai
@@ -298,7 +298,8 @@ trước khi deploy bản này** (thiếu cột thì đọc user bị lỗi).
 
 ## Hạn chế / việc còn lại
 
-- Điều khoản: chưa có API trả `Auth:TermsVersion` hay link điều khoản cho FE (FE tự hiển thị trang điều khoản); đổi
+- Điều khoản: tài khoản có trước tính năng này giữ `null` và không bị hỏi đồng ý (quyết định giữ nguyên, không điền
+  dữ liệu giả); chưa có API trả `Auth:TermsVersion` hay link điều khoản cho FE (FE tự hiển thị trang điều khoản); đổi
   phiên bản chưa bắt khách cũ đồng ý lại; `terms_accepted_at`/`terms_version` chưa trả ra API (chỉ lưu trong CSDL).
 
 - Chưa xác thực email/OTP SMS–Zalo, quên mật khẩu (FR-01, FR-04): chờ module Notification.
