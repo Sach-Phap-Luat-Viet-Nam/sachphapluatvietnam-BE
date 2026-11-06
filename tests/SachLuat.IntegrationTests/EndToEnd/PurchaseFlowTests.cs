@@ -263,6 +263,7 @@ public sealed class PurchaseFlowTests(EndToEndFactory factory)
             email = "khach@e2e.test",
             password = "khach-password",
             fullName = "Khách thành viên",
+            acceptTerms = true,
         }, HttpStatusCode.Created);
         member.AccessToken = registered.GetProperty("accessToken").GetString();
         await member.PostAsync("/api/v1/cart/items", new { skuId, quantity = 2 });
