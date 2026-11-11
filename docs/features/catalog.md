@@ -56,7 +56,7 @@ Tiền tố `/api/v1`. Enum trong JSON và query string dạng snake_case (`on_s
 
 | Method | Route | Mô tả |
 | --- | --- | --- |
-| GET | `/books?q=&category=&type=&audience=&cover=&minPrice=&maxPrice=&onSale=&legalDocument=&sort=&page=&limit=` | Danh sách (FR-12, FR-13, FR-14); `sort`: `newest`, `price_asc`, `price_desc`; `onSale=true`: chỉ sách có SKU đang bán thấp hơn giá bìa; `limit` mặc định 24, tối đa 100 |
+| GET | `/books?q=&category=&author=&type=&audience=&cover=&minPrice=&maxPrice=&onSale=&legalDocument=&sort=&page=&limit=` | Danh sách (FR-12, FR-13, FR-14); `sort`: `newest`, `price_asc`, `price_desc`; `onSale=true`: chỉ sách có SKU đang bán thấp hơn giá bìa; `limit` mặc định 24, tối đa 100 |
 | GET | `/books/{slug}` | Chi tiết + ấn bản (mới nhất trước, `isLatest` cho cảnh báo BR-03) + SKU (`inStock`, `discountPercent`) + văn bản pháp luật |
 | GET | `/categories` | Cây danh mục |
 
@@ -73,15 +73,21 @@ Giá trong response (danh sách, chi tiết, và `AdminBookResponse`):
 | `discountPercent` | % giảm của `salePrice` so với `listPrice`, làm tròn xuống |
 | `saleEndsAt` | Thời điểm hết giá lịch (UTC), để hiện đếm ngược; `null` khi đang bán giá thường |
 
-`q` khớp tên sách và mã SKU (`skuCode`) của bất kỳ ấn bản nào theo kiểu chứa chuỗi, không phân biệt hoa/thường
-(gõ `250` hoặc `pl250` đều ra sách PL250); ISBN phải nhập đủ.
+`q` (FR-11) khớp theo kiểu chứa chuỗi, không phân biệt hoa/thường:
+
+- **tên sách** và **tên tác giả** (tác giả chưa xóa): không phân biệt dấu, kể cả `đ`/`d` (`bo luat dat dai`,
+  `ĐẤT ĐAI`, `Đất dai` cho cùng kết quả);
+- **mã SKU** của bất kỳ ấn bản nào (gõ `250` hoặc `pl250` đều ra sách PL250);
+- **ISBN** phải nhập đủ 13 số, cho phép gạch nối/khoảng trắng (`978-604-...`).
+
+`author` là slug tác giả, khớp nguyên (trang "Sách của tác giả").
 `category` gồm cả danh mục con; `legalDocument` khớp văn bản gắn với ấn bản hoặc nhãn "Cập nhật đến".
 
 **Admin** (policy `catalog_admin`: super_admin, product_manager, Super Admin bắt buộc 2FA):
 
 | Method | Route | Mô tả |
 | --- | --- | --- |
-| GET | `/admin/books?q=&status=` | Danh sách mọi trạng thái; `q` như website, thêm khớp nguyên `slug` |
+| GET | `/admin/books?q=&status=` | Danh sách mọi trạng thái; `q` như website (kể cả không dấu, tên tác giả), thêm khớp nguyên `slug` |
 | GET/PUT | `/admin/books/{id}` | Chi tiết (mọi ấn bản, tồn từng SKU) / sửa |
 | POST | `/admin/books` | Tạo: `{title, slug, bookType, status, description?, targetAudiences[], metaTitle?, metaDescription?, categoryIds[], authorIds[]}` |
 | POST | `/admin/books/quick` | Tạo trọn gói `{book: {...như POST /admin/books}, edition: {...như POST /admin/books/{id}/editions}, skus: [{skuCode, coverType, listPrice, salePrice, allowPreorder}]}` trong **một transaction**: đầu sách + ấn bản đầu tiên (tự là mới nhất) + SKU; lỗi phần nào cũng không tạo gì. Mỗi loại bìa và mã SKU chỉ xuất hiện một lần trong `skus`. Trả `AdminBookResponse` (201) |
@@ -160,13 +166,21 @@ Migration `AddSkuPriceSchedules`: bảng `sku_price_schedules` (`sku_id` → `sk
 `starts_at`, `ends_at`, `note`), check `sale_price > 0` và `ends_at > starts_at`, index `(sku_id, ends_at)`.
 Chỉ thêm bảng, không đổi dữ liệu cũ.
 
+Migration `AddUnaccentSearch` (tìm không dấu): cài extension `unaccent`, `pg_trgm` vào schema `public` (extension
+"trusted", chủ database cài được); tạo hàm `catalog.f_unaccent(text)` (bọc `unaccent()` thành IMMUTABLE, map qua
+`CatalogDbFunctions.Unaccent`); index GIN trigram `ix_books_title_unaccent_trgm` trên `f_unaccent(title)` và
+`ix_authors_name_unaccent_trgm` trên `f_unaccent(name)`. Hàm và index viết bằng SQL trong migration, không nằm trong
+model snapshot. Server PostgreSQL cần gói contrib (image `postgres:16-alpine` và Neon đều có sẵn).
+
 Enum lưu dạng chuỗi snake_case (`on_sale`, `joint_circular`). Đổi tên member enum = đổi dữ liệu,
 phải có migration cập nhật giá trị cũ.
 
 ## Hạn chế / việc còn lại
 
 - `ICatalogSkuReader.SearchSkusAsync` (cho kho): khớp một phần tên sách, mã SKU hoặc ISBN bằng `ILIKE`, sắp theo tên sách rồi mã SKU.
-- Tìm kiếm tạm dùng `ILIKE` theo tên sách, khớp nguyên ISBN/mã SKU; chưa tìm theo một phần mã SKU, chưa tìm không dấu, theo tác giả, gợi ý (FR-11): chờ Meilisearch.
+- Tìm kiếm dùng PostgreSQL (`unaccent` + `ILIKE`, index trigram). Chưa có: gợi ý khi gõ, chịu lỗi chính tả, xếp theo
+  độ liên quan (kết quả vẫn theo `sort`), tìm số hiệu văn bản trong `q` (dùng tham số `legalDocument`) (FR-11).
+- Tìm kho (`ICatalogSkuReader.SearchSkusAsync`) và tìm tác giả/văn bản ở Admin chưa bỏ dấu.
 - Ảnh bìa đã upload được qua Cloudinary; chưa xóa ảnh cũ trên Cloudinary khi đổi ảnh (ảnh mồ côi).
 - Chưa có upload file đọc thử (chỉ lưu URL), watermark đọc thử (NFR-16).
 - Chưa có concurrency token cho chỉnh sửa đồng thời trên Admin.

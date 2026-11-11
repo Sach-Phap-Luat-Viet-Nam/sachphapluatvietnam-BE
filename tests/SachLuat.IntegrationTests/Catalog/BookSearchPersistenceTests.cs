@@ -67,7 +67,8 @@ public sealed class BookSearchPersistenceTests(CatalogDatabaseFixture fixture)
         var (book, _) = await SaveBookAsync(dbContext, title: $"Bộ luật Đất đai {suffix}");
         var service = new StorefrontQueryService(dbContext, new NoStock(), TimeProvider.System);
 
-        var unaccented = await service.ListBooksAsync(new BooksQuery { Q = $"bo luat dat dai {suffix}" }, CancellationToken);
+        var unaccented = await service.ListBooksAsync(
+            new BooksQuery { Q = $"bo luat dat dai {suffix}" }, CancellationToken);
         var upper = await service.ListBooksAsync(new BooksQuery { Q = $"ĐẤT ĐAI {suffix}" }, CancellationToken);
         var mixed = await service.ListBooksAsync(new BooksQuery { Q = $"Đất dai {suffix}" }, CancellationToken);
 
