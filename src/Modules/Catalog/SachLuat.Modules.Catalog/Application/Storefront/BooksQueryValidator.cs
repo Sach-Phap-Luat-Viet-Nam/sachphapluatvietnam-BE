@@ -10,6 +10,7 @@ internal sealed class BooksQueryValidator : PagedQueryValidator<BooksQuery>
     public BooksQueryValidator()
     {
         RuleFor(query => query.Q).MaximumLength(200);
+        RuleFor(query => query.Author).MaximumLength(Slug.MaxLength);
         RuleFor(query => query.Type)
             .Must(value => SnakeCaseEnumConverter<BookType>.TryParse(value, out _))
             .When(query => query.Type is not null)

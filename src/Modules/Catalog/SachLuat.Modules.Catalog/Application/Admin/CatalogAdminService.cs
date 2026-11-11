@@ -23,13 +23,7 @@ internal sealed class CatalogAdminService(
         var books = dbContext.Books.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(query.Q))
         {
-            var term = query.Q.Trim();
-            var pattern = LikePatterns.Contains(term);
-            books = books.Where(book => EF.Functions.ILike(book.Title, pattern, LikePatterns.EscapeCharacter)
-                || book.Slug == term
-                || book.Editions.Any(edition => edition.Isbn == term
-                    || edition.Skus.Any(sku => EF.Functions.ILike(
-                        sku.SkuCode, pattern, LikePatterns.EscapeCharacter))));
+            books = books.MatchKeyword(query.Q, matchSlug: true);
         }
 
         if (SnakeCaseEnumConverter<BookStatus>.TryParse(query.Status, out var status))

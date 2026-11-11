@@ -32,6 +32,10 @@ internal sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> option
     {
         modelBuilder.HasDefaultSchema(Schema);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CatalogDbContext).Assembly);
+
+        var unaccent = typeof(CatalogDbFunctions).GetMethod(nameof(CatalogDbFunctions.Unaccent), [typeof(string)])
+            ?? throw new InvalidOperationException("Không tìm thấy CatalogDbFunctions.Unaccent.");
+        modelBuilder.HasDbFunction(unaccent).HasSchema(Schema).HasName(CatalogDbFunctions.UnaccentName);
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

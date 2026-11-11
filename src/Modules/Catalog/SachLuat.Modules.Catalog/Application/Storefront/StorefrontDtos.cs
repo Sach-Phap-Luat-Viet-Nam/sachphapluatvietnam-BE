@@ -14,6 +14,9 @@ internal sealed class BooksQuery : PagedQuery
     /// <summary>Slug danh mục, gồm cả danh mục con.</summary>
     public string? Category { get; set; }
 
+    /// <summary>Slug tác giả (trang "Sách của tác giả").</summary>
+    public string? Author { get; set; }
+
     public string? Type { get; set; }
 
     public string? Audience { get; set; }
