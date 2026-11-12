@@ -100,9 +100,18 @@ internal sealed class AdminOrdersController(OrderAdminService service, ICurrentU
 {
     [Authorize(Policy = Policies.OrdersRead)]
     [HttpGet]
-    public Task<PagedResponse<OrderSummaryResponse>> List(
+    public Task<AdminOrdersResponse> List(
         [FromQuery] AdminOrdersQuery query,
         CancellationToken cancellationToken) => service.ListAsync(query, cancellationToken);
+
+    [Authorize(Policy = Policies.OrdersRead)]
+    [HttpGet("export")]
+    public async Task<FileContentResult> Export(
+        [FromQuery] AdminOrdersQuery query,
+        CancellationToken cancellationToken) => File(
+            await service.ExportAsync(query, cancellationToken),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "orders.xlsx");
 
     [Authorize(Policy = Policies.OrdersRead)]
     [HttpGet("{code}")]
