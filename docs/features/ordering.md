@@ -95,7 +95,7 @@ Tiền tố `/api/v1`.
 | POST | `/checkout/preview` | Tùy chọn | `{source: cart\|buy_now, skuId?, quantity?, province?, couponCode?, phone?}` → `CheckoutPreviewResponse` (`skuId`, `quantity` bắt buộc với `buy_now`) |
 | GET | `/orders` | Bearer | Đơn của tôi (phân trang) |
 | GET | `/orders/{code}` | Bearer | Chi tiết đơn của tôi kèm lịch sử trạng thái |
-| POST | `/orders/lookup` | Không | `{orderCode, phone}` (giới hạn tần suất); `phone` dạng `0…` hay `+84…` đều khớp |
+| POST | `/orders/lookup` | Không | `{orderCode, phone}` (giới hạn tần suất); `phone` dạng `0…` hay `+84…` đều khớp; `items[].coverImageUrl` trả URL ảnh bìa hiện tại từ catalog, `null` nếu không có ảnh hoặc SKU không còn tồn tại |
 | POST | `/orders/{code}/cancel` | Bearer | `{reason?}` |
 | GET | `/orders/guest/{token}` | Không | Khách vãng lai xem đơn qua link (giới hạn tần suất) → `OrderResponse` |
 | POST | `/orders/guest/{token}/cancel` | Không | `{reason?}` → `OrderResponse` (giới hạn tần suất) |
