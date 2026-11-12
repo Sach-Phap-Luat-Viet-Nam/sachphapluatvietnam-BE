@@ -60,6 +60,8 @@ internal static class OrderExcelExporter
             XNamespace reference = RelationshipNamespace;
             var names = new[] { "Thống kê", "Đơn hàng", "Chi tiết sách" };
             WriteDocument(archive, "xl/workbook.xml", new XElement(spreadsheet + "workbook",
+                new XElement(spreadsheet + "bookViews",
+                    new XElement(spreadsheet + "workbookView", new XAttribute("activeTab", 0))),
                 new XElement(spreadsheet + "sheets", names.Select((name, index) =>
                     new XElement(spreadsheet + "sheet", new XAttribute("name", name),
                         new XAttribute("sheetId", index + 1), new XAttribute(reference + "id", $"rId{index + 1}"))))));
