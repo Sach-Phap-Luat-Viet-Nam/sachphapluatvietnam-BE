@@ -15,9 +15,48 @@ internal sealed class OrderAdminService(
 {
     private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
 
-    public async Task<PagedResponse<OrderSummaryResponse>> ListAsync(
+    public async Task<AdminOrdersResponse> ListAsync(
         AdminOrdersQuery query,
         CancellationToken cancellationToken)
+    {
+        var orders = FilterOrders(query);
+        var total = await orders.CountAsync(cancellationToken);
+        var soldOrders = orders.Where(order =>
+            order.Status == OrderStatus.Delivered || order.Status == OrderStatus.Completed);
+        var revenue = await soldOrders.SumAsync(order => order.Subtotal - order.Discount, cancellationToken);
+        var booksSold = await soldOrders.SelectMany(order => order.Items)
+            .SumAsync(item => (long)item.Quantity, cancellationToken);
+        var items = await orders
+            .OrderByDescending(order => order.CreatedAt)
+            .ThenByDescending(order => order.Id)
+            .Skip(query.Skip)
+            .Take(query.Limit)
+            .Select(order => new OrderSummaryResponse(
+                order.OrderCode,
+                order.Status,
+                order.PaymentMethod,
+                order.PaymentStatus,
+                order.CustomerName,
+                order.Phone,
+                order.Items.Sum(item => item.Quantity),
+                order.Total,
+                order.CreatedAt))
+            .ToListAsync(cancellationToken);
+        return new AdminOrdersResponse(items, new PageMeta(query.Page, query.Limit, total),
+            new OrderStatisticsResponse(revenue, booksSold));
+    }
+
+    public async Task<byte[]> ExportAsync(AdminOrdersQuery query, CancellationToken cancellationToken)
+    {
+        var orders = await FilterOrders(query)
+            .Include(order => order.Items)
+            .OrderByDescending(order => order.CreatedAt)
+            .ThenByDescending(order => order.Id)
+            .ToListAsync(cancellationToken);
+        return OrderExcelExporter.Export(orders, query, cancellationToken);
+    }
+
+    private IQueryable<Order> FilterOrders(AdminOrdersQuery query)
     {
         var orders = dbContext.Orders.AsNoTracking();
         if (SnakeCaseEnumConverter<OrderStatus>.TryParse(query.Status, out var status))
@@ -49,24 +88,7 @@ internal sealed class OrderAdminService(
             orders = orders.Where(order => order.OrderCode == term || order.Phone == phone);
         }
 
-        var total = await orders.CountAsync(cancellationToken);
-        var items = await orders
-            .OrderByDescending(order => order.CreatedAt)
-            .ThenByDescending(order => order.Id)
-            .Skip(query.Skip)
-            .Take(query.Limit)
-            .Select(order => new OrderSummaryResponse(
-                order.OrderCode,
-                order.Status,
-                order.PaymentMethod,
-                order.PaymentStatus,
-                order.CustomerName,
-                order.Phone,
-                order.Items.Sum(item => item.Quantity),
-                order.Total,
-                order.CreatedAt))
-            .ToListAsync(cancellationToken);
-        return PagedResponse<OrderSummaryResponse>.Create(items, query, total);
+        return orders;
     }
 
     public async Task<AdminOrderResponse> GetAsync(string orderCode, CancellationToken cancellationToken)
