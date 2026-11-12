@@ -100,9 +100,50 @@ Tiền tố `/api/v1`.
 | GET | `/orders/guest/{token}` | Không | Khách vãng lai xem đơn qua link (giới hạn tần suất) → `OrderResponse` |
 | POST | `/orders/guest/{token}/cancel` | Không | `{reason?}` → `OrderResponse` (giới hạn tần suất) |
 | POST | `/shipping/quote` | Không | `{subtotal, province?, items?: [{skuId, quantity}]}` → `{shippingFee, freeShippingThreshold, amountToFreeShipping, eta: {minDays, maxDays}?, zoneName?}`. Chỉ gửi `subtotal` (không `province`) thì dùng phí cố định như trước. `freeShippingThreshold` là `null` khi Admin tắt miễn ship theo ngưỡng |
-| GET | `/admin/orders?status=&paymentMethod=&from=&to=&q=` | orders_read | Lọc theo trạng thái, phương thức, ngày (giờ VN), mã đơn/SĐT |
+| GET | `/admin/orders?Page=1&Limit=20&status=&paymentMethod=&from=&to=&q=` | orders_read | Danh sách phân trang `{items, meta, statistics}`, lọc theo trạng thái, phương thức, ngày tạo (giờ VN), mã đơn/SĐT |
+| GET | `/admin/orders/export?status=&paymentMethod=&from=&to=&q=` | orders_read | Tải `orders.xlsx`: toàn bộ đơn theo bộ lọc, thống kê và chi tiết sách; bỏ qua phân trang |
 | GET | `/admin/orders/{code}` | orders_read | `{order, userId, nextStatuses[], costOfGoods, customerRisk, fastForward[]}` |
 | POST | `/admin/orders/{code}/status` | orders_manage | `{status, note?}`; `status` là một bước kế tiếp hoặc một trạng thái trong `fastForward` |
+
+### Thống kê và xuất Excel đơn hàng Admin
+
+`GET /api/v1/admin/orders?Page=1&Limit=20` giữ nguyên `items`, `meta` và bổ sung `statistics`:
+
+```json
+{
+  "items": [],
+  "meta": { "page": 1, "limit": 20, "total": 0 },
+  "statistics": { "revenue": 0, "booksSold": 0 }
+}
+```
+
+- `revenue`: tổng `subtotal − discount` (VND) của đơn có trạng thái hiện tại là `delivered` hoặc `completed`;
+  tiền sách sau giảm giá, **không gồm phí ship**. Đơn chỉ mới thanh toán, chưa giao không được tính.
+- `booksSold`: tổng số cuốn (`items[].quantity`) trong cùng các đơn được tính doanh thu; không phải số SKU/đầu sách.
+- Thống kê áp dụng **toàn bộ bộ lọc**, trước phân trang; thay `Page`/`Limit` không đổi thống kê.
+  Bộ lọc trạng thái chỉ chọn đơn chưa bán (ví dụ `pending_confirm`) thì hai số bằng 0.
+  Đơn đang yêu cầu trả, đang hoàn, đã hoàn, đã hoàn tiền hoặc đã hủy không được tính.
+- `from`, `to` lọc theo **ngày tạo đơn**, không phải ngày giao/thanh toán; tính trọn cả hai ngày theo UTC+7.
+  Không có kết quả thì hai số bằng 0, kể cả khi trang yêu cầu vượt tổng số trang.
+
+`GET /api/v1/admin/orders/export` dùng cùng bộ lọc và quyền `orders_read` như danh sách.
+Response là binary `.xlsx`, MIME `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`,
+`Content-Disposition: attachment; filename=orders.xlsx`. FE gửi Bearer token như API danh sách, đọc response
+bằng `blob` rồi tải file, không đọc JSON khi thành công.
+
+File gồm ba sheet:
+
+1. **Thống kê**: tổng số đơn theo bộ lọc, doanh thu, số cuốn đã bán, cách tính và bộ lọc đang dùng.
+2. **Đơn hàng**: mỗi đơn một dòng, mới nhất trước; thông tin khách/địa chỉ, số sách, các khoản tiền và trạng thái.
+3. **Chi tiết sách**: mỗi dòng sách của từng đơn, snapshot SKU/tên/ấn bản/ISBN/bìa, giá, số lượng, giảm giá,
+   tiền sách sau giảm. Sheet đơn hàng và chi tiết gồm **mọi trạng thái theo bộ lọc**, không chỉ đơn đã bán.
+
+Ngày giờ trong Excel dùng UTC+7; các khoản tiền là ô số (VND), SĐT/ISBN là text để giữ số 0 đầu.
+Nội dung người dùng là text, không được diễn giải thành công thức Excel. Không có kết quả vẫn tải được file
+với dòng tiêu đề và thống kê bằng 0. `Page`/`Limit` không giới hạn dữ liệu xuất; nếu gửi vẫn phải hợp lệ
+(`Page >= 1`, `1 <= Limit <= 100`). Bộ lọc sai trả `400 VALIDATION_ERROR` như danh sách.
+
+Không thêm package, cấu hình hoặc migration cho tính năng báo cáo này.
 
 `OrderResponse`: mã đơn, trạng thái, phương thức/tình trạng thanh toán, thông tin khách, địa chỉ, `items[]`,
 `subtotal, discount, shippingFee, shippingDiscount, total`, `appliedPromotions[]` (snapshot tên, mã, số tiền),
@@ -176,6 +217,9 @@ migration ở bước deploy như trên.
 `docs/features/staff-notification.md`. Production cần áp migration ở bước deploy như trên.
 
 ## Hạn chế / việc còn lại
+
+- Export tạo file đồng bộ trong bộ nhớ; nên dùng bộ lọc ngày khi xuất lượng dữ liệu lớn. Chưa có export nền
+  hoặc chia nhiều file/sheet khi vượt giới hạn Excel (1.048.576 dòng/sheet, bao gồm dòng tiêu đề).
 
 - Mua ngay chỉ đặt một SKU mỗi lần.
 - Hỗ trợ COD và chuyển khoản đối soát tự động qua SePay (`docs/features/sepay-payment.md`); VNPAY/MoMo/ZaloPay
