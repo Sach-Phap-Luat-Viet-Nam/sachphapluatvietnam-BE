@@ -96,7 +96,10 @@ internal sealed class CheckoutController(OrderService orderService) : Controller
 
 [ApiController]
 [Route(ApiRoutes.AdminV1 + "/orders")]
-internal sealed class AdminOrdersController(OrderAdminService service, ICurrentUser currentUser) : ControllerBase
+internal sealed class AdminOrdersController(
+    OrderAdminService service,
+    ICurrentUser currentUser,
+    TimeProvider timeProvider) : ControllerBase
 {
     [Authorize(Policy = Policies.OrdersRead)]
     [HttpGet]
@@ -108,10 +111,14 @@ internal sealed class AdminOrdersController(OrderAdminService service, ICurrentU
     [HttpGet("export")]
     public async Task<FileContentResult> Export(
         [FromQuery] AdminOrdersQuery query,
-        CancellationToken cancellationToken) => File(
-            await service.ExportAsync(query, cancellationToken),
+        CancellationToken cancellationToken)
+    {
+        var content = await service.ExportAsync(query, cancellationToken);
+        Response.Headers.Append("Access-Control-Expose-Headers", "Content-Disposition");
+        return File(content,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "orders.xlsx");
+            OrderExcelExporter.FileName(query, timeProvider.GetUtcNow()));
+    }
 
     [Authorize(Policy = Policies.OrdersRead)]
     [HttpGet("{code}")]
