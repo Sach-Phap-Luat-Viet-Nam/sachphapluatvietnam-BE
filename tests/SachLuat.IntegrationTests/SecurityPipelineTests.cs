@@ -11,6 +11,7 @@ public sealed class SecurityPipelineTests(ApiFactory factory) : IClassFixture<Ap
     [Theory]
     [InlineData("/api/v1/admin/books")]
     [InlineData("/api/v1/admin/orders")]
+    [InlineData("/api/v1/admin/orders/export")]
     [InlineData("/api/v1/admin/inventory/receipts")]
     [InlineData("/api/v1/admin/users")]
     [InlineData("/api/v1/admin/popups")]
