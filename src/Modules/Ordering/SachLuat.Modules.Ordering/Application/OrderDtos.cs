@@ -168,7 +168,8 @@ internal sealed record OrderItemResponse(
     decimal UnitPrice,
     int Quantity,
     decimal LineTotal,
-    decimal DiscountAmount);
+    decimal DiscountAmount,
+    string? CoverImageUrl = null);
 
 internal sealed record OrderStatusLogResponse(
     OrderStatus? FromStatus,
