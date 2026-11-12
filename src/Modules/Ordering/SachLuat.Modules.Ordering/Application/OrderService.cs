@@ -136,7 +136,16 @@ internal sealed class OrderService(
                 dbContext.Orders.Where(o => o.OrderCode == request.OrderCode.Trim() && o.Phone == phone),
                 cancellationToken)
             ?? throw OrderErrors.NotFound();
-        return ToOrderResponse(order);
+        var skus = await skuReader.GetSkusAsync(
+            [.. order.Items.Select(item => item.SkuId).Distinct()], cancellationToken);
+        var response = ToOrderResponse(order);
+        return response with
+        {
+            Items = [.. response.Items.Select(item => item with
+            {
+                CoverImageUrl = skus.TryGetValue(item.SkuId, out var sku) ? sku.CoverImageUrl : null,
+            })],
+        };
     }
 
     /// <summary>Khách vãng lai xem đơn qua link bí mật nhận lúc đặt hàng.</summary>
