@@ -217,6 +217,13 @@ internal sealed record OrderSummaryResponse(
     decimal Total,
     DateTime CreatedAt);
 
+internal sealed record OrderStatisticsResponse(decimal Revenue, long BooksSold);
+
+internal sealed record AdminOrdersResponse(
+    IReadOnlyList<OrderSummaryResponse> Items,
+    PageMeta Meta,
+    OrderStatisticsResponse Statistics);
+
 /// <param name="CostOfGoods">Tổng giá vốn (có sau khi đóng gói), dùng cho báo cáo lợi nhuận gộp (FR-95).</param>
 /// <param name="CustomerRisk">Lịch sử đơn theo số điện thoại của đơn, để CSKH cân nhắc khi gọi xác nhận.</param>
 /// <param name="FastForward">
