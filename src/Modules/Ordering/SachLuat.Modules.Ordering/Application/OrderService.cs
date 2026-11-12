@@ -125,17 +125,6 @@ internal sealed class OrderService(
         var userId = currentUser.RequireUserId();
         var order = await LoadAsync(dbContext.Orders.Where(o => o.OrderCode == orderCode && o.UserId == userId), cancellationToken)
             ?? throw OrderErrors.NotFound();
-        return ToOrderResponse(order);
-    }
-
-    /// <summary>FR-40: tra cứu đơn không cần đăng nhập bằng mã đơn + số điện thoại.</summary>
-    public async Task<OrderResponse> LookupAsync(LookupOrderRequest request, CancellationToken cancellationToken)
-    {
-        var phone = PhoneNumbers.Normalize(request.Phone);
-        var order = await LoadAsync(
-                dbContext.Orders.Where(o => o.OrderCode == request.OrderCode.Trim() && o.Phone == phone),
-                cancellationToken)
-            ?? throw OrderErrors.NotFound();
         var skus = await skuReader.GetSkusAsync(
             [.. order.Items.Select(item => item.SkuId).Distinct()], cancellationToken);
         var response = ToOrderResponse(order);
@@ -146,6 +135,17 @@ internal sealed class OrderService(
                 CoverImageUrl = skus.TryGetValue(item.SkuId, out var sku) ? sku.CoverImageUrl : null,
             })],
         };
+    }
+
+    /// <summary>FR-40: tra cứu đơn không cần đăng nhập bằng mã đơn + số điện thoại.</summary>
+    public async Task<OrderResponse> LookupAsync(LookupOrderRequest request, CancellationToken cancellationToken)
+    {
+        var phone = PhoneNumbers.Normalize(request.Phone);
+        var order = await LoadAsync(
+                dbContext.Orders.Where(o => o.OrderCode == request.OrderCode.Trim() && o.Phone == phone),
+                cancellationToken)
+            ?? throw OrderErrors.NotFound();
+        return ToOrderResponse(order);
     }
 
     /// <summary>Khách vãng lai xem đơn qua link bí mật nhận lúc đặt hàng.</summary>
