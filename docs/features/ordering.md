@@ -101,7 +101,7 @@ Tiền tố `/api/v1`.
 | POST | `/orders/guest/{token}/cancel` | Không | `{reason?}` → `OrderResponse` (giới hạn tần suất) |
 | POST | `/shipping/quote` | Không | `{subtotal, province?, items?: [{skuId, quantity}]}` → `{shippingFee, freeShippingThreshold, amountToFreeShipping, eta: {minDays, maxDays}?, zoneName?}`. Chỉ gửi `subtotal` (không `province`) thì dùng phí cố định như trước. `freeShippingThreshold` là `null` khi Admin tắt miễn ship theo ngưỡng |
 | GET | `/admin/orders?Page=1&Limit=20&status=&paymentMethod=&from=&to=&q=` | orders_read | Danh sách phân trang `{items, meta, statistics}`, lọc theo trạng thái, phương thức, ngày tạo (giờ VN), mã đơn/SĐT |
-| GET | `/admin/orders/export?status=&paymentMethod=&from=&to=&q=` | orders_read | Tải `orders.xlsx`: toàn bộ đơn theo bộ lọc, thống kê và chi tiết sách; bỏ qua phân trang |
+| GET | `/admin/orders/export?status=&paymentMethod=&from=&to=&q=` | orders_read | Tải Excel báo cáo đơn hàng: toàn bộ đơn theo bộ lọc, thống kê và chi tiết sách; bỏ qua phân trang |
 | GET | `/admin/orders/{code}` | orders_read | `{order, userId, nextStatuses[], costOfGoods, customerRisk, fastForward[]}` |
 | POST | `/admin/orders/{code}/status` | orders_manage | `{status, note?}`; `status` là một bước kế tiếp hoặc một trạng thái trong `fastForward` |
 
@@ -128,7 +128,10 @@ Tiền tố `/api/v1`.
 
 `GET /api/v1/admin/orders/export` dùng cùng bộ lọc và quyền `orders_read` như danh sách.
 Response là binary `.xlsx`, MIME `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`,
-`Content-Disposition: attachment; filename=orders.xlsx`. FE gửi Bearer token như API danh sách, đọc response
+`Content-Disposition: attachment` với tên file mô tả báo cáo, khoảng ngày tạo được lọc và thời điểm xuất UTC+7,
+ví dụ `Sach-Luat-Viet-Nam_Bao-cao-don-hang_Tu-2026-11-01_Den-2026-11-12_Xuat-2026-11-12_14-30-00.xlsx`.
+Không lọc ngày thì phần khoảng ngày là `Tat-ca-thoi-gian`; chỉ lọc một đầu thì dùng `Tu-...` hoặc `Den-...`.
+FE dùng tên từ header `Content-Disposition` khi tải file, gửi Bearer token như API danh sách, đọc response
 bằng `blob` rồi tải file, không đọc JSON khi thành công.
 
 File gồm ba sheet:
@@ -139,6 +142,10 @@ File gồm ba sheet:
    tiền sách sau giảm. Sheet đơn hàng và chi tiết gồm **mọi trạng thái theo bộ lọc**, không chỉ đơn đã bán.
 
 Ngày giờ trong Excel dùng UTC+7; các khoản tiền là ô số (VND), SĐT/ISBN là text để giữ số 0 đầu.
+Các sheet dùng tiêu đề xanh ngọc đậm, chữ trắng, dòng xen kẽ nền nhạt và viền nhẹ; ba chỉ số tổng quan được
+nhấn màu. Cột có độ rộng riêng theo nội dung, tên sách/địa chỉ tự xuống dòng và chiều cao dòng được tính theo
+độ dài. Tiền hiển thị có dấu phân cách hàng nghìn và ký hiệu `₫`, số lượng có phân cách hàng nghìn.
+Hàng tiêu đề được cố định khi cuộn; sheet Đơn hàng và Chi tiết sách có bộ lọc cột.
 Nội dung người dùng là text, không được diễn giải thành công thức Excel. Không có kết quả vẫn tải được file
 với dòng tiêu đề và thống kê bằng 0. `Page`/`Limit` không giới hạn dữ liệu xuất; nếu gửi vẫn phải hợp lệ
 (`Page >= 1`, `1 <= Limit <= 100`). Bộ lọc sai trả `400 VALIDATION_ERROR` như danh sách.
