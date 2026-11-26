@@ -10,4 +10,10 @@ internal static class ContentErrors
 
     public static BusinessException PopupNotFound() =>
         new(ErrorCodes.NotFound, "Không tìm thấy popup", StatusCodes.Status404NotFound);
+
+    public static BusinessException StaticPageNotFound() =>
+        new(ErrorCodes.NotFound, "Không tìm thấy trang", StatusCodes.Status404NotFound);
+
+    public static BusinessException StaticPageSlugTaken(string slug) =>
+        new(ErrorCodes.Conflict, $"Đường dẫn \"{slug}\" đã được trang khác sử dụng", StatusCodes.Status409Conflict);
 }
