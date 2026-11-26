@@ -43,7 +43,7 @@ Hiện có hai trang được seed sẵn: `dieu-khoan-su-dung`, `chinh-sach-bao-
 | ------ | ------------------------------ | -------------------------- | ------------------------------------------------- |
 | GET    | `/api/v1/admin/pages?page=&limit=` | —                      | Phân trang `AdminStaticPageSummaryResponse` theo slug A→Z |
 | GET    | `/api/v1/admin/pages/{id}`     | —                          | 200 `AdminStaticPageResponse`; 404                |
-| POST   | `/api/v1/admin/pages`          | `UpsertStaticPageRequest`  | 201 `AdminStaticPageResponse`; 409 `CONFLICT` trùng slug |
+| POST   | `/api/v1/admin/pages`          | `UpsertStaticPageRequest`  | 201 `AdminStaticPageResponse`; 409 `SLUG_DUPLICATE` trùng slug |
 | PUT    | `/api/v1/admin/pages/{id}`     | `UpsertStaticPageRequest`  | 200 `AdminStaticPageResponse`; 404; 409           |
 | DELETE | `/api/v1/admin/pages/{id}`     | —                          | 204; 404                                          |
 
