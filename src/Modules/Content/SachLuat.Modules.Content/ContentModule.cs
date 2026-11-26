@@ -30,6 +30,7 @@ public sealed class ContentModule : IModule
             .AddInterceptors(serviceProvider.GetRequiredService<AuditableEntityInterceptor>()));
 
         services.AddScoped<PopupService>();
+        services.AddScoped<StaticPageService>();
         services.AddCloudinaryUploads(configuration);
         services.AddValidatorsFromAssembly(typeof(ContentModule).Assembly, includeInternalTypes: true);
 
