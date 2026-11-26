@@ -10,6 +10,8 @@ internal sealed class ContentDbContext(DbContextOptions<ContentDbContext> option
 
     public DbSet<Popup> Popups => Set<Popup>();
 
+    public DbSet<StaticPage> StaticPages => Set<StaticPage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(Schema);
