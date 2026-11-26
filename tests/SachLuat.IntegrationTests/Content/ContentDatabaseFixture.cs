@@ -58,6 +58,15 @@ public sealed class ContentDatabaseFixture : IAsyncLifetime
         return scope;
     }
 
+    /// <summary>Scope không dọn dữ liệu, cho test tự cô lập bằng khóa riêng (không xóa popup của test khác).</summary>
+    internal AsyncServiceScope CreateScope()
+    {
+        Assert.SkipWhen(
+            _serviceProvider is null,
+            $"Set {ConnectionStringVariable} to run database tests (see docs/setup.md).");
+        return _serviceProvider!.CreateAsyncScope();
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_serviceProvider is not null)
