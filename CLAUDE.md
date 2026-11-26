@@ -8,7 +8,7 @@
 - **Kiểu API**: Controllers, tiền tố `api/v1` (`ApiRoutes.V1`), lỗi trả `ProblemDetails` + `code`
 - **CSDL / ORM**: PostgreSQL 16 + EF Core (Npgsql), mỗi module một schema và một `DbContext`,
   tên bảng/cột `snake_case`, không khóa ngoại chéo schema. Giỏ hàng lưu Redis 7.
-- **Module hiện có**: Auth (Identity + JWT + 2FA), Catalog, Inventory, Cart, Ordering, Content (popup),
+- **Module hiện có**: Auth (Identity + JWT + 2FA), Catalog, Inventory, Cart, Ordering, Content (popup, trang tĩnh),
   Shipping (vùng giao hàng, phí ship), Promotion (khuyến mãi, mã giảm giá),
   Notification (tin nhắn nội bộ qua Zalo Bot, chưa có CSDL)
   (mô tả từng module: `docs/features/*.md`)
