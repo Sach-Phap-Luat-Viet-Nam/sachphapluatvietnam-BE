@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SachLuat.Modules.Content.Application;
+using SachLuat.Modules.Content.Domain;
 using SachLuat.Modules.Content.Infrastructure.Persistence;
 using SachLuat.SharedKernel.Api;
 using SachLuat.SharedKernel.Errors;
@@ -72,7 +73,7 @@ public sealed class StaticPagePersistenceTests(ContentDatabaseFixture fixture)
         var act = () => service.CreateAsync(Request(slug) with { Title = "Trùng" }, CancellationToken);
 
         var error = (await act.Should().ThrowAsync<BusinessException>()).Which;
-        error.Code.Should().Be(ErrorCodes.Conflict);
+        error.Code.Should().Be(ContentErrors.SlugDuplicateCode);
         error.StatusCode.Should().Be(409);
     }
 
