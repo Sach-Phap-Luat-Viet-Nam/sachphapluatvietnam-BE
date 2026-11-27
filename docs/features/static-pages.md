@@ -75,7 +75,7 @@ Không có.
 
 ## Hạn chế / việc còn lại
 
-- Chưa có màn Admin (trình soạn thảo WYSIWYG) trong FE; tạm thời sửa qua API Admin.
+- Màn Admin soạn thảo WYSIWYG: FE `docs/features/admin-static-pages.md`. Chưa có khóa khi hai người cùng sửa (người lưu sau ghi đè).
 - Chưa lưu lịch sử phiên bản. Phiên bản điều khoản khách đồng ý khi đăng ký vẫn là cấu hình `Auth:TermsVersion`,
   không tự đổi khi sửa trang.
 - Storefront chỉ có route cho hai slug đã seed; trang tĩnh mới (đổi trả, vận chuyển, FAQ...) cần thêm route bên FE.
